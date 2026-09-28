@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		3302C87E306AD482001B6155 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3302C87D306AD482001B6155 /* CoolifyAPI */; };
 		3302C881306AD494001B6155 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3302C880306AD494001B6155 /* CoolifyAPI */; };
+		3302C887306AD532001B6155 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3302C886306AD532001B6155 /* CoolifyAPI */; };
 		33F663E8306AD1DD00682500 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = 33F663E7306AD1DD00682500 /* PostHog */; };
 /* End PBXBuildFile section */
 
@@ -29,6 +30,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				3302C881306AD494001B6155 /* CoolifyAPI in Frameworks */,
+				3302C887306AD532001B6155 /* CoolifyAPI in Frameworks */,
 				33F663E8306AD1DD00682500 /* PostHog in Frameworks */,
 				3302C87E306AD482001B6155 /* CoolifyAPI in Frameworks */,
 			);
@@ -73,6 +75,7 @@
 				33F663E7306AD1DD00682500 /* PostHog */,
 				3302C87D306AD482001B6155 /* CoolifyAPI */,
 				3302C880306AD494001B6155 /* CoolifyAPI */,
+				3302C886306AD532001B6155 /* CoolifyAPI */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* Hotify.app */;
@@ -104,7 +107,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				33F663E6306AD1DD00682500 /* XCRemoteSwiftPackageReference "posthog-ios" */,
-				3302C87F306AD494001B6155 /* XCLocalSwiftPackageReference "CoolifyAPI" */,
+				3302C885306AD532001B6155 /* XCLocalSwiftPackageReference "CoolifyAPI" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -363,7 +366,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		3302C87F306AD494001B6155 /* XCLocalSwiftPackageReference "CoolifyAPI" */ = {
+		3302C885306AD532001B6155 /* XCLocalSwiftPackageReference "CoolifyAPI" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = CoolifyAPI;
 		};
@@ -387,6 +390,10 @@
 			productName = CoolifyAPI;
 		};
 		3302C880306AD494001B6155 /* CoolifyAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CoolifyAPI;
+		};
+		3302C886306AD532001B6155 /* CoolifyAPI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = CoolifyAPI;
 		};
