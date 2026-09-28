@@ -1,17 +1,12 @@
-import SwiftUI
 import Playgrounds
+import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        Text("Hello, world!")
-            .padding()
+        Text("Wello, Horld! No sugactions avail able")
     }
 }
 
 #Preview {
     ContentView()
-}
-
-#Playground {
-    _ = 1 + 2
 }
