@@ -23,7 +23,6 @@ struct AddInstanceForm: View {
                     .disabled(name.isEmpty || baseURL.isEmpty || token.isEmpty)
             }
         }
-        .padding()
         .frame(minWidth: 360)
         .interactiveDismissDisabled(isDirty)
     }

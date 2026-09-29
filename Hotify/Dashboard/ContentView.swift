@@ -58,7 +58,7 @@ struct ContentView: View {
                 let _ = try store.add(name: name, baseURL: url, token: token)
             }
             .presentationDetents([.fraction(0.37), .medium])
-            .presentationDragIndicator(.visible)
+            .presentationDragIndicator(.hidden)
 //            .interactiveDismissDisabled()
 //            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             .presentationContentInteraction(.automatic)

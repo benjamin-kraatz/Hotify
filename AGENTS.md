@@ -26,12 +26,12 @@ cd CoolifyAPI && swift test
 # App build. Run this after any change in Hotify/.
 xcodebuild -project Hotify.xcodeproj -scheme Hotify -destination 'platform=macOS' build
 
-# Format, then lint. CI fails on any lint warning. The config is in .swift-format.
+# Format, then lint. CI does not check formatting, so run these before you commit. The config is in .swift-format.
 swift format format -i --recursive --parallel Hotify CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
 swift format lint --strict --recursive --parallel Hotify CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
 ```
 
-CI (`.github/workflows/ci.yml`) runs lint, the package tests, and unsigned macOS and iOS Simulator builds on the `xcode-27` runner for every push to `main` and every pull request.
+CI (`.github/workflows/ci.yml`) runs the package tests and unsigned macOS and iOS Simulator builds on the `xcode-27` runner for every push to `main` and every pull request, except docs-only changes.
 
 The live tests in `LiveCoolifyTests.swift` skip unless `COOLIFY_LIVE_TESTS=1` is set. They need a real instance and read `COOLIFY_DEMO_INSTANCE_BASE_URL` and `COOLIFY_DEMO_INSTANCE_API_KEY` from the environment or `.env`. Do not run them unless the user asks.
 

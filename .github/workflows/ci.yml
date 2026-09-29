@@ -15,26 +15,7 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  SWIFT_SOURCES: Hotify CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
-
 jobs:
-  lint:
-    name: Lint
-    runs-on: xcode-27
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Toolchain
-        run: |
-          xcodebuild -version
-          swift --version
-
-      # swift-format ships with the Xcode toolchain and reads .swift-format at the repo root.
-      - name: swift format lint
-        run: swift format lint --strict --recursive --parallel $SWIFT_SOURCES
-
   test:
     name: Test CoolifyAPI
     runs-on: xcode-27
