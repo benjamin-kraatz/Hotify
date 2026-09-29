@@ -142,7 +142,7 @@ struct ContentView: View {
                 actionError: snapshot.actionError,
                 onAction: { action in run(action, route) }
             )
-            .id(route)
+            .id(DetailIdentity(instanceID: store.selectedID, route: route))
         } else {
             ContentUnavailableView {
                 Label {
@@ -215,7 +215,7 @@ struct ContentView: View {
         }
         // Read the Keychain once per switch rather than on every render.
         boundToken = TokenStore.load(for: selected.id)
-        client = boundToken.flatMap { try? selected.client(token: $0) }
+        client = store.client(for: selected)
         boundID = selected.id
         dashboard.bind(client)
     }
@@ -226,4 +226,10 @@ struct ContentView: View {
         .environment(InstanceStore(instances: []))
         .environment(MenuBarModel(preview: true))
         .environment(VariableLock(isRequired: true))
+}
+
+/// Keeps detail tasks isolated even when two instances contain the same resource UUID.
+private struct DetailIdentity: Hashable {
+    var instanceID: UUID?
+    var route: ResourceRoute
 }
