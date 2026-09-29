@@ -4,6 +4,8 @@ import SwiftUI
 /// The window: instances, then the selected instance's resources, then the open resource.
 struct ContentView: View {
     @SwiftUI.Environment(InstanceStore.self) private var store
+    @SwiftUI.Environment(\.scenePhase) private var scenePhase
+    @State private var boundToken: String?
     @State private var dashboard = DashboardModel()
     @State private var dashboards: [CoolifyInstance.ID: DashboardModel] = [:]
     @State private var client: CoolifyClient?
@@ -22,6 +24,11 @@ struct ContentView: View {
                     .transition(.opacity)
             }
         }
+        .safeAreaInset(edge: .top) {
+            if let message = store.syncError {
+                NoticeBanner(message: message).padding()
+            }
+        }
         .animation(.smooth, value: store.instances.isEmpty)
         .onAppear {
             store.seedFromEnvironment()
@@ -30,6 +37,19 @@ struct ContentView: View {
         .onChange(of: store.selectedID) { _, _ in
             selectedResource = nil
             rebind()
+        }
+        .onChange(of: store.selected?.baseURL) { _, _ in
+            resetConnection()
+        }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            store.refreshSync()
+            // Keychain sync has no public arrival notification. Check while this window is active.
+            while !Task.isCancelled {
+                let token = store.selected.flatMap { TokenStore.load(for: $0.id) }
+                if token != boundToken { resetConnection() }
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
+            }
         }
         .sheet(isPresented: $isAdding) {
             formSheet(
@@ -54,8 +74,7 @@ struct ContentView: View {
                         token: token
                     )
                     guard store.selectedID == instance.id, connectionChanged else { return }
-                    selectedResource = nil
-                    rebind()
+                    resetConnection()
                 }
             )
         }
@@ -81,7 +100,7 @@ struct ContentView: View {
                     Label("No API token", systemImage: "key.slash")
                 } description: {
                     Text(
-                        "Hotify can't find a token for \(instance.name) in the Keychain. Edit the instance and paste it again."
+                        "The token for \(instance.name) hasn't arrived. Enable iCloud Keychain on both devices, or edit the instance to paste it. Hotify will connect when the token arrives."
                     )
                 } actions: {
                     Button("Edit \(instance.name)") {
@@ -156,6 +175,12 @@ struct ContentView: View {
         Task { await dashboard.perform(action, route: route) }
     }
 
+    private func resetConnection() {
+        selectedResource = nil
+        if let id = store.selectedID { dashboards.removeValue(forKey: id) }
+        rebind()
+    }
+
     private func rebind() {
         dashboard.stop()
         let ids = Set(store.instances.map(\.id))
@@ -163,6 +188,8 @@ struct ContentView: View {
         guard let selected = store.selected else {
             client = nil
             boundID = nil
+            boundToken = nil
+            dashboard = DashboardModel()
             return
         }
 
@@ -174,7 +201,8 @@ struct ContentView: View {
             dashboard = newDashboard
         }
         // Read the Keychain once per switch rather than on every render.
-        client = store.client(for: selected)
+        boundToken = TokenStore.load(for: selected.id)
+        client = boundToken.flatMap { try? selected.client(token: $0) }
         boundID = selected.id
         dashboard.bind(client)
     }

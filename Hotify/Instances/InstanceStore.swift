@@ -2,24 +2,35 @@ import CoolifyAPI
 import Foundation
 
 /// Saved instances. Tokens are stored separately in the Keychain, keyed by instance id.
+@MainActor
 @Observable
 final class InstanceStore {
     private(set) var instances: [CoolifyInstance] = []
     var selectedID: CoolifyInstance.ID?
 
+    private var sync: InstanceSync?
+
     private let defaultsKey = "hotify.instances"
 
     init() {
         load()
-        if selectedID == nil {
-            selectedID = instances.first?.id
+        let sync = InstanceSync()
+        self.sync = sync
+        sync.onChange = { [weak self] records in self?.apply(records) }
+        // Legacy entries have no edit timestamp. Any synced edit or deletion takes precedence.
+        for instance in instances where sync.records[instance.id] == nil {
+            sync.save(record(for: instance, modifiedAt: .distantPast))
         }
+        sync.refresh()
+        refreshCredentials()
     }
 
     init(instances: [CoolifyInstance]) {
         self.instances = instances
         selectedID = instances.first?.id
     }
+
+    var syncError: String? { sync?.errorMessage }
 
     var selected: CoolifyInstance? {
         instances.first { $0.id == selectedID }
@@ -34,6 +45,7 @@ final class InstanceStore {
         let (saved, trimmedToken) = try validated(name: name, baseURL: baseURL, token: token)
         try TokenStore.save(trimmedToken, for: saved.id)
         instances.append(saved)
+        sync?.save(record(for: saved))
         selectedID = saved.id
         persist()
         return saved
@@ -50,16 +62,17 @@ final class InstanceStore {
         let previous = instances[index]
         let (saved, trimmedToken) = try validated(id: id, name: name, baseURL: baseURL, token: token)
         let tokenChanged = TokenStore.load(for: id) != trimmedToken
-        // Rewriting an unchanged token deletes and recreates the Keychain item.
         if tokenChanged {
             try TokenStore.save(trimmedToken, for: id)
         }
         instances[index] = saved
+        sync?.save(record(for: saved))
         persist()
         return previous.baseURL != saved.baseURL || tokenChanged
     }
 
     func remove(_ instance: CoolifyInstance) {
+        sync?.save(record(for: instance, isDeleted: true))
         TokenStore.delete(for: instance.id)
         instances.removeAll { $0.id == instance.id }
         if selectedID == instance.id {
@@ -76,6 +89,40 @@ final class InstanceStore {
             let token = environment["COOLIFY_DEMO_INSTANCE_API_KEY"], !token.isEmpty
         else { return }
         _ = try? add(name: "Demo", baseURL: baseURL, token: token)
+    }
+
+    /// Retries legacy token migration and picks up cloud changes when the app becomes active.
+    func refreshSync() {
+        sync?.refresh()
+        refreshCredentials()
+    }
+
+    private func refreshCredentials() {
+        guard sync != nil else { return }
+        for instance in instances { TokenStore.migrate(for: instance.id) }
+    }
+
+    private func record(
+        for instance: CoolifyInstance, modifiedAt: Date = .now, isDeleted: Bool = false
+    ) -> InstanceSyncRecord {
+        InstanceSyncRecord(
+            id: instance.id, name: instance.name, baseURL: instance.baseURL,
+            modifiedAt: modifiedAt, revision: UUID().uuidString, isDeleted: isDeleted
+        )
+    }
+
+    private func apply(_ records: [InstanceSyncRecord]) {
+        for record in records where record.isDeleted { TokenStore.delete(for: record.id) }
+        instances = records.filter { !$0.isDeleted }.map {
+            CoolifyInstance(id: $0.id, name: $0.name, baseURL: $0.baseURL)
+        }.sorted {
+            if $0.name != $1.name { return $0.name < $1.name }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+        if !instances.contains(where: { $0.id == selectedID }) {
+            selectedID = instances.first?.id
+        }
+        persist()
     }
 
     private func validated(id: UUID = UUID(), name: String, baseURL: String, token: String) throws -> (

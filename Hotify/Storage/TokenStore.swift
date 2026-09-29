@@ -1,48 +1,64 @@
 import Foundation
 import Security
 
-/// Keychain storage for instance tokens.
-///
-/// `kSecUseDataProtectionKeychain` plus `kSecAttrAccessibleAfterFirstUnlock` is what a sandboxed
-/// macOS app can read again on the next launch.
+/// Instance credentials stored in the data protection Keychain and synced by iCloud Keychain.
 enum TokenStore {
     private static let service = "com.sebastiankraatz.Hotify.token"
 
     static func save(_ token: String, for instanceID: UUID) throws {
-        let account = instanceID.uuidString
+        let base = query(instanceID, synchronizable: true)
         let data = Data(token.utf8)
-        let base = query(account: account)
-        SecItemDelete(base as CFDictionary)
-        var item = base
-        item[kSecValueData as String] = data
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        item[kSecUseDataProtectionKeychain as String] = true
-        let status = SecItemAdd(item as CFDictionary, nil)
-        guard status == errSecSuccess else {
+        let status = SecItemUpdate(base as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if status == errSecItemNotFound {
+            var item = base
+            item[kSecValueData as String] = data
+            // This accessibility class permits iCloud sync and background reads after first unlock.
+            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            let added = SecItemAdd(item as CFDictionary, nil)
+            guard added == errSecSuccess else { throw TokenStoreError(status: added) }
+        } else if status != errSecSuccess {
             throw TokenStoreError(status: status)
         }
+        // Keep the old local credential until its synchronizable replacement has been saved.
+        SecItemDelete(query(instanceID, synchronizable: false) as CFDictionary)
     }
 
     static func load(for instanceID: UUID) -> String? {
-        var item = query(account: instanceID.uuidString)
+        read(instanceID, synchronizable: true) ?? read(instanceID, synchronizable: false)
+    }
+
+    static func migrate(for instanceID: UUID) {
+        if read(instanceID, synchronizable: true) != nil {
+            SecItemDelete(query(instanceID, synchronizable: false) as CFDictionary)
+        } else if let token = read(instanceID, synchronizable: false) {
+            // A locked Keychain can reject migration; leave the original and retry on activation.
+            try? save(token, for: instanceID)
+        }
+    }
+
+    static func delete(for instanceID: UUID) {
+        var item = query(instanceID, synchronizable: true)
+        item[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+        SecItemDelete(item as CFDictionary)
+    }
+
+    private static func read(_ instanceID: UUID, synchronizable: Bool) -> String? {
+        var item = query(instanceID, synchronizable: synchronizable)
         item[kSecReturnData as String] = true
         item[kSecMatchLimit as String] = kSecMatchLimitOne
-        item[kSecUseDataProtectionKeychain as String] = true
         var result: CFTypeRef?
         let status = SecItemCopyMatching(item as CFDictionary, &result)
         guard status == errSecSuccess, let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
-    static func delete(for instanceID: UUID) {
-        SecItemDelete(query(account: instanceID.uuidString) as CFDictionary)
-    }
-
-    private static func query(account: String) -> [String: Any] {
+    private static func query(_ instanceID: UUID, synchronizable: Bool) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: instanceID.uuidString,
+            kSecAttrSynchronizable as String: synchronizable,
+            kSecUseDataProtectionKeychain as String: true,
         ]
     }
 }

@@ -80,7 +80,7 @@ struct InstanceSidebar: View {
             }
         } message: { _ in
             Text(
-                "Hotify forgets this instance and deletes its API token from the Keychain. Nothing changes on the server."
+                "Hotify removes this instance and its API token from all your synced devices. Nothing changes on the server."
             )
         }
     }

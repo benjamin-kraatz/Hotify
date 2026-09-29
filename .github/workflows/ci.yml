@@ -37,6 +37,12 @@ jobs:
       - name: swift test
         run: swift test
 
+      - name: Instance sync checks
+        working-directory: .
+        run: |
+          swiftc Hotify/Instances/InstanceSyncRecord.swift Hotify/Instances/InstanceSync.swift Tests/InstanceSyncTests.swift -o "$RUNNER_TEMP/hotify-sync-tests"
+          "$RUNNER_TEMP/hotify-sync-tests"
+
   build:
     name: Build (${{ matrix.name }})
     runs-on: xcode-27
