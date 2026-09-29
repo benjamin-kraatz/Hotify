@@ -23,6 +23,9 @@ struct AddInstanceForm: View {
                     .disabled(name.isEmpty || baseURL.isEmpty || token.isEmpty)
             }
         }
+        #if os(macOS)
+        .padding()
+        #endif
         .frame(minWidth: 360)
         .interactiveDismissDisabled(isDirty)
     }
