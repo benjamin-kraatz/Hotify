@@ -62,6 +62,7 @@ struct VariableSyncView: View {
                 }
                 if model.busy { ProgressView() }
             }
+            .formStyle(.grouped)
             .disabled(model.busy)
             .navigationTitle(model.reviewing ? "Review variable changes" : "Compare and sync")
             .toolbar {

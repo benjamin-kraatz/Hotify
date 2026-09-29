@@ -158,8 +158,9 @@ final class ResourceDetailModel {
             break
         }
         switch deploymentResult {
-        case .success(let lines):
-            deployments = lines
+        case .success(let result):
+            deployments = result.lines
+            canLoadMoreDeployments = result.hasMore
         case .failure(let error):
             errors.append(Self.message(for: error))
         case nil:
@@ -201,21 +202,22 @@ final class ResourceDetailModel {
 
     /// `nil` for a database or service, which have no deployments, or when the request was cancelled.
     private func loadDeployments(_ client: CoolifyClient, route: ResourceRoute) async
-        -> Result<[DeploymentLine], any Error>?
+        -> Result<(lines: [DeploymentLine], hasMore: Bool), any Error>?
     {
         guard case .application(let uuid) = route else { return nil }
         do {
             // Reload the expanded window so new deployments do not shift an offset and skip history.
             let page = try await client.applicationDeployments(uuid, take: deploymentLimit)
-            canLoadMoreDeployments = page.deployments.count < page.count
             return .success(
-                page.deployments.enumerated().map { index, deployment in
-                    DeploymentLine(
-                        deployment: deployment,
-                        fallbackID: "\(index)",
-                        clientAPIBaseURL: client.apiBaseURL
-                    )
-                }
+                (
+                    lines: page.deployments.enumerated().map { index, deployment in
+                        DeploymentLine(
+                            deployment: deployment,
+                            fallbackID: "\(index)",
+                            clientAPIBaseURL: client.apiBaseURL
+                        )
+                    }, hasMore: page.deployments.count < page.count
+                )
             )
         } catch is CancellationError {
             return nil

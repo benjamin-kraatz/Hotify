@@ -15,7 +15,7 @@ struct VariableSyncRow: View {
             if let source = change.source {
                 Text("Source: \(source.value ?? "Value withheld by Coolify")").font(.caption.monospaced())
                     .textSelection(.enabled)
-                Text("Flags: \(VariableLine(variable: source).tags.joined(separator: ", "))").font(.caption)
+                Text("Flags: \(flags(source))").font(.caption)
                     .foregroundStyle(.secondary)
             }
             if let comment = change.source?.comment, !comment.isEmpty {
@@ -27,11 +27,17 @@ struct VariableSyncRow: View {
             if let target = change.destination {
                 Text("Destination: \(target.value ?? "Value withheld by Coolify")").font(.caption.monospaced())
                     .textSelection(.enabled)
-                Text("Flags: \(VariableLine(variable: target).tags.joined(separator: ", "))").font(.caption)
+                Text("Flags: \(flags(target))").font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
     }
+    private func flags(_ variable: EnvironmentVariable) -> String {
+        var tags = VariableLine(variable: variable).tags
+        if variable.isRuntime == true && variable.isBuildtime == true { tags.insert("Build and runtime", at: 0) }
+        return tags.isEmpty ? "Default" : tags.joined(separator: ", ")
+    }
+
     private var label: String {
         switch change.kind {
         case .create: "Create"

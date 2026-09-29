@@ -26,7 +26,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     #endif
 
     init() {
+        #if DEBUG
+        let fixtureStore = FixtureEnvironment.makeStore()
+        let store = fixtureStore ?? InstanceStore()
+        if fixtureStore != nil { _variableLock = State(initialValue: VariableLock(isRequired: false)) }
+        #else
         let store = InstanceStore()
+        #endif
         let companion = MenuBarModel()
         companion.connect(store)
         _instanceStore = State(initialValue: store)
