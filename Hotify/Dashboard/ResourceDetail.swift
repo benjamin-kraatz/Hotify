@@ -125,7 +125,7 @@ struct ResourceDetail: View {
         switch resource.kind {
         case .application: [.logs, .deployments, .variables]
         case .service: [.logs, .containers, .variables]
-        case .database: [.logs, .variables]
+        case .database: [.logs, .backups, .variables]
         }
     }
 
@@ -212,6 +212,10 @@ struct ResourceDetail: View {
                             deployments: deployments, isLoading: isLoading, onSelect: { selectedDeployment = $0 },
                             canLoadMore: canLoadMoreDeployments, onLoadMore: onLoadMoreDeployments)
                     }
+                case .backups:
+                    if case .database(let uuid) = resource.route {
+                        BackupsView(client: deploymentClient, database: uuid, resourceName: resource.name)
+                    }
                 case .containers:
                     ContainerList(containers: resource.containers)
                 case .variables:
@@ -264,6 +268,7 @@ struct ResourceDetail: View {
 
 /// The views under the detail header.
 enum DetailTab: Identifiable, Hashable {
+    case backups
     case deployments
     case containers
     case logs
@@ -273,6 +278,7 @@ enum DetailTab: Identifiable, Hashable {
 
     var title: String {
         switch self {
+        case .backups: "Backups"
         case .deployments: "Deployments"
         case .containers: "Containers"
         case .logs: "Logs"
