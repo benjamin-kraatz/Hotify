@@ -9,13 +9,14 @@ import UIKit
 #if os(macOS)
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        !UserDefaults.standard.bool(forKey: MenuBarModel.enabledKey)
     }
 }
 #endif
 
 @main struct MyApp: App {
-    @State private var instanceStore = InstanceStore()
+    @State private var instanceStore: InstanceStore
+    @State private var menuBar: MenuBarModel
     @State private var variableLock = VariableLock()
     @SwiftUI.Environment(\.scenePhase) private var scenePhase
 
@@ -25,6 +26,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     #endif
 
     init() {
+        let store = InstanceStore()
+        let companion = MenuBarModel()
+        companion.connect(store)
+        _instanceStore = State(initialValue: store)
+        _menuBar = State(initialValue: companion)
         #if os(iOS)
         // SwiftUI has no hook for navigation title fonts, so large titles pick up the brand's wide face here.
         let wide = UIFont.systemFont(ofSize: 34, weight: .heavy, width: .expanded)
@@ -35,17 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environment(instanceStore)
-                .environment(variableLock)
-                #if os(iOS)
-            // iOS ignores the asset catalog accent here, though macOS honors it. `glassButton` undoes this
-            // tint on plain glass buttons, which would otherwise fill solid red.
-            .tint(.ember)
-                #endif
-        }
-        #if os(macOS)
+        mainScene
+            #if os(macOS)
         .defaultSize(width: 1240, height: 780)
         .windowToolbarStyle(.unified)
         .commands {
@@ -55,19 +52,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-        #endif
-        // Not on `.inactive`: the Face ID prompt itself makes the scene inactive on iOS.
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background {
-                variableLock.lock()
+            #endif
+            // Not on `.inactive`: the Face ID prompt itself makes the scene inactive on iOS.
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background {
+                    variableLock.lock()
+                }
             }
-        }
 
         #if os(macOS)
         Settings {
             SettingsView()
                 .environment(variableLock)
+                .environment(instanceStore)
+                .environment(menuBar)
         }
+
+        MenuBarExtra(
+            "Hotify", systemImage: "flame", isInserted: Binding(get: { menuBar.enabled }, set: { menuBar.enabled = $0 })
+        ) {
+            MenuBarView().environment(menuBar)
+        }
+        .menuBarExtraStyle(.window)
 
         Window("About Hotify", id: "about") {
             AboutView(buildInfo: .current)
@@ -78,5 +84,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         .windowStyle(.hiddenTitleBar)
         .restorationBehavior(.disabled)
         #endif
+    }
+
+    @SceneBuilder
+    private var mainScene: some Scene {
+        #if os(macOS)
+        Window("Hotify", id: "main") { mainContent }
+        #else
+        WindowGroup { mainContent }
+        #endif
+    }
+
+    private var mainContent: some View {
+        ContentView()
+            .environment(instanceStore)
+            .environment(variableLock)
+            .environment(menuBar)
+            #if os(iOS)
+        .tint(.ember)
+            #endif
     }
 }

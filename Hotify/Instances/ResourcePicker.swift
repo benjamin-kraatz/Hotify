@@ -2,10 +2,10 @@ import CoolifyAPI
 import SwiftUI
 
 /// Chooses an instance and one of its resources without changing the main window's selection.
-struct SyncResourcePicker: View {
+struct ResourcePicker: View {
     @SwiftUI.Environment(InstanceStore.self) private var store
     var title: String
-    @Binding var endpoint: VariableSyncEndpoint?
+    @Binding var endpoint: ResourceEndpoint?
     @State private var instanceID: UUID?
     @State private var resources: [ResourceSummary] = []
     @State private var error: String?
@@ -36,7 +36,7 @@ struct SyncResourcePicker: View {
                             endpoint = nil
                             return
                         }
-                        endpoint = VariableSyncEndpoint(
+                        endpoint = ResourceEndpoint(
                             instanceID: instance.id, instanceName: instance.name, resource: resource)
                     })
             ) {
@@ -81,6 +81,6 @@ struct SyncResourcePicker: View {
 }
 
 #Preview {
-    Form { SyncResourcePicker(title: "Destination", endpoint: .constant(nil)) }
+    Form { ResourcePicker(title: "Destination", endpoint: .constant(nil)) }
         .environment(InstanceStore(instances: []))
 }
