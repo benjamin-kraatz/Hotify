@@ -43,6 +43,21 @@ struct ResourceGuide: View {
                     }
                 }
 
+                if kind == .service {
+                    section("Containers in Logs") {
+                        GuideRow(title: "Running", detail: "Filled flame. Pick it to read what the container prints.") {
+                            containerIcon("flame.fill")
+                        }
+                        GuideRow(
+                            title: "Stopped",
+                            detail:
+                                "Outlined flame. Coolify serves no logs for a stopped container. Some, like a migration, stop on purpose once their job is done."
+                        ) {
+                            containerIcon("flame")
+                        }
+                    }
+                }
+
                 if kind == .application {
                     Text("Every Start, Redeploy, and Restart adds an entry under Deployments, with how it went.")
                         .font(.footnote)
@@ -53,6 +68,13 @@ struct ResourceGuide: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// The same symbols the log view's container menu shows.
+    private func containerIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.title3)
+            .foregroundStyle(.ember)
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -155,6 +177,11 @@ struct ResourceGuideButton: View {
 
 #Preview("Application") {
     ResourceGuide(kind: .application)
+        .frame(width: 400, height: 720)
+}
+
+#Preview("Service") {
+    ResourceGuide(kind: .service)
         .frame(width: 400, height: 720)
 }
 
