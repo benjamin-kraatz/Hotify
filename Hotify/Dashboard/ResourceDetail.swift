@@ -172,24 +172,17 @@ struct ResourceDetail: View {
             .padding(.horizontal, 20)
             .padding(.bottom, loadError == nil && actionError == nil ? 0 : 12)
 
-            VStack(alignment: .leading, spacing: 6) {
-                if tabs.count > 1 {
-                    Picker("Show", selection: Binding(get: { currentTab }, set: { tab = $0 })) {
-                        ForEach(tabs) { tab in
-                            Text(tab.title).tag(tab)
-                        }
+            if tabs.count > 1 {
+                Picker("Show", selection: Binding(get: { currentTab }, set: { tab = $0 })) {
+                    ForEach(tabs) { tab in
+                        Text(tab.title).tag(tab)
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
                 }
-                Text(currentTab.caption(for: resource.kind))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 20)
+                .padding(.bottom, 14)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
 
             Group {
                 switch currentTab {
@@ -240,20 +233,6 @@ enum DetailTab: Identifiable, Hashable {
         case .deployments: "Deployments"
         case .containers: "Containers"
         case .logs: "Logs"
-        }
-    }
-
-    /// One line on what the tab holds, because "Deployments" next to a Redeploy button reads like an action.
-    func caption(for kind: ResourceKind) -> String {
-        switch (self, kind) {
-        case (.deployments, _):
-            "Each build Coolify ran for this app, newest first. Start, Redeploy, and Restart each add one."
-        case (.containers, _):
-            "The containers this service runs, and how each one is doing."
-        case (.logs, .service):
-            "What one container prints, newest at the bottom. Pick the container on the left."
-        case (.logs, _):
-            "What the container prints, newest at the bottom. Refreshes every 5 seconds."
         }
     }
 }
