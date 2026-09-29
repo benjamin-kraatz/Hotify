@@ -3,7 +3,7 @@ import SwiftUI
 /// The teardrop from the Hotify logo: a sharp tip on top, a round belly below.
 ///
 /// Draw it in a frame about 1.5 times taller than it is wide to match the logo.
-struct FlameShape: Shape {
+nonisolated struct FlameShape: Shape {
     func path(in rect: CGRect) -> Path {
         let radius = rect.width / 2
         let belly = rect.maxY - radius

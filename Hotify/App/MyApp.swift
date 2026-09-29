@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Window("About Hotify", id: "about") {
             AboutView(buildInfo: .current)
-                .frame(width: 400, height: 560)
+                .frame(width: 400, height: 584)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
