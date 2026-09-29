@@ -6,8 +6,8 @@ struct VariableSyncView: View {
     @SwiftUI.Environment(InstanceStore.self) private var store
     @SwiftUI.Environment(VariableLock.self) private var lock
     @SwiftUI.Environment(\.dismiss) private var dismiss
-    @State var source: VariableSyncEndpoint?
-    @State private var destination: VariableSyncEndpoint?
+    @State var source: ResourceEndpoint?
+    @State private var destination: ResourceEndpoint?
     @State private var sourcePreview = false
     @State private var destinationPreview = false
     @State private var model = VariableSyncModel()
@@ -25,11 +25,11 @@ struct VariableSyncView: View {
                     }
                 } else {
                     if !model.reviewing {
-                        SyncResourcePicker(title: "Source", endpoint: $source)
+                        ResourcePicker(title: "Source", endpoint: $source)
                         if source?.resource.kind == .application {
                             Toggle("Source preview variables", isOn: $sourcePreview)
                         }
-                        SyncResourcePicker(title: "Destination", endpoint: $destination)
+                        ResourcePicker(title: "Destination", endpoint: $destination)
                         if destination?.resource.kind == .application {
                             Toggle("Destination preview variables", isOn: $destinationPreview)
                         }
@@ -156,7 +156,7 @@ struct VariableSyncView: View {
         }
     }
 
-    private func client(for endpoint: VariableSyncEndpoint) -> CoolifyClient? {
+    private func client(for endpoint: ResourceEndpoint) -> CoolifyClient? {
         store.instances.first { $0.id == endpoint.instanceID }.flatMap { store.client(for: $0) }
     }
 

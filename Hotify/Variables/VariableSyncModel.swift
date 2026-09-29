@@ -10,7 +10,7 @@ final class VariableSyncModel {
     var reviewing = false
     var busy = false
     var message: String?
-    var changedDestination: VariableSyncEndpoint?
+    var changedDestination: ResourceEndpoint?
     var changedPreview = false
 
     var writes: [VariableSyncChange] {
@@ -34,7 +34,7 @@ final class VariableSyncModel {
     }
 
     func compare(
-        source: VariableSyncEndpoint, destination: VariableSyncEndpoint, sourceClient: CoolifyClient,
+        source: ResourceEndpoint, destination: ResourceEndpoint, sourceClient: CoolifyClient,
         destinationClient: CoolifyClient, sourcePreview: Bool, destinationPreview: Bool
     ) async {
         reset()
@@ -61,7 +61,7 @@ final class VariableSyncModel {
     }
 
     func apply(
-        source: VariableSyncEndpoint, destination: VariableSyncEndpoint, sourceClient: CoolifyClient,
+        source: ResourceEndpoint, destination: ResourceEndpoint, sourceClient: CoolifyClient,
         destinationClient: CoolifyClient, sourcePreview: Bool
     ) async {
         guard let plan, reviewing, !busy, !writes.isEmpty else { return }
@@ -99,7 +99,7 @@ final class VariableSyncModel {
         }
     }
 
-    func activate(client: CoolifyClient, endpoint: VariableSyncEndpoint) async {
+    func activate(client: CoolifyClient, endpoint: ResourceEndpoint) async {
         guard !busy else { return }
         busy = true
         defer { busy = false }

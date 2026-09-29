@@ -3,6 +3,7 @@ import SwiftUI
 
 /// The window: instances, then the selected instance's resources, then the open resource.
 struct ContentView: View {
+    @SwiftUI.Environment(MenuBarModel.self) private var menuBar
     @SwiftUI.Environment(InstanceStore.self) private var store
     @SwiftUI.Environment(\.scenePhase) private var scenePhase
     @State private var boundToken: String?
@@ -33,10 +34,13 @@ struct ContentView: View {
         .onAppear {
             store.seedFromEnvironment()
             rebind()
+            followMenuBarSelection()
         }
+        .onChange(of: menuBar.navigation) { _, _ in followMenuBarSelection() }
         .onChange(of: store.selectedID) { _, _ in
             selectedResource = nil
             rebind()
+            if menuBar.navigation?.instanceID == store.selectedID { selectedResource = menuBar.navigation?.route }
         }
         .onChange(of: store.selected?.baseURL) { _, _ in
             resetConnection()
@@ -175,10 +179,19 @@ struct ContentView: View {
         Task { await dashboard.perform(action, route: route) }
     }
 
+    private func followMenuBarSelection() {
+        guard let request = menuBar.navigation, store.instances.contains(where: { $0.id == request.instanceID }) else {
+            return
+        }
+        store.selectedID = request.instanceID
+        selectedResource = request.route
+    }
+
     private func resetConnection() {
         selectedResource = nil
         if let id = store.selectedID { dashboards.removeValue(forKey: id) }
         rebind()
+        if menuBar.navigation?.instanceID == store.selectedID { selectedResource = menuBar.navigation?.route }
     }
 
     private func rebind() {
@@ -211,5 +224,6 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(InstanceStore(instances: []))
+        .environment(MenuBarModel(preview: true))
         .environment(VariableLock(isRequired: true))
 }

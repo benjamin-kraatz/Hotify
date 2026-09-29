@@ -67,7 +67,7 @@ struct VariableList: View {
         .sheet(isPresented: $syncing) {
             VariableSyncView(
                 source: store.selected.map {
-                    VariableSyncEndpoint(instanceID: $0.id, instanceName: $0.name, resource: resource)
+                    ResourceEndpoint(instanceID: $0.id, instanceName: $0.name, resource: resource)
                 }
             ) {
                 Task { await model.load() }

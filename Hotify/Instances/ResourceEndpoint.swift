@@ -1,8 +1,8 @@
 import CoolifyAPI
 import Foundation
 
-/// A saved instance and resource selected for a manual variable comparison.
-struct VariableSyncEndpoint: Hashable {
+/// A saved instance and resource selected independently of the main window.
+struct ResourceEndpoint: Hashable {
     var instanceID: UUID
     var instanceName: String
     var resource: ResourceSummary

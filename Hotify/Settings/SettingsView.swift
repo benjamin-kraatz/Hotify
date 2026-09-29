@@ -10,6 +10,9 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            #if os(macOS)
+            MenuBarSettings()
+            #endif
             Section {
                 Toggle(
                     isOn: Binding(
@@ -64,7 +67,7 @@ struct SettingsView: View {
         .animation(.snappy, value: lock.failure)
         #if os(macOS)
         .frame(width: 500)
-        .frame(minHeight: 240, idealHeight: 300)
+        .frame(minHeight: 340, idealHeight: 560)
         #endif
     }
 
@@ -80,10 +83,14 @@ struct SettingsView: View {
 
 #Preview("On") {
     SettingsView()
+        .environment(MenuBarModel(preview: true))
+        .environment(InstanceStore(instances: []))
         .environment(VariableLock(isRequired: true))
 }
 
 #Preview("Off") {
     SettingsView()
+        .environment(MenuBarModel(preview: true))
+        .environment(InstanceStore(instances: []))
         .environment(VariableLock(isRequired: false))
 }
