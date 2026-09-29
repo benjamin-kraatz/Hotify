@@ -77,31 +77,76 @@ struct ResourceHeader: View {
         .animation(.snappy, value: actions)
     }
 
+    /// Every label when they fit. Then the lead action keeps its label and the rest shrink to icons,
+    /// and on the narrowest screens the rest move into a menu.
     private var actionBar: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
-                buttons
+                ForEach(actions) { action in
+                    button(action, showsTitle: true)
+                }
             }
-            VStack(alignment: .leading, spacing: 10) {
-                buttons
+            HStack(spacing: 10) {
+                ForEach(actions) { action in
+                    button(action, showsTitle: action == actions.first)
+                }
+            }
+            HStack(spacing: 10) {
+                if let lead = actions.first {
+                    button(lead, showsTitle: true)
+                }
+                moreMenu
             }
         }
         .controlSize(.large)
-        .labelStyle(.titleAndIcon)
     }
 
-    private var buttons: some View {
-        ForEach(actions) { action in
-            Button(action.title, systemImage: action.systemImage) {
-                onAction(action)
+    private func button(_ action: ResourceAction, showsTitle: Bool) -> some View {
+        Button(action.title, systemImage: action.systemImage) {
+            onAction(action)
+        }
+        .labelStyle(ActionLabelStyle(showsTitle: showsTitle))
+        // The first action is the likely one, unless it takes the resource down.
+        .glassButton(prominent: action == actions.first && action != .stop && action != .cancelDeployment)
+        .disabled(action.isBlocked(by: pendingAction))
+        .help(action.explanation(for: resource.kind))
+        .accessibilityHint(action.explanation(for: resource.kind))
+        .keyboardShortcut(action.shortcut)
+        .transition(.scale(scale: 0.85).combined(with: .opacity))
+    }
+
+    @ViewBuilder
+    private var moreMenu: some View {
+        let rest = actions.dropFirst()
+        if !rest.isEmpty {
+            Menu {
+                ForEach(Array(rest)) { action in
+                    Button(action == .stop ? "Stop…" : action.title, systemImage: action.systemImage) {
+                        onAction(action)
+                    }
+                    .disabled(action.isBlocked(by: pendingAction))
+                }
+            } label: {
+                Label("More Actions", systemImage: "ellipsis")
+                    .labelStyle(.iconOnly)
             }
-            // The first action is the likely one, unless it takes the resource down.
-            .glassButton(prominent: action == actions.first && action != .stop && action != .cancelDeployment)
-            .disabled(action.isBlocked(by: pendingAction))
-            .help(action.explanation(for: resource.kind))
-            .accessibilityHint(action.explanation(for: resource.kind))
-            .keyboardShortcut(action.shortcut)
-            .transition(.scale(scale: 0.85).combined(with: .opacity))
+            .menuIndicator(.hidden)
+            .glassButton()
+        }
+    }
+}
+
+/// Title and icon, or the icon alone while the title still reaches VoiceOver.
+private struct ActionLabelStyle: LabelStyle {
+    var showsTitle: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if showsTitle {
+            Label(configuration)
+                .labelStyle(.titleAndIcon)
+        } else {
+            Label(configuration)
+                .labelStyle(.iconOnly)
         }
     }
 }
