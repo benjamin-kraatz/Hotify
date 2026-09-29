@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="Hotify/Assets.xcassets/Logo.imageset/logo.png" alt="Hotify" width="160">
+
 # Hotify
 
 A Mac and iPhone app for your self-hosted [Coolify](https://coolify.io).
