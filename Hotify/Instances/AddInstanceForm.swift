@@ -71,6 +71,8 @@ struct AddInstanceForm: View {
                             .disabled(!isFormComplete)
                     }
                     .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
 
                 Section {

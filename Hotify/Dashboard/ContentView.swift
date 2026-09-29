@@ -77,7 +77,7 @@ struct ContentView: View {
             AddInstanceForm { name, url, token in
                 let _ = try store.add(name: name, baseURL: url, token: token)
             }
-            .presentationDetents([.fraction(0.37), .medium])
+            .presentationDetents([.fraction(0.37), .large])
             .presentationDragIndicator(.hidden)
             //            .interactiveDismissDisabled()
             //            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
