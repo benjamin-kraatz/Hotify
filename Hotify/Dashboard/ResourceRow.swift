@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// One service and the containers Coolify reports under it.
-struct ServiceRow: View {
+/// One application, database, or service, with start, restart, and stop.
+struct ResourceRow: View {
     var title: String
     var status: String
-    var containerLines: [String]
+    var detailLines: [String]
     var isBusy: Bool
     var onStart: () -> Void
     var onRestart: () -> Void
@@ -14,7 +14,7 @@ struct ServiceRow: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
             Text(status)
-            ForEach(containerLines, id: \.self) { line in
+            ForEach(detailLines, id: \.self) { line in
                 Text(line)
             }
             HStack {
@@ -28,10 +28,10 @@ struct ServiceRow: View {
 }
 
 #Preview {
-    ServiceRow(
+    ResourceRow(
         title: "convex",
         status: "running:healthy",
-        containerLines: [
+        detailLines: [
             "dashboard running:healthy",
             "backend running:healthy",
         ],

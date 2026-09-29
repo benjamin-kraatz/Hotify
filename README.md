@@ -19,8 +19,8 @@ A Mac and iPhone app for your self-hosted [Coolify](https://coolify.io).
 ## What it does
 
 - Connect as many Coolify instances as you like. Tokens live in the Keychain.
-- See your team, Coolify version, server status, and services at a glance.
-- Start, stop, and restart services.
+- See your team, Coolify version, server status, applications, databases, and services at a glance.
+- Start, stop, and restart applications, databases, and services.
 - Works over plain `http` on your LAN too.
 
 Hotify supports Coolify 4.3.x. Older versions aren't tested. It uses Coolify's HTTP API, so it can do what the API can do. The [OpenAPI spec](https://github.com/coollabsio/coolify/blob/main/openapi.yaml) lists what that is.
@@ -28,7 +28,7 @@ Hotify supports Coolify 4.3.x. Older versions aren't tested. It uses Coolify's H
 ## What's next
 
 - [ ] Face ID to lock connected servers
-- [ ] Applications, databases, deployments, previews, and logs
+- [ ] Deployments, previews, and logs
 - [ ] Downloading files from the server to the device
 
 ## Building

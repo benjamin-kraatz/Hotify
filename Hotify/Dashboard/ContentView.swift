@@ -33,7 +33,7 @@ struct ContentView: View {
                 } else if store.selected.flatMap({ store.client(for: $0) }) == nil {
                     Text("No token for this instance")
                 } else {
-                    serviceList
+                    resourceList
                 }
             }
             .navigationTitle(dashboard.teamName.isEmpty ? "Hotify" : dashboard.teamName)
@@ -59,13 +59,17 @@ struct ContentView: View {
             }
             .presentationDetents([.fraction(0.37), .medium])
             .presentationDragIndicator(.hidden)
-//            .interactiveDismissDisabled()
-//            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            //            .interactiveDismissDisabled()
+            //            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             .presentationContentInteraction(.automatic)
         }
     }
 
-    private var serviceList: some View {
+    private var resourceListsAreEmpty: Bool {
+        dashboard.applications.isEmpty && dashboard.databases.isEmpty && dashboard.services.isEmpty
+    }
+
+    private var resourceList: some View {
         List {
             if let loadError = dashboard.loadError {
                 Text(loadError)
@@ -76,23 +80,82 @@ struct ContentView: View {
             if let server = dashboard.servers.first {
                 Text("\(server.name) \(server.isReachable == true ? "reachable" : "unreachable")")
             }
-            ForEach(dashboard.services) { service in
-                ServiceRow(
-                    title: service.serviceType ?? service.name,
-                    status: service.status ?? "unknown",
-                    containerLines: (service.applications ?? []).map { container in
-                        "\(container.humanName ?? container.name) \(container.status ?? "unknown")"
-                    },
-                    isBusy: dashboard.busyServiceIDs.contains(service.id),
-                    onStart: { run(.start, on: service) },
-                    onRestart: { run(.restart, on: service) },
-                    onStop: { run(.stop, on: service) }
-                )
+            if dashboard.isLoading, resourceListsAreEmpty {
+                Text("Loading")
+            } else if resourceListsAreEmpty, dashboard.loadError == nil {
+                Text("No resources")
+            }
+            if !dashboard.applications.isEmpty {
+                Section("Applications") {
+                    ForEach(dashboard.applications, id: \.uuid) { application in
+                        ResourceRow(
+                            title: application.name.isEmpty ? application.uuid : application.name,
+                            status: application.status ?? "unknown",
+                            detailLines: applicationLines(application),
+                            isBusy: dashboard.busyTargets.contains(.application(application.uuid)),
+                            onStart: { run(.start, on: application) },
+                            onRestart: { run(.restart, on: application) },
+                            onStop: { run(.stop, on: application) }
+                        )
+                    }
+                }
+            }
+            if !dashboard.databases.isEmpty {
+                Section("Databases") {
+                    ForEach(dashboard.databases) { database in
+                        ResourceRow(
+                            title: databaseTitle(database),
+                            status: database.status ?? "unknown",
+                            detailLines: [],
+                            isBusy: dashboard.busyTargets.contains(.database(database.uuid)),
+                            onStart: { run(.start, on: database) },
+                            onRestart: { run(.restart, on: database) },
+                            onStop: { run(.stop, on: database) }
+                        )
+                    }
+                }
+            }
+            if !dashboard.services.isEmpty {
+                Section("Services") {
+                    ForEach(dashboard.services) { service in
+                        ResourceRow(
+                            title: service.serviceType ?? service.name,
+                            status: service.status ?? "unknown",
+                            detailLines: (service.applications ?? []).map { container in
+                                "\(container.humanName ?? container.name) \(container.status ?? "unknown")"
+                            },
+                            isBusy: dashboard.busyTargets.contains(.service(service.id)),
+                            onStart: { run(.start, on: service) },
+                            onRestart: { run(.restart, on: service) },
+                            onStop: { run(.stop, on: service) }
+                        )
+                    }
+                }
             }
         }
     }
 
-    private func run(_ action: ServiceAction, on service: Service) {
+    private func applicationLines(_ application: Application) -> [String] {
+        guard let fqdn = application.fqdn, !fqdn.isEmpty else { return [] }
+        return [fqdn]
+    }
+
+    private func databaseTitle(_ database: Database) -> String {
+        if let name = database.name, !name.isEmpty {
+            return name
+        }
+        return database.uuid
+    }
+
+    private func run(_ action: ResourceAction, on application: Application) {
+        Task { await dashboard.perform(action, on: application) }
+    }
+
+    private func run(_ action: ResourceAction, on database: Database) {
+        Task { await dashboard.perform(action, on: database) }
+    }
+
+    private func run(_ action: ResourceAction, on service: Service) {
         Task { await dashboard.perform(action, on: service) }
     }
 
