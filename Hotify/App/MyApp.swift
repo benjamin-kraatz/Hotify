@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 @main struct MyApp: App {
     @State private var instanceStore = InstanceStore()
+    @State private var variableLock = VariableLock()
+    @SwiftUI.Environment(\.scenePhase) private var scenePhase
 
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -35,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WindowGroup {
             ContentView()
                 .environment(instanceStore)
+                .environment(variableLock)
                 #if os(iOS)
             // iOS ignores the asset catalog accent here, though macOS honors it. `glassButton` undoes this
             // tint on plain glass buttons, which would otherwise fill solid red.
@@ -44,6 +47,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if os(macOS)
         .defaultSize(width: 1240, height: 780)
         .windowToolbarStyle(.unified)
+        #endif
+        // Not on `.inactive`: the Face ID prompt itself makes the scene inactive on iOS.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                variableLock.lock()
+            }
+        }
+
+        #if os(macOS)
+        Settings {
+            SettingsView()
+                .environment(variableLock)
+        }
         #endif
     }
 }

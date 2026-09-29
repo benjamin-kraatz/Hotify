@@ -114,9 +114,9 @@ private struct DeploymentRow: View {
                                 systemImage: "timer"
                             )
                         }
-                        if let url = line.url {
+                        if let url = line.url, let urlLabel = line.urlLabel {
                             Link(destination: url) {
-                                Label(url.host() ?? "Open", systemImage: "arrow.up.right")
+                                Label(urlLabel, systemImage: "arrow.up.right")
                             }
                             .foregroundStyle(.tint)
                             .lineLimit(1)

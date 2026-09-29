@@ -1,7 +1,7 @@
 import CoolifyAPI
 import SwiftUI
 
-/// Deployments, containers, and logs for one application, database, or service. Polls while it is on screen.
+/// Deployments, containers, logs, and variables for one application, database, or service. Polls while it is on screen.
 struct ResourceDetailScreen: View {
     var client: CoolifyClient?
     var resource: ResourceSummary
@@ -11,6 +11,7 @@ struct ResourceDetailScreen: View {
     var onAction: (ResourceAction) -> Void
 
     @State private var model: ResourceDetailModel
+    @State private var variables: VariablesModel
     @State private var chosenContainerID: Int?
 
     init(
@@ -19,6 +20,7 @@ struct ResourceDetailScreen: View {
         pendingAction: ResourceAction?,
         actionError: String? = nil,
         model: ResourceDetailModel = ResourceDetailModel(),
+        variables: VariablesModel = VariablesModel(),
         onAction: @escaping (ResourceAction) -> Void
     ) {
         self.client = client
@@ -27,6 +29,7 @@ struct ResourceDetailScreen: View {
         self.actionError = actionError
         self.onAction = onAction
         _model = State(initialValue: model)
+        _variables = State(initialValue: variables)
     }
 
     /// The container whose logs show: the one picked, else the first running one, else the first.
@@ -59,6 +62,7 @@ struct ResourceDetailScreen: View {
             rawLogs: model.logs,
             logLineCount: $model.logLineCount,
             deployments: model.deployments,
+            variables: variables,
             loadError: model.loadError,
             actionError: actionError,
             isLoading: model.isLoading,
@@ -67,6 +71,7 @@ struct ResourceDetailScreen: View {
         .task(id: resource.route) {
             guard let client else { return }
             model.prepare(client, route: resource.route)
+            variables.prepare(client, route: resource.route)
             await model.setLogSource(logSource)
             while !Task.isCancelled {
                 await model.refresh()
@@ -87,7 +92,7 @@ struct ResourceDetailScreen: View {
     }
 }
 
-/// The detail layout. Takes plain values so a preview does not need a client.
+/// The detail layout. Takes plain values, and models without a client, so a preview does not need one.
 struct ResourceDetail: View {
     var resource: ResourceSummary
     var pendingAction: ResourceAction?
@@ -97,6 +102,7 @@ struct ResourceDetail: View {
     var rawLogs: String
     @Binding var logLineCount: Int
     var deployments: [DeploymentLine]
+    var variables: VariablesModel
     var loadError: String?
     var actionError: String?
     var isLoading: Bool
@@ -107,9 +113,9 @@ struct ResourceDetail: View {
 
     private var tabs: [DetailTab] {
         switch resource.kind {
-        case .application: [.logs, .deployments]
-        case .service: [.logs, .containers]
-        case .database: [.logs]
+        case .application: [.logs, .deployments, .variables]
+        case .service: [.logs, .containers, .variables]
+        case .database: [.logs, .variables]
         }
     }
 
@@ -190,6 +196,13 @@ struct ResourceDetail: View {
                     DeploymentTimeline(deployments: deployments, isLoading: isLoading)
                 case .containers:
                     ContainerList(containers: resource.containers)
+                case .variables:
+                    VariableList(
+                        model: variables,
+                        resource: resource,
+                        pendingAction: pendingAction,
+                        onAction: onAction
+                    )
                 case .logs:
                     LogView(
                         lines: logLines,
@@ -208,6 +221,12 @@ struct ResourceDetail: View {
         .animation(.snappy, value: currentTab)
         .animation(.snappy, value: loadError)
         .animation(.snappy, value: actionError)
+        // A restart or deploy started anywhere puts saved variable changes to use.
+        .onChange(of: pendingAction) { _, action in
+            if action == .start || action == .deploy || action == .restart {
+                variables.hasUnappliedChanges = false
+            }
+        }
         #if os(macOS)
         .navigationTitle(resource.name)
         #else
@@ -230,6 +249,7 @@ enum DetailTab: Identifiable, Hashable {
     case deployments
     case containers
     case logs
+    case variables
 
     var id: Self { self }
 
@@ -238,6 +258,7 @@ enum DetailTab: Identifiable, Hashable {
         case .deployments: "Deployments"
         case .containers: "Containers"
         case .logs: "Logs"
+        case .variables: "Variables"
         }
     }
 }
@@ -247,6 +268,7 @@ enum DetailTab: Identifiable, Hashable {
         applicationDetailPreview()
     }
     .frame(width: 640, height: 720)
+    .environment(VariableLock(isRequired: true))
 }
 
 #Preview("Service") {
@@ -268,6 +290,7 @@ enum DetailTab: Identifiable, Hashable {
         )
     }
     .frame(width: 640, height: 720)
+    .environment(VariableLock(isRequired: true))
 }
 
 #Preview("Database") {
@@ -275,6 +298,7 @@ enum DetailTab: Identifiable, Hashable {
         databaseDetailPreview()
     }
     .frame(width: 640, height: 720)
+    .environment(VariableLock(isRequired: true))
 }
 
 private func applicationDetailPreview() -> some View {

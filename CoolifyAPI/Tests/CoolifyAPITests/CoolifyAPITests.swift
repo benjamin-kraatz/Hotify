@@ -207,6 +207,88 @@ final class CoolifyAPITests: XCTestCase {
         let result = try await client.deploy(uuid: "app-1")
         XCTAssertEqual(result.deployments.first?.deploymentUUID, "dep-3")
     }
+
+    func testEnvironmentVariablesKeepHiddenValuesApartFromEmptyOnes() throws {
+        let json = """
+            [
+              { "uuid": "env-1", "key": "DATABASE_URL", "value": "postgres://db", "real_value": "postgres://db",
+                "is_preview": 0, "is_literal": "1", "is_multiline": false, "is_shown_once": 0,
+                "is_runtime": 1, "is_buildtime": 0 },
+              { "uuid": "env-2", "key": "EMPTY", "value": "", "is_preview": 1 },
+              { "uuid": "env-3", "key": "STRIPE_KEY", "is_shown_once": true }
+            ]
+            """.data(using: .utf8)!
+
+        let variables = try CoolifyJSON.decoder().decode([EnvironmentVariable].self, from: json)
+        XCTAssertEqual(variables[0].value, "postgres://db")
+        XCTAssertEqual(variables[0].isLiteral, true)
+        XCTAssertEqual(variables[0].isBuildtime, false)
+        XCTAssertEqual(variables[1].value, "")
+        XCTAssertEqual(variables[1].isPreview, true)
+        XCTAssertNil(variables[1].isRuntime)
+        // Coolify leaves the value out, rather than sending an empty one, for a shown-once variable.
+        XCTAssertNil(variables[2].value)
+        XCTAssertTrue(variables[2].isShownOnce)
+    }
+
+    func testEnvironmentVariableWritesSendEveryFlag() async throws {
+        let client = try makeClient { request in
+            XCTAssertNil(request.url?.query)
+            switch (request.httpMethod, request.url?.path) {
+            case ("POST", "/api/v1/applications/app-1/envs"):
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+                XCTAssertEqual(
+                    bodyText(request),
+                    #"{"is_literal":true,"is_multiline":false,"is_preview":false,"is_shown_once":false,"key":"API_URL","value":"https:\/\/api.example.com"}"#
+                )
+                return (201, Data(#"{"uuid":"env-9"}"#.utf8), [:])
+            case ("PATCH", "/api/v1/services/svc-1/envs"):
+                // Services have no preview variables, so the flag stays out of the body.
+                XCTAssertEqual(
+                    bodyText(request),
+                    #"{"is_literal":false,"is_multiline":true,"is_shown_once":true,"key":"CERT","value":"a\nb"}"#
+                )
+                return (201, Data(#"{"uuid":"env-2","key":"CERT","is_multiline":1,"is_shown_once":1}"#.utf8), [:])
+            case ("DELETE", "/api/v1/databases/db-1/envs/env-3"):
+                XCTAssertNil(bodyText(request))
+                return (200, Data(#"{"message":"Environment variable deleted."}"#.utf8), [:])
+            default:
+                XCTFail("Unexpected \(request.httpMethod ?? "") \(request.url?.path ?? "")")
+                return (404, Data(), [:])
+            }
+        }
+
+        let created = try await client.createEnvironmentVariable(
+            EnvironmentVariableDraft(
+                key: "API_URL", value: "https://api.example.com", isPreview: false, isLiteral: true),
+            on: .application("app-1")
+        )
+        XCTAssertEqual(created.uuid, "env-9")
+        let updated = try await client.updateEnvironmentVariable(
+            EnvironmentVariableDraft(key: "CERT", value: "a\nb", isMultiline: true, isShownOnce: true),
+            on: .service("svc-1")
+        )
+        XCTAssertTrue(updated.isShownOnce)
+        try await client.deleteEnvironmentVariable("env-3", from: .database("db-1"))
+    }
+}
+
+/// URLSession hands a protocol the body as a stream, not as `httpBody`.
+private func bodyText(_ request: URLRequest) -> String? {
+    if let body = request.httpBody {
+        return String(decoding: body, as: UTF8.self)
+    }
+    guard let stream = request.httpBodyStream else { return nil }
+    stream.open()
+    defer { stream.close() }
+    var data = Data()
+    var buffer = [UInt8](repeating: 0, count: 1_024)
+    while stream.hasBytesAvailable {
+        let read = stream.read(&buffer, maxLength: buffer.count)
+        guard read > 0 else { break }
+        data.append(buffer, count: read)
+    }
+    return String(decoding: data, as: UTF8.self)
 }
 
 private func queryItems(_ request: URLRequest) -> [URLQueryItem] {

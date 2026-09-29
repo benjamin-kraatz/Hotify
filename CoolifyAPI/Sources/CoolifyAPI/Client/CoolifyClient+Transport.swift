@@ -16,6 +16,16 @@ extension CoolifyClient {
         return try decode(T.self, from: data, response: response)
     }
 
+    func post<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
+        let (data, response) = try await send("POST", path: path, body: try CoolifyJSON.encoder().encode(body))
+        return try decode(T.self, from: data, response: response)
+    }
+
+    func patch<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
+        let (data, response) = try await send("PATCH", path: path, body: try CoolifyJSON.encoder().encode(body))
+        return try decode(T.self, from: data, response: response)
+    }
+
     func delete<T: Decodable>(_ path: String) async throws -> T {
         let (data, response) = try await send("DELETE", path: path)
         return try decode(T.self, from: data, response: response)
@@ -56,11 +66,13 @@ extension CoolifyClient {
     private func send(
         _ method: String,
         path: String,
-        query: [URLQueryItem] = []
+        query: [URLQueryItem] = [],
+        body: Data? = nil
     ) async throws -> (Data, HTTPURLResponse) {
         let url = try makeURL(path: path, query: query)
         var request = URLRequest(url: url)
         request.httpMethod = method
+        request.httpBody = body
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
         if method != "GET" {

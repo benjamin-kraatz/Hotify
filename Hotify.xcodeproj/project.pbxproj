@@ -306,7 +306,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Hotify;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "Download files from your server onto your device.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Protect access to the management surface,";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Hotify asks for Face ID before it shows environment variable values.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -377,7 +377,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Hotify;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "Download files from your server onto your device.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Protect access to the management surface,";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Hotify asks for Face ID before it shows environment variable values.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

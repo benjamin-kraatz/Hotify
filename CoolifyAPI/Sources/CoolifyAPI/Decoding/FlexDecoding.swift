@@ -62,6 +62,13 @@ enum CoolifyJSON {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
     }
+
+    static func encoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.outputFormatting = .sortedKeys
+        return encoder
+    }
 }
 
 enum CoolifyTimestamp {

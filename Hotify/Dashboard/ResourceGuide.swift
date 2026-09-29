@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// What the flames and the action buttons mean, for the kind of resource on screen.
+/// What the flames, the action buttons, and the variable lock mean, for the kind of resource on screen.
 struct ResourceGuide: View {
     var kind: ResourceKind
 
@@ -58,6 +58,29 @@ struct ResourceGuide: View {
                     }
                 }
 
+                section("Variables") {
+                    GuideRow(
+                        title: "Locked",
+                        detail:
+                            "Keys show, values stay hidden until you confirm it’s you. They lock again after a few minutes. Turn this off in Settings."
+                    ) {
+                        variableIcon("lock.fill")
+                    }
+                    GuideRow(
+                        title: "Hidden",
+                        detail:
+                            "Coolify never sends back a value saved as hidden, and a token without read:sensitive gets no values. You can still replace them."
+                    ) {
+                        variableIcon("eye.slash")
+                    }
+                    GuideRow(
+                        title: "Applying a change",
+                        detail: "Containers read variables when they start. Redeploy or restart to use a change."
+                    ) {
+                        variableIcon("arrow.triangle.2.circlepath")
+                    }
+                }
+
                 if kind == .application {
                     Text("Every Start, Redeploy, and Restart adds an entry under Deployments, with how it went.")
                         .font(.footnote)
@@ -75,6 +98,12 @@ struct ResourceGuide: View {
         Image(systemName: systemName)
             .font(.title3)
             .foregroundStyle(.ember)
+    }
+
+    private func variableIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.secondary)
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

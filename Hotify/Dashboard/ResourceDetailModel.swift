@@ -13,6 +13,7 @@ struct DeploymentLine: Identifiable, Hashable {
     var startedAt: Date?
     var finishedAt: Date?
     var url: URL?
+    var urlLabel: String?
 
     var isPreview: Bool { pullRequest != nil }
 
@@ -47,7 +48,7 @@ struct DeploymentLine: Identifiable, Hashable {
 }
 
 extension DeploymentLine {
-    init(deployment: Deployment, fallbackID: String) {
+    init(deployment: Deployment, fallbackID: String, clientAPIBaseURL: URL) {
         let identifier = deployment.deploymentUUID
         id = identifier.isEmpty ? fallbackID : identifier
         status = deployment.status ?? "unknown"
@@ -62,9 +63,26 @@ extension DeploymentLine {
         isRestart = deployment.restartOnly == true
         startedAt = deployment.createdAtDate
         finishedAt = deployment.finishedAtDate
-        if let raw = deployment.deploymentURL, !raw.isEmpty, let parsed = URL(string: raw) {
-            url = parsed
+        if let raw = deployment.deploymentURL?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            if let parsed = URL(string: raw), parsed.scheme != nil, let host = parsed.host() {
+                url = parsed
+                urlLabel = host
+            } else if let relativeURL = URL(string: raw, relativeTo: Self.instanceRoot(for: clientAPIBaseURL))?
+                .absoluteURL
+            {
+                // Coolify also returns its own relative deployment route in this field, not an application URL.
+                url = relativeURL
+                urlLabel = "View in Coolify"
+            }
         }
+    }
+
+    private static func instanceRoot(for apiBaseURL: URL) -> URL {
+        var components = URLComponents(url: apiBaseURL, resolvingAgainstBaseURL: false)
+        components?.path = "/"
+        components?.query = nil
+        components?.fragment = nil
+        return components?.url ?? apiBaseURL
     }
 }
 
@@ -189,7 +207,11 @@ final class ResourceDetailModel {
             let page = try await client.applicationDeployments(uuid, take: 20)
             return .success(
                 page.deployments.enumerated().map { index, deployment in
-                    DeploymentLine(deployment: deployment, fallbackID: "\(index)")
+                    DeploymentLine(
+                        deployment: deployment,
+                        fallbackID: "\(index)",
+                        clientAPIBaseURL: client.apiBaseURL
+                    )
                 }
             )
         } catch is CancellationError {

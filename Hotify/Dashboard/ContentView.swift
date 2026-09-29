@@ -211,4 +211,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(InstanceStore(instances: []))
+        .environment(VariableLock(isRequired: true))
 }

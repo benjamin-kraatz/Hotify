@@ -9,6 +9,8 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Design/` has the shared look: brand colors, the display font, the flame glyph, and `Heat`.
   - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
+  - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
+  - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
   - `Storage/` wraps the Keychain.
 - `CoolifyAPI/` is a local Swift package the app depends on.
   - `Client/` has `CoolifyClient` and one `CoolifyClient+<Group>.swift` extension per endpoint group.

@@ -10,6 +10,7 @@ struct InstanceSidebar: View {
     var heat: (CoolifyInstance) -> Heat
 
     @State private var removing: CoolifyInstance?
+    @State private var isShowingSettings = false
 
     var body: some View {
         @Bindable var store = store
@@ -66,7 +67,32 @@ struct InstanceSidebar: View {
                 .keyboardShortcut("n")
                 .help("Add a Coolify instance")
             }
+            // The Mac has a Settings window in the app menu instead.
+            #if os(iOS)
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Settings", systemImage: "gear") {
+                    isShowingSettings = true
+                }
+            }
+            #endif
         }
+        #if os(iOS)
+        .sheet(isPresented: $isShowingSettings) {
+            NavigationStack {
+                SettingsView()
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            isShowingSettings = false
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        #endif
         .confirmationDialog(
             removing.map { "Remove \($0.name)?" } ?? "",
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
@@ -139,4 +165,5 @@ private struct Wordmark: View {
         }
     }
     .environment(InstanceStore(instances: instances))
+    .environment(VariableLock(isRequired: true))
 }
