@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Hotify/Assets.xcassets/Logo.imageset/logo.png" alt="Hotify" width="160">
+<img src="Hotify/Resources/Assets.xcassets/Logo.imageset/logo.png" alt="Hotify" width="160">
 
 # Hotify
 
