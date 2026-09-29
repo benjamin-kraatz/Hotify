@@ -22,6 +22,7 @@ struct ResourceRow: View {
                 Button("Restart", action: onRestart)
                 Button("Stop", action: onStop)
             }
+            .buttonStyle(.borderless)
             .disabled(isBusy)
         }
     }
