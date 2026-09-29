@@ -69,6 +69,9 @@ public struct EnvironmentVariableDraft: Encodable, Sendable, Hashable {
     public var isLiteral: Bool
     public var isMultiline: Bool
     public var isShownOnce: Bool
+    public var isRuntime: Bool?
+    public var isBuildtime: Bool?
+    public var comment: String?
 
     public init(
         key: String,
@@ -76,7 +79,10 @@ public struct EnvironmentVariableDraft: Encodable, Sendable, Hashable {
         isPreview: Bool? = nil,
         isLiteral: Bool = false,
         isMultiline: Bool = false,
-        isShownOnce: Bool = false
+        isShownOnce: Bool = false,
+        isRuntime: Bool? = nil,
+        isBuildtime: Bool? = nil,
+        comment: String? = nil
     ) {
         self.key = key
         self.value = value
@@ -84,5 +90,8 @@ public struct EnvironmentVariableDraft: Encodable, Sendable, Hashable {
         self.isLiteral = isLiteral
         self.isMultiline = isMultiline
         self.isShownOnce = isShownOnce
+        self.isRuntime = isRuntime
+        self.isBuildtime = isBuildtime
+        self.comment = comment
     }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 
 /// A resource's environment variables. Keys always show. Values wait until `VariableLock` opens.
 struct VariableList: View {
+    @SwiftUI.Environment(InstanceStore.self) private var store
     @SwiftUI.Environment(VariableLock.self) private var lock
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -15,6 +16,8 @@ struct VariableList: View {
     @State private var editing: EditorTarget?
     @State private var deleting: VariableLine?
     @State private var copiedAll = 0
+    @State private var syncing = false
+    @State private var promptToApply = false
 
     private var shown: [VariableLine] {
         let trimmed = filter.trimmingCharacters(in: .whitespaces)
@@ -29,7 +32,7 @@ struct VariableList: View {
 
     /// What puts a change to use. A stopped resource picks it up when it starts, so it needs nothing.
     private var applyAction: ResourceAction? {
-        guard resource.heat != .cold else { return nil }
+        guard resource.heat != .cold, !model.lastChangeWasPreview else { return nil }
         return resource.kind == .application ? .deploy : .restart
     }
 
@@ -60,6 +63,25 @@ struct VariableList: View {
         }
         .sheet(item: $editing) { target in
             editor(for: target)
+        }
+        .sheet(isPresented: $syncing) {
+            VariableSyncView(
+                source: store.selected.map {
+                    VariableSyncEndpoint(instanceID: $0.id, instanceName: $0.name, resource: resource)
+                }
+            ) {
+                Task { await model.load() }
+            }
+        }
+        .onChange(of: model.changeRevision) { _, _ in if editing == nil { promptToApply = true } }
+        .onChange(of: editing == nil) { _, closed in if closed && model.hasUnappliedChanges { promptToApply = true } }
+        .alert("Apply saved variables?", isPresented: $promptToApply) {
+            if let action = applyAction {
+                Button(action.title) { onAction(action) }.disabled(pendingAction != nil || resource.isDeploying)
+            }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text(applyMessage)
         }
         .confirmationDialog(
             deleting.map { "Delete \($0.key)?" } ?? "",
@@ -124,6 +146,12 @@ struct VariableList: View {
             }
 
             Menu {
+                Button("Compare and sync…", systemImage: "arrow.left.arrow.right") {
+                    Task {
+                        guard await unlock() else { return }
+                        syncing = true
+                    }
+                }
                 Button("Copy All as .env", systemImage: "doc.on.clipboard") {
                     copyAll()
                 }
@@ -195,7 +223,10 @@ struct VariableList: View {
     }
 
     private var applyMessage: String {
-        switch applyAction {
+        if model.lastChangeWasPreview {
+            return "Saved. Redeploy the affected previews in Coolify to apply these variables."
+        }
+        return switch applyAction {
         case .deploy: "Saved. It takes effect after a redeploy."
         case .restart: "Saved. It takes effect after a restart."
         default: "Saved. It takes effect on the next start."
@@ -454,6 +485,7 @@ private struct ApplyBar: View {
         resource: ResourceSummary(route: .database("db"), name: "postgres", status: "running:healthy"),
         onAction: { _ in }
     )
+    .environment(InstanceStore(instances: []))
     .environment(VariableLock(isRequired: true))
     .frame(width: 560, height: 420)
 }
@@ -479,6 +511,7 @@ private func variableListPreview(isRequired: Bool, unapplied: Bool = false) -> s
         resource: ResourceSummary(route: .application("app"), name: "marketing-site", status: "running:healthy"),
         onAction: { _ in }
     )
+    .environment(InstanceStore(instances: []))
     .environment(VariableLock(isRequired: isRequired))
     .frame(width: 560, height: 560)
 }
