@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @testable import CoolifyAPI
 
 final class LiveCoolifyTests: XCTestCase {
@@ -7,7 +8,7 @@ final class LiveCoolifyTests: XCTestCase {
         let environment = liveEnvironment()
         try XCTSkipIf(environment["COOLIFY_LIVE_TESTS"] != "1")
         guard let baseURL = environment["COOLIFY_DEMO_INSTANCE_BASE_URL"], !baseURL.isEmpty,
-              let token = environment["COOLIFY_DEMO_INSTANCE_API_KEY"], !token.isEmpty
+            let token = environment["COOLIFY_DEMO_INSTANCE_API_KEY"], !token.isEmpty
         else {
             throw XCTSkip("COOLIFY_DEMO_INSTANCE_BASE_URL and COOLIFY_DEMO_INSTANCE_API_KEY are not set")
         }
@@ -49,9 +50,12 @@ final class LiveCoolifyTests: XCTestCase {
 
         print("Coolify \(version) health=\(health) team=\(team.name)")
         print("projects=\(projects.count) servers=\(servers.count) serverResources=\(serverResources.count)")
-        print("applications=\(applications.count) services=\(services.count) databases=\(databases.count) inventory=\(inventory.count) runningDeployments=\(deployments.count)")
+        print(
+            "applications=\(applications.count) services=\(services.count) databases=\(databases.count) inventory=\(inventory.count) runningDeployments=\(deployments.count)"
+        )
         for service in services {
-            let containers = (service.applications ?? []).map { "\($0.name):\($0.status ?? "unknown")" }.joined(separator: ", ")
+            let containers = (service.applications ?? []).map { "\($0.name):\($0.status ?? "unknown")" }.joined(
+                separator: ", ")
             print("service \(service.serviceType ?? service.name) \(service.status ?? "unknown") [\(containers)]")
         }
     }

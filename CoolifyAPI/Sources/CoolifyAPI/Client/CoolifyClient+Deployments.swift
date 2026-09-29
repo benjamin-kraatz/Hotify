@@ -48,7 +48,7 @@ extension CoolifyClient {
         dockerTag: String? = nil
     ) async throws -> DeployResult {
         var query: [URLQueryItem] = [
-            URLQueryItem(name: "force", value: Self.flag(force)),
+            URLQueryItem(name: "force", value: Self.flag(force))
         ]
         if let uuid, !uuid.isEmpty {
             query.append(URLQueryItem(name: "uuid", value: uuid))

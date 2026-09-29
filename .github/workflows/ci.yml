@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  SWIFT_SOURCES: Hotify CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: xcode-27
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      # swift-format ships with the Xcode toolchain and reads .swift-format at the repo root.
+      - name: swift format lint
+        run: swift format lint --strict --recursive --parallel $SWIFT_SOURCES
+
+  test:
+    name: Test CoolifyAPI
+    runs-on: xcode-27
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: CoolifyAPI
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - uses: actions/cache@v4
+        with:
+          path: CoolifyAPI/.build
+          key: spm-build-${{ runner.os }}-${{ hashFiles('CoolifyAPI/Package.swift', 'CoolifyAPI/Package.resolved') }}
+          restore-keys: spm-build-${{ runner.os }}-
+
+      # LiveCoolifyTests skip on their own because COOLIFY_LIVE_TESTS is not set here.
+      - name: swift test
+        run: swift test
+
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: xcode-27
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            destination: generic/platform=macOS
+          - name: iOS Simulator
+            destination: generic/platform=iOS Simulator
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain
+        run: xcodebuild -version
+
+      - uses: actions/cache@v4
+        with:
+          path: .spm
+          key: spm-packages-${{ hashFiles('Hotify.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-packages-
+
+      # Dry build: no signing, so it needs no certificates, profiles, or team access.
+      # Package versions come only from the committed Package.resolved.
+      - name: xcodebuild build
+        run: |
+          xcodebuild build \
+            -project Hotify.xcodeproj \
+            -scheme Hotify \
+            -configuration Debug \
+            -destination '${{ matrix.destination }}' \
+            -derivedDataPath .derivedData \
+            -clonedSourcePackagesDirPath .spm \
+            -disableAutomaticPackageResolution \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""

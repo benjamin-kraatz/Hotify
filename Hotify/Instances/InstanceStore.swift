@@ -54,14 +54,14 @@ final class InstanceStore {
         guard instances.isEmpty else { return }
         let environment = ProcessInfo.processInfo.environment
         guard let baseURL = environment["COOLIFY_DEMO_INSTANCE_BASE_URL"], !baseURL.isEmpty,
-              let token = environment["COOLIFY_DEMO_INSTANCE_API_KEY"], !token.isEmpty
+            let token = environment["COOLIFY_DEMO_INSTANCE_API_KEY"], !token.isEmpty
         else { return }
         _ = try? add(name: "Demo", baseURL: baseURL, token: token)
     }
 
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: defaultsKey),
-              let decoded = try? JSONDecoder().decode([CoolifyInstance].self, from: data)
+            let decoded = try? JSONDecoder().decode([CoolifyInstance].self, from: data)
         else { return }
         instances = decoded
     }

@@ -35,8 +35,8 @@ public protocol HasResourceStatus {
     var status: String? { get }
 }
 
-public extension HasResourceStatus {
-    var parsedStatus: ResourceStatus? {
+extension HasResourceStatus {
+    public var parsedStatus: ResourceStatus? {
         status.map(ResourceStatus.init(raw:))
     }
 }

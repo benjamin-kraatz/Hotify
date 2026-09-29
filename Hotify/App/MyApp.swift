@@ -1,7 +1,8 @@
+import SwiftUI
+
 #if os(macOS)
 import AppKit
 #endif
-import SwiftUI
 
 #if os(macOS)
 final class AppDelegate: NSObject, NSApplicationDelegate {

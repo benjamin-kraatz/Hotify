@@ -9,13 +9,13 @@ let package = Package(
         .iOS(.v18),
     ],
     products: [
-        .library(name: "CoolifyAPI", targets: ["CoolifyAPI"]),
+        .library(name: "CoolifyAPI", targets: ["CoolifyAPI"])
     ],
     targets: [
         .target(
             name: "CoolifyAPI",
             swiftSettings: [
-                .enableUpcomingFeature("ApproachableConcurrency"),
+                .enableUpcomingFeature("ApproachableConcurrency")
             ]
         ),
         .testTarget(

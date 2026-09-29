@@ -40,8 +40,9 @@ extension CoolifyClient {
             return payload.logs
         }
         if value.hasPrefix("{"),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let message = object["message"] as? String {
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let message = object["message"] as? String
+        {
             return message
         }
         return value

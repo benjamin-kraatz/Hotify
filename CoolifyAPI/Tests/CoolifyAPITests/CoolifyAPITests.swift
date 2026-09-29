@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @testable import CoolifyAPI
 
 final class CoolifyAPITests: XCTestCase {
@@ -16,15 +17,15 @@ final class CoolifyAPITests: XCTestCase {
 
     func testApplicationSettingsAcceptIntegerBooleans() throws {
         let json = """
-        {
-          "uuid": "app-1",
-          "name": "Web",
-          "status": "running:healthy",
-          "git_repository": "git@github.com:example/web.git",
-          "created_at": "2026-09-18T12:02:18.000000Z",
-          "settings": { "is_preview_deployments_enabled": true, "is_force_https_enabled": 1 }
-        }
-        """.data(using: .utf8)!
+            {
+              "uuid": "app-1",
+              "name": "Web",
+              "status": "running:healthy",
+              "git_repository": "git@github.com:example/web.git",
+              "created_at": "2026-09-18T12:02:18.000000Z",
+              "settings": { "is_preview_deployments_enabled": true, "is_force_https_enabled": 1 }
+            }
+            """.data(using: .utf8)!
 
         let application = try CoolifyJSON.decoder().decode(Application.self, from: json)
         XCTAssertEqual(application.settings?.isForceHTTPSEnabled, true)
@@ -34,15 +35,15 @@ final class CoolifyAPITests: XCTestCase {
 
     func testDeploymentPageReadsStringPullRequestID() throws {
         let json = """
-        {
-          "count": 1,
-          "deployments": [{
-            "deployment_uuid": "dep-1",
-            "pull_request_id": "18",
-            "is_api": 1
-          }]
-        }
-        """.data(using: .utf8)!
+            {
+              "count": 1,
+              "deployments": [{
+                "deployment_uuid": "dep-1",
+                "pull_request_id": "18",
+                "is_api": 1
+              }]
+            }
+            """.data(using: .utf8)!
 
         let page = try CoolifyJSON.decoder().decode(DeploymentPage.self, from: json)
         XCTAssertEqual(page.deployments[0].pullRequestID, 18)
@@ -52,20 +53,20 @@ final class CoolifyAPITests: XCTestCase {
 
     func testServiceDecodeKeepsNestedContainerStatus() throws {
         let json = """
-        {
-          "uuid": "svc-1",
-          "name": "convex",
-          "status": "running:healthy",
-          "service_type": "convex",
-          "server_status": true,
-          "applications": [{
-            "id": 7,
-            "name": "dashboard",
-            "human_name": "dashboard",
-            "status": "running:healthy"
-          }]
-        }
-        """.data(using: .utf8)!
+            {
+              "uuid": "svc-1",
+              "name": "convex",
+              "status": "running:healthy",
+              "service_type": "convex",
+              "server_status": true,
+              "applications": [{
+                "id": 7,
+                "name": "dashboard",
+                "human_name": "dashboard",
+                "status": "running:healthy"
+              }]
+            }
+            """.data(using: .utf8)!
 
         let service = try CoolifyJSON.decoder().decode(Service.self, from: json)
         XCTAssertEqual(service.applications?.first?.parsedStatus?.isRunning, true)
@@ -117,7 +118,8 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
         do {
             let (status, data, headers) = try responder(request)
             guard let url = request.url,
-                  let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)
+                let response = HTTPURLResponse(
+                    url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)
             else {
                 client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
                 return
