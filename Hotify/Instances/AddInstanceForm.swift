@@ -25,6 +25,11 @@ struct AddInstanceForm: View {
         }
         .padding()
         .frame(minWidth: 360)
+        .interactiveDismissDisabled(isDirty)
+    }
+
+    private var isDirty: Bool {
+        !name.isEmpty || !baseURL.isEmpty || !token.isEmpty
     }
 
     private func submit() {

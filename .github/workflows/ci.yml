@@ -3,7 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ['**/*.md', LICENSE]
   pull_request:
+    paths-ignore: ['**/*.md', LICENSE]
   workflow_dispatch:
 
 concurrency:
@@ -48,12 +50,8 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - uses: actions/cache@v4
-        with:
-          path: CoolifyAPI/.build
-          key: spm-build-${{ runner.os }}-${{ hashFiles('CoolifyAPI/Package.swift', 'CoolifyAPI/Package.resolved') }}
-          restore-keys: spm-build-${{ runner.os }}-
-
+      # No .build cache: the package has no dependencies, and a fresh checkout
+      # gives every source a new mtime, so a restored .build is rebuilt anyway.
       # LiveCoolifyTests skip on their own because COOLIFY_LIVE_TESTS is not set here.
       - name: swift test
         run: swift test
@@ -74,7 +72,10 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Toolchain
-        run: xcodebuild -version
+        id: toolchain
+        run: |
+          xcodebuild -version
+          echo "xcode=$(xcodebuild -version | awk 'NR==2 {print $3}')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@v4
         with:
@@ -82,8 +83,19 @@ jobs:
           key: spm-packages-${{ hashFiles('Hotify.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: spm-packages-
 
+      # Package targets such as PostHog keep their mtimes through .spm, so Xcode
+      # reuses their cached build products and only recompiles the app sources.
+      # Keyed on the Xcode build because module caches do not survive a toolchain change.
+      - uses: actions/cache@v4
+        with:
+          path: .derivedData
+          key: derived-data-${{ matrix.name }}-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('Hotify.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: derived-data-${{ matrix.name }}-${{ steps.toolchain.outputs.xcode }}-
+
       # Dry build: no signing, so it needs no certificates, profiles, or team access.
       # Package versions come only from the committed Package.resolved.
+      # arm64 only: a generic destination otherwise builds x86_64 too, which doubles compile time.
+      # No index store: nothing reads it on CI.
       - name: xcodebuild build
         run: |
           xcodebuild build \
@@ -94,6 +106,9 @@ jobs:
             -derivedDataPath .derivedData \
             -clonedSourcePackagesDirPath .spm \
             -disableAutomaticPackageResolution \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""

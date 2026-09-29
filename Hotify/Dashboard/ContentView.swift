@@ -55,8 +55,13 @@ struct ContentView: View {
         }
         .sheet(isPresented: $isAdding) {
             AddInstanceForm { name, url, token in
-                try store.add(name: name, baseURL: url, token: token)
+                let _ = try store.add(name: name, baseURL: url, token: token)
             }
+            .presentationDetents([.fraction(0.37), .medium])
+            .presentationDragIndicator(.visible)
+//            .interactiveDismissDisabled()
+//            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            .presentationContentInteraction(.automatic)
         }
     }
 
