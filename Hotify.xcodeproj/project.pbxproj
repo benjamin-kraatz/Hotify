@@ -293,6 +293,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Hotify-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Hotify;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "Download files from your server onto your device.";
@@ -360,6 +361,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Hotify-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Hotify;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "Download files from your server onto your device.";
