@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentView: View {
     @SwiftUI.Environment(InstanceStore.self) private var store
     @State private var dashboard = DashboardModel()
+    @State private var dashboards: [CoolifyInstance.ID: DashboardModel] = [:]
     @State private var isAdding = false
     @State private var editing: CoolifyInstance?
     @State private var path = NavigationPath()
@@ -246,9 +247,15 @@ struct ContentView: View {
     }
 
     private func rebind() {
-        guard let selected = store.selected else {
-            dashboard.stop()
-            return
+        dashboard.stop()
+        guard let selected = store.selected else { return }
+
+        if let cachedDashboard = dashboards[selected.id] {
+            dashboard = cachedDashboard
+        } else {
+            let newDashboard = DashboardModel()
+            dashboards[selected.id] = newDashboard
+            dashboard = newDashboard
         }
         dashboard.bind(store.client(for: selected))
     }

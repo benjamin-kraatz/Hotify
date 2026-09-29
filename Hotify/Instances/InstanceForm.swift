@@ -1,3 +1,4 @@
+import CoolifyAPI
 import SwiftUI
 
 /// Adds a Coolify instance, or edits one that is already saved.
@@ -7,13 +8,17 @@ struct InstanceForm: View {
     var title: String
     var confirmTitle: String
     var overrideError: String?
+    var overrideSuccess: String?
     var onSave: (String, String, String) throws -> Void
 
     @State private var name: String
     @State private var baseURL: String
     @State private var token: String
     @State private var isTokenVisible = false
-    @State private var errorMessage: String?
+    @State private var saveError: String?
+    @State private var connectionError: String?
+    @State private var connectionSuccess: String?
+    @State private var connectionGeneration = 0
 
     private let originalName: String
     private let originalURL: String
@@ -26,11 +31,13 @@ struct InstanceForm: View {
         baseURL: String = "",
         token: String = "",
         overrideError: String? = nil,
+        overrideSuccess: String? = nil,
         onSave: @escaping (String, String, String) throws -> Void
     ) {
         self.title = title
         self.confirmTitle = confirmTitle
         self.overrideError = overrideError
+        self.overrideSuccess = overrideSuccess
         self.onSave = onSave
         self.originalName = name
         self.originalURL = baseURL
@@ -95,23 +102,19 @@ struct InstanceForm: View {
 
                 Section {
                     HStack {
-                        TryConnectionButton()
-                            .disabled(!isFormComplete)
+                        TryConnectionButton(resetID: connectionGeneration) {
+                            await tryConnection()
+                        }
+                        .disabled(!canTryConnection)
                     }
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                }
-
-                Section {
-                    // Form fields
                 } footer: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if let message = overrideError ?? errorMessage {
-                            Text(message)
-                                .foregroundStyle(.red)
-                        }
-                    }
+                    connectionStatus
+                        .animation(.easeInOut(duration: 0.2), value: connectionError)
+                        .animation(.easeInOut(duration: 0.2), value: connectionSuccess)
+                        .animation(.easeInOut(duration: 0.2), value: saveError)
                 }
             }
             .navigationTitle(title)
@@ -132,12 +135,39 @@ struct InstanceForm: View {
                     .disabled(!isFormComplete || !isDirty)
                 }
             }
+            .onChange(of: name) { _, _ in
+                saveError = nil
+            }
+            .onChange(of: baseURL) { _, _ in
+                connectionGeneration += 1
+                clearConnectionFeedback()
+            }
+            .onChange(of: token) { _, _ in
+                connectionGeneration += 1
+                clearConnectionFeedback()
+            }
         }
         #if os(macOS)
         .padding()
         #endif
         .frame(minWidth: 360)
         .interactiveDismissDisabled(isDirty)
+    }
+
+    @ViewBuilder
+    private var connectionStatus: some View {
+        if let message = overrideError ?? connectionError ?? saveError {
+            Text(message)
+                .foregroundStyle(.red)
+        } else if let message = overrideSuccess ?? connectionSuccess {
+            Text(message)
+                .foregroundStyle(.green)
+        }
+    }
+
+    private var canTryConnection: Bool {
+        !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var isFormComplete: Bool {
@@ -164,12 +194,85 @@ struct InstanceForm: View {
     }
 
     private func submit() {
+        connectionError = nil
+        connectionSuccess = nil
         do {
             try onSave(name, baseURL, token)
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            saveError = error.localizedDescription
         }
+    }
+
+    private func clearConnectionFeedback() {
+        connectionError = nil
+        connectionSuccess = nil
+        saveError = nil
+    }
+
+    private func tryConnection() async {
+        let url = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let apiToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        let generation = connectionGeneration
+        clearConnectionFeedback()
+
+        do {
+            // A fast answer finishes before the spinner is visible.
+            try await Task.sleep(for: .milliseconds(100))
+            let client = try CoolifyClient(instanceURL: url, token: apiToken)
+            let probe = try await probe(client)
+            guard stillCurrent(url: url, token: apiToken, generation: generation) else { return }
+            let message = connectionSummary(team: probe.team, version: probe.version)
+            connectionSuccess = message
+            announce(message)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard stillCurrent(url: url, token: apiToken, generation: generation) else { return }
+            let message = (error as? CoolifyError)?.message ?? error.localizedDescription
+            connectionError = message
+            announce(message)
+        }
+    }
+
+    private func probe(_ client: CoolifyClient) async throws -> (team: String, version: String) {
+        async let versionTask = client.version()
+        async let teamTask = client.currentTeam()
+        do {
+            // Health answers without a token, so the team request is what proves this token works.
+            let team = try await teamTask
+            let version = (try? await versionTask) ?? ""
+            return (team.name, version)
+        } catch {
+            _ = try? await versionTask
+            throw error
+        }
+    }
+
+    private func stillCurrent(url: String, token apiToken: String, generation: Int) -> Bool {
+        generation == connectionGeneration
+            && baseURL.trimmingCharacters(in: .whitespacesAndNewlines) == url
+            && token.trimmingCharacters(in: .whitespacesAndNewlines) == apiToken
+    }
+
+    private func connectionSummary(team: String, version: String) -> String {
+        let trimmedTeam = team.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedVersion = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTeam.isEmpty, !trimmedVersion.isEmpty {
+            return "Connected to \(trimmedTeam). Coolify \(trimmedVersion)."
+        }
+        if !trimmedTeam.isEmpty {
+            return "Connected to \(trimmedTeam)."
+        }
+        if !trimmedVersion.isEmpty {
+            return "Connected. Coolify \(trimmedVersion)."
+        }
+        return "Connected."
+    }
+
+    private func announce(_ message: String) {
+        guard !message.isEmpty else { return }
+        AccessibilityNotification.Announcement(message).post()
     }
 }
 
@@ -191,5 +294,11 @@ struct InstanceForm: View {
     InstanceForm(
         overrideError:
             "The connection could not be established. Please provide us your credit card info and we will charge you."
+    ) { _, _, _ in }
+}
+
+#Preview("Connected") {
+    InstanceForm(
+        overrideSuccess: "Connected to Home. Coolify 4.0.0-beta.436."
     ) { _, _, _ in }
 }

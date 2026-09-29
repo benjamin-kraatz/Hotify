@@ -25,17 +25,9 @@ final class DashboardModel {
         generation += 1
         pollTask?.cancel()
         self.client = client
-        version = ""
-        teamName = ""
-        projects = []
-        servers = []
-        applications = []
-        databases = []
-        services = []
         loadError = nil
         actionError = nil
         busyTargets = []
-        lastUpdated = nil
         guard client != nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -55,7 +47,7 @@ final class DashboardModel {
 
     func refresh() async {
         guard let client else { return }
-        if applications.isEmpty, databases.isEmpty, services.isEmpty {
+        if lastUpdated == nil {
             isLoading = true
         }
         defer { isLoading = false }
