@@ -24,39 +24,6 @@ struct ResourceHeader: View {
         ResourceAction.available(for: resource)
     }
 
-    /// One line on what is happening, or on what the buttons do. Start and Redeploy read alike otherwise.
-    private var caption: String? {
-        let isApplication = resource.kind == .application
-        switch pendingAction {
-        case .start?:
-            return isApplication
-                ? "Coolify is building the latest commit, then starts it. Deployments shows the progress."
-                : "Coolify is starting the containers."
-        case .deploy?:
-            return "Coolify is building the latest commit. Deployments shows the progress."
-        case .restart?:
-            return "Coolify is restarting the containers."
-        case .stop?:
-            return "Coolify is stopping the containers."
-        case .cancelDeployment?:
-            return "Coolify is cancelling the deployment."
-        case nil:
-            break
-        }
-        if resource.isDeploying {
-            return "A deployment is running. Deployments shows the progress."
-        }
-        guard isApplication else { return nil }
-        if hasFailed {
-            return "Check Deployments for what went wrong. Start tries again with the latest commit."
-        }
-        switch resource.heat {
-        case .cold: return "Start builds the latest commit and runs it."
-        case .lit, .warming, .troubled: return "Redeploy builds the latest commit. Restart keeps the current build."
-        case .unknown: return nil
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .center, spacing: 18) {
@@ -101,23 +68,13 @@ struct ResourceHeader: View {
                 }
             }
 
-            if !actions.isEmpty || caption != nil {
-                VStack(alignment: .leading, spacing: 8) {
-                    actionBar
-                    if let caption {
-                        Text(caption)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .contentTransition(.opacity)
-                    }
-                }
+            if !actions.isEmpty {
+                actionBar
             }
         }
         .animation(.snappy, value: heat)
         .animation(.snappy, value: statusText)
         .animation(.snappy, value: actions)
-        .animation(.snappy, value: caption)
     }
 
     private var actionBar: some View {

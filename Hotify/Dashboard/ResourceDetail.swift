@@ -214,6 +214,11 @@ struct ResourceDetail: View {
         .navigationTitle(resource.kind.title)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                ResourceGuideButton(kind: resource.kind)
+            }
+        }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
         }
