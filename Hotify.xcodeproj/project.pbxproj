@@ -15,6 +15,9 @@
 
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* Hotify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hotify.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		33AB7694306BA41600E8B52D /* AGENTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = AGENTS.md; sourceTree = "<group>"; };
+		33AB7695306BA41600E8B52D /* env.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = env.example; sourceTree = "<group>"; };
+		33AB7696306BA41600E8B52D /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -41,6 +44,9 @@
 		000000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				33AB7694306BA41600E8B52D /* AGENTS.md */,
+				33AB7695306BA41600E8B52D /* env.example */,
+				33AB7696306BA41600E8B52D /* README.md */,
 				000000000000000000000010 /* Hotify */,
 				000000000000000000000020 /* Products */,
 			);
