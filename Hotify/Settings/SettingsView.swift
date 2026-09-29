@@ -48,6 +48,15 @@ struct SettingsView: View {
             } footer: {
                 Text(footer)
             }
+            #if os(iOS)
+            Section {
+                NavigationLink {
+                    AboutView(buildInfo: .current)
+                } label: {
+                    Label("About Hotify", systemImage: "info.circle")
+                }
+            }
+            #endif
         }
         .formStyle(.grouped)
         .animation(.snappy, value: lock.isRequired)

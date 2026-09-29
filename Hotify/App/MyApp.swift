@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @SwiftUI.Environment(\.openWindow) private var openWindow
     #endif
 
     init() {
@@ -47,6 +48,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if os(macOS)
         .defaultSize(width: 1240, height: 780)
         .windowToolbarStyle(.unified)
+        .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Hotify") {
+                    openWindow(id: "about")
+                }
+            }
+        }
         #endif
         // Not on `.inactive`: the Face ID prompt itself makes the scene inactive on iOS.
         .onChange(of: scenePhase) { _, phase in
@@ -60,6 +68,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SettingsView()
                 .environment(variableLock)
         }
+
+        Window("About Hotify", id: "about") {
+            AboutView(buildInfo: .current)
+                .frame(width: 400, height: 560)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .windowStyle(.hiddenTitleBar)
+        .restorationBehavior(.disabled)
         #endif
     }
 }

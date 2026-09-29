@@ -1,4 +1,4 @@
-name: CI
+name: Release
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 
 concurrency:
   # A shared main group can discard pending release runs even without cancellation.
-  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: release-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -34,93 +34,9 @@ jobs:
           COMMIT: ${{ github.sha }}
         run: python3 -B scripts/release_tag.py --before "$BEFORE" --commit "$COMMIT"
 
-  test:
-    name: Test CoolifyAPI
-    runs-on: xcode-27
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: CoolifyAPI
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Toolchain
-        run: |
-          xcodebuild -version
-          swift --version
-
-      # No .build cache: the package has no dependencies, and a fresh checkout
-      # gives every source a new mtime, so a restored .build is rebuilt anyway.
-      # LiveCoolifyTests skip on their own because COOLIFY_LIVE_TESTS is not set here.
-      - name: swift test
-        run: swift test
-
-      - name: Instance sync checks
-        working-directory: .
-        run: |
-          swiftc Hotify/Instances/InstanceSyncRecord.swift Hotify/Instances/InstanceSync.swift Tests/InstanceSyncTests.swift -o "$RUNNER_TEMP/hotify-sync-tests"
-          "$RUNNER_TEMP/hotify-sync-tests"
-
-  build:
-    name: Build (${{ matrix.name }})
-    runs-on: xcode-27
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            destination: generic/platform=macOS
-          - name: iOS Simulator
-            destination: generic/platform=iOS Simulator
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Toolchain
-        id: toolchain
-        run: |
-          xcodebuild -version
-          echo "xcode=$(xcodebuild -version | awk 'NR==2 {print $3}')" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v4
-        with:
-          path: .spm
-          key: spm-packages-${{ hashFiles('Hotify.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: spm-packages-
-
-      # Package targets such as PostHog keep their mtimes through .spm, so Xcode
-      # reuses their cached build products and only recompiles the app sources.
-      # Keyed on the Xcode build because module caches do not survive a toolchain change.
-      - uses: actions/cache@v4
-        with:
-          path: .derivedData
-          key: derived-data-${{ matrix.name }}-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('Hotify.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: derived-data-${{ matrix.name }}-${{ steps.toolchain.outputs.xcode }}-
-
-      # Dry build: no signing, so it needs no certificates, profiles, or team access.
-      # Package versions come only from the committed Package.resolved.
-      # arm64 only: a generic destination otherwise builds x86_64 too, which doubles compile time.
-      # No index store: nothing reads it on CI.
-      - name: xcodebuild build
-        run: |
-          xcodebuild build \
-            -project Hotify.xcodeproj \
-            -scheme Hotify \
-            -configuration Debug \
-            -destination '${{ matrix.destination }}' \
-            -derivedDataPath .derivedData \
-            -clonedSourcePackagesDirPath .spm \
-            -disableAutomaticPackageResolution \
-            ARCHS=arm64 \
-            ONLY_ACTIVE_ARCH=YES \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
-
   release-tag:
     name: Tag release
-    needs: [release-check, test, build]
+    needs: [release-check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5

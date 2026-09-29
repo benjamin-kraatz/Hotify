@@ -34,7 +34,9 @@ swift format format -i --recursive --parallel Hotify CoolifyAPI/Sources CoolifyA
 swift format lint --strict --recursive --parallel Hotify CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
 ```
 
-CI (`.github/workflows/ci.yml`) runs the package tests and unsigned macOS and iOS Simulator builds on the `xcode-27` runner for every push to `main` and every pull request, except docs-only changes.
+GitHub Actions (`.github/workflows/ci.yml`) validates releases and publishes tags. Xcode Cloud owns app builds on main and iOS/macOS distribution from tags. GitHub tagging does not wait for Xcode Cloud builds. Run the local checks above when changing app or API code.
+
+The app target runs `scripts/write_build_info.sh` on every build and archive to embed `BuildInfo.json`. The About view reads its commit SHA separately from the marketing version and Cloud-managed build number.
 
 The live tests in `LiveCoolifyTests.swift` skip unless `COOLIFY_LIVE_TESTS=1` is set. They need a real instance and read `COOLIFY_DEMO_INSTANCE_BASE_URL` and `COOLIFY_DEMO_INSTANCE_API_KEY` from the environment or `.env`. Do not run them unless the user asks.
 
@@ -98,4 +100,4 @@ Skip tests for plain getters and views. The build covers those.
 ### Releases
 
 - For a request to cut or prepare a release, or continue one through merging, read `.agents/skills/hotify-release/SKILL.md`.
-- Release operation and recovery details are in `docs/releases.md`. GitHub CI publishes version tags after a marketing-version increase passes main CI; agents prepare the PR and merge only when asked.
+- Release operation and recovery details are in `docs/releases.md`. GitHub CI publishes version tags after a marketing-version increase passes release validation on main; agents prepare the PR and merge only when asked.

@@ -6,6 +6,7 @@ struct WelcomeView: View {
 
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var step = 0
+    @State private var isShowingAbout = false
 
     var body: some View {
         VStack(spacing: 30) {
@@ -35,6 +36,13 @@ struct WelcomeView: View {
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
+                #if os(iOS)
+                Button("About Hotify") {
+                    isShowingAbout = true
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                #endif
             }
             .opacity(step >= 2 ? 1 : 0)
             .offset(y: step >= 2 || reduceMotion ? 0 : 12)
@@ -45,6 +53,18 @@ struct WelcomeView: View {
         #if os(macOS)
         .toolbar(removing: .title)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        #endif
+        #if os(iOS)
+        .sheet(isPresented: $isShowingAbout) {
+            NavigationStack {
+                AboutView(buildInfo: .current)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { isShowingAbout = false }
+                    }
+                }
+            }
+        }
         #endif
         .task {
             try? await Task.sleep(for: .milliseconds(420))
