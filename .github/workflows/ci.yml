@@ -47,7 +47,20 @@ jobs:
         with:
           fetch-depth: 0
       - name: Publish tag for a marketing version increase
+        id: tag
         env:
           BEFORE: ${{ github.event.before }}
           COMMIT: ${{ github.sha }}
         run: python3 -B scripts/release_tag.py --before "$BEFORE" --commit "$COMMIT" --publish
+      - name: Publish GitHub Release for the tag
+        if: steps.tag.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        # A rerun finds the release already published and leaves it, and any edited notes, alone.
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "$TAG already has a GitHub Release"
+          else
+            gh release create "$TAG" --verify-tag --title "Hotify ${TAG#v}" --generate-notes
+          fi

@@ -6,7 +6,7 @@ Ask an agent to "cut a release" or invoke `$hotify-release`. The repository skil
 
 Merging a marketing-version increase into main requests a release. PR titles, bodies, labels, and branch names do not control tagging. Direct pushes that increase the version on main have the same effect.
 
-The GitHub Release workflow compares `MARKETING_VERSION` before and after the main push. All configurations must agree on a numeric `MAJ.MIN.PATCH`, and a changed version must increase. After the release automation tests and version validation pass, `Tag release` creates an annotated `vMAJ.MIN.PATCH` tag on that run's exact commit and pushes only that tag. Only the tagging job receives `contents: write` permission.
+The GitHub Release workflow compares `MARKETING_VERSION` before and after the main push. All configurations must agree on a numeric `MAJ.MIN.PATCH`, and a changed version must increase. After the release automation tests and version validation pass, `Tag release` creates an annotated `vMAJ.MIN.PATCH` tag on that run's exact commit and pushes only that tag. The same job then publishes a GitHub Release named `Hotify MAJ.MIN.PATCH` for the tag, with GitHub's generated notes. An agent that merged the release replaces those notes with a short summary of the changes. Only the tagging job receives `contents: write` permission.
 
 Ordinary commits with an unchanged version do not publish tags, even when that version has no tag yet. A push containing multiple commits releases only its final version. Keep each intended release bump in its own merge/push.
 
@@ -32,6 +32,7 @@ No extra token is configured initially. GitHub's built-in `GITHUB_TOKEN` can pub
 - A failed or cancelled dependency leaves the release untagged. For a transient failure, rerun the original main Release run. Rerunning a job preserves the run's original commit and before/after version comparison. A manually dispatched Release run does not tag.
 - If a code fix requires a new commit, rerunning the old run cannot include that fix. Discuss whether to abandon the untagged version and prepare the next version. An ordinary fix commit with the same version intentionally does not publish the abandoned release.
 - If only tagging fails, fix the permission or connectivity issue and rerun failed jobs on the original run. An existing remote tag on the expected commit counts as success. A tag on a different commit causes an error and is never moved or deleted.
+- If the tag is published but its GitHub Release is not, rerun failed jobs on the original run. The tag step reports the existing tag, and the release step creates the missing release. An existing release is left as it is, including edited notes.
 - If tagging succeeds but Xcode Cloud does not start, repair or manually start the Apple workflow for the existing tag. Do not recreate the Git tag to retrigger it.
 - If main is force-pushed or its previous commit is unavailable, validation fails rather than guessing the release baseline.
 

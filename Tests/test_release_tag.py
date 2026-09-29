@@ -108,6 +108,33 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(release.git("tag", "--list"), "")
         self.assertIsNone(release.remote_target("v0.3.0"))
 
+    def run_publish(self, commit, output):
+        subprocess.run(
+            [
+                sys.executable,
+                str(Path(SPEC.origin)),
+                "--before",
+                self.before,
+                "--commit",
+                commit,
+                "--publish",
+            ],
+            check=True,
+            env={**os.environ, "GITHUB_OUTPUT": str(output)},
+        )
+
+    def test_publish_reports_tag_for_the_github_release(self):
+        output = Path(self.temp.name) / "output"
+        tested = self.commit("0.3.0")
+        self.run_publish(tested, output)
+        self.assertEqual(release.remote_target("v0.3.0"), tested)
+        self.assertEqual(output.read_text(), "tag=v0.3.0\n")
+
+    def test_unchanged_version_reports_no_tag(self):
+        output = Path(self.temp.name) / "output"
+        self.run_publish(self.commit("0.2.4"), output)
+        self.assertFalse(output.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

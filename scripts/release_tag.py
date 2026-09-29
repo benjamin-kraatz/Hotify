@@ -1,6 +1,7 @@
 """Tag a tested main update only when its marketing version increases."""
 
 import argparse
+import os
 import re
 import subprocess
 
@@ -109,6 +110,11 @@ def main():
         print("Marketing version unchanged; no release tag")
     elif args.publish:
         print(publish_tag(version, args.commit))
+        # Tell the workflow which tag exists, so a later step can publish its GitHub Release.
+        output = os.environ.get("GITHUB_OUTPUT")
+        if output:
+            with open(output, "a", encoding="utf-8") as file:
+                file.write(f"tag=v{version}\n")
     else:
         print(f"Would tag {args.commit} as v{version}")
 
