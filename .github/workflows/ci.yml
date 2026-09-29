@@ -9,13 +9,31 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A shared main group can discard pending release runs even without cancellation.
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
+  release-check:
+    name: Validate release automation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Test release detection and tagging
+        run: python3 -B -m unittest discover -s Tests -p 'test_release_tag.py' -v
+      - name: Validate marketing version change
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        env:
+          BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          COMMIT: ${{ github.sha }}
+        run: python3 -B scripts/release_tag.py --before "$BEFORE" --commit "$COMMIT"
+
   test:
     name: Test CoolifyAPI
     runs-on: xcode-27
@@ -99,3 +117,21 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
+
+  release-tag:
+    name: Tag release
+    needs: [release-check, test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Publish tag for a marketing version increase
+        env:
+          BEFORE: ${{ github.event.before }}
+          COMMIT: ${{ github.sha }}
+        run: python3 -B scripts/release_tag.py --before "$BEFORE" --commit "$COMMIT" --publish

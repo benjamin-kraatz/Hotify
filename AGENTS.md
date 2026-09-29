@@ -94,3 +94,8 @@ Skip tests for plain getters and views. The build covers those.
 - Use a conventional subject: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, or `chore:`.
 - Keep the subject short, lowercase after the prefix, with no trailing period.
 - Only commit or push when the user asks.
+
+### Releases
+
+- For a request to cut or prepare a release, or continue one through merging, read `.agents/skills/hotify-release/SKILL.md`.
+- Release operation and recovery details are in `docs/releases.md`. GitHub CI publishes version tags after a marketing-version increase passes main CI; agents prepare the PR and merge only when asked.
