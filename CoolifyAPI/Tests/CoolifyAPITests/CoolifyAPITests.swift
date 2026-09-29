@@ -92,6 +92,50 @@ final class CoolifyAPITests: XCTestCase {
         let started = try await client.startPreview(applicationUUID: "app-1", pullRequestID: 18)
         XCTAssertEqual(started.deployments.first?.deploymentUUID, "dep-2")
     }
+
+    func testApplicationAndDatabaseListControls() async throws {
+        let queued = Data(#"{"message":"queued"}"#.utf8)
+        let client = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertNil(request.httpBody)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
+            switch request.url?.path {
+            case "/api/v1/applications/app-1/start":
+                XCTAssertEqual(
+                    queryItems(request),
+                    [
+                        URLQueryItem(name: "force", value: "0"),
+                        URLQueryItem(name: "instant_deploy", value: "0"),
+                    ]
+                )
+            case "/api/v1/applications/app-1/stop":
+                XCTAssertEqual(queryItems(request), [URLQueryItem(name: "docker_cleanup", value: "0")])
+            case "/api/v1/applications/app-1/restart":
+                XCTAssertNil(request.url?.query)
+            case "/api/v1/databases/db-1/start":
+                XCTAssertNil(request.url?.query)
+            case "/api/v1/databases/db-1/stop":
+                XCTAssertEqual(queryItems(request), [URLQueryItem(name: "docker_cleanup", value: "0")])
+            case "/api/v1/databases/db-1/restart":
+                XCTAssertNil(request.url?.query)
+            default:
+                XCTFail("Unexpected \(request.httpMethod ?? "") \(request.url?.path ?? "")")
+            }
+            return (200, queued, [:])
+        }
+
+        _ = try await client.startApplication("app-1")
+        _ = try await client.stopApplication("app-1", dockerCleanup: false)
+        _ = try await client.restartApplication("app-1")
+        _ = try await client.startDatabase("db-1")
+        _ = try await client.stopDatabase("db-1", dockerCleanup: false)
+        _ = try await client.restartDatabase("db-1")
+    }
+}
+
+private func queryItems(_ request: URLRequest) -> [URLQueryItem] {
+    guard let url = request.url else { return [] }
+    return URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
 }
 
 private func makeClient(
