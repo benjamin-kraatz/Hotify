@@ -1,16 +1,44 @@
 import SwiftUI
 
-struct AddInstanceForm: View {
+/// Adds a Coolify instance, or edits one that is already saved.
+struct InstanceForm: View {
     @SwiftUI.Environment(\.dismiss) private var dismiss
 
+    var title: String
+    var confirmTitle: String
     var overrideError: String?
-    var onAdd: (String, String, String) throws -> Void
+    var onSave: (String, String, String) throws -> Void
 
-    @State private var name = ""
-    @State private var baseURL = ""
-    @State private var token = ""
+    @State private var name: String
+    @State private var baseURL: String
+    @State private var token: String
     @State private var isTokenVisible = false
     @State private var errorMessage: String?
+
+    private let originalName: String
+    private let originalURL: String
+    private let originalToken: String
+
+    init(
+        title: String = "Add Instance",
+        confirmTitle: String = "Add",
+        name: String = "",
+        baseURL: String = "",
+        token: String = "",
+        overrideError: String? = nil,
+        onSave: @escaping (String, String, String) throws -> Void
+    ) {
+        self.title = title
+        self.confirmTitle = confirmTitle
+        self.overrideError = overrideError
+        self.onSave = onSave
+        self.originalName = name
+        self.originalURL = baseURL
+        self.originalToken = token
+        _name = State(initialValue: name)
+        _baseURL = State(initialValue: baseURL)
+        _token = State(initialValue: token)
+    }
 
     var body: some View {
         NavigationStack {
@@ -86,7 +114,7 @@ struct AddInstanceForm: View {
                     }
                 }
             }
-            .navigationTitle("Add Instance")
+            .navigationTitle(title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -98,10 +126,10 @@ struct AddInstanceForm: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
+                    Button(confirmTitle) {
                         submit()
                     }
-                    .disabled(name.isEmpty || baseURL.isEmpty || token.isEmpty)
+                    .disabled(!isFormComplete || !isDirty)
                 }
             }
         }
@@ -117,7 +145,7 @@ struct AddInstanceForm: View {
     }
 
     private var isDirty: Bool {
-        !name.isEmpty || !baseURL.isEmpty || !token.isEmpty
+        name != originalName || baseURL != originalURL || token != originalToken
     }
 
     private var eyeButton: some View {
@@ -137,7 +165,7 @@ struct AddInstanceForm: View {
 
     private func submit() {
         do {
-            try onAdd(name, baseURL, token)
+            try onSave(name, baseURL, token)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -146,11 +174,21 @@ struct AddInstanceForm: View {
 }
 
 #Preview {
-    AddInstanceForm { _, _, _ in }
+    InstanceForm { _, _, _ in }
+}
+
+#Preview("Edit") {
+    InstanceForm(
+        title: "Edit Instance",
+        confirmTitle: "Save",
+        name: "Home",
+        baseURL: "https://coolify.example",
+        token: "secret"
+    ) { _, _, _ in }
 }
 
 #Preview("With error") {
-    AddInstanceForm(
+    InstanceForm(
         overrideError:
             "The connection could not be established. Please provide us your credit card info and we will charge you."
     ) { _, _, _ in }

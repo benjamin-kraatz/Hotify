@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CoolifyError: Error, Sendable, Equatable {
+public struct CoolifyError: Error, LocalizedError, Sendable, Equatable {
     public var statusCode: Int?
     public var message: String
     public var fieldErrors: [String: [String]]
@@ -32,6 +32,10 @@ public struct CoolifyError: Error, Sendable, Equatable {
 
     public var isValidation: Bool {
         statusCode == 422
+    }
+
+    public var errorDescription: String? {
+        message
     }
 
     static func invalidInstanceURL(_ message: String) -> CoolifyError {

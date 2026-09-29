@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #endif
 
 @main struct MyApp: App {
+    @State private var instanceStore = InstanceStore()
+
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     #endif
@@ -20,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(instanceStore)
         }
     }
 }

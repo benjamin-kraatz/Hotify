@@ -2,31 +2,17 @@ import CoolifyAPI
 import SwiftUI
 
 struct ContentView: View {
-    @State private var store = InstanceStore()
+    @SwiftUI.Environment(InstanceStore.self) private var store
     @State private var dashboard = DashboardModel()
     @State private var isAdding = false
+    @State private var editing: CoolifyInstance?
     @State private var path = NavigationPath()
 
     var body: some View {
+        @Bindable var store = store
+
         NavigationSplitView {
-            List(selection: $store.selectedID) {
-                ForEach(store.instances) { instance in
-                    VStack(alignment: .leading) {
-                        Text(instance.name)
-                        Text(instance.baseURL.absoluteString)
-                    }
-                    .tag(instance.id)
-                    .contextMenu {
-                        Button("Remove", role: .destructive) {
-                            store.remove(instance)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Instances")
-            .toolbar {
-                Button("Add") { isAdding = true }
-            }
+            InstancesListView(isAdding: $isAdding, editing: $editing)
         } detail: {
             NavigationStack(path: $path) {
                 Group {
@@ -74,15 +60,40 @@ struct ContentView: View {
             rebind()
         }
         .sheet(isPresented: $isAdding) {
-            AddInstanceForm { name, url, token in
-                let _ = try store.add(name: name, baseURL: url, token: token)
-            }
+            formSheet(
+                InstanceForm { name, url, token in
+                    let _ = try store.add(name: name, baseURL: url, token: token)
+                }
+            )
+        }
+        .sheet(item: $editing) { instance in
+            formSheet(
+                InstanceForm(
+                    title: "Edit Instance",
+                    confirmTitle: "Save",
+                    name: instance.name,
+                    baseURL: instance.baseURL.absoluteString,
+                    token: TokenStore.load(for: instance.id) ?? ""
+                ) { name, url, token in
+                    let connectionChanged = try store.update(
+                        id: instance.id,
+                        name: name,
+                        baseURL: url,
+                        token: token
+                    )
+                    guard store.selectedID == instance.id, connectionChanged else { return }
+                    path = NavigationPath()
+                    rebind()
+                }
+            )
+        }
+    }
+
+    private func formSheet<Content: View>(_ content: Content) -> some View {
+        content
             .presentationDetents([.fraction(0.37), .large])
             .presentationDragIndicator(.hidden)
-            //            .interactiveDismissDisabled()
-            //            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             .presentationContentInteraction(.automatic)
-        }
     }
 
     private var resourceListsAreEmpty: Bool {
@@ -245,4 +256,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+        .environment(InstanceStore())
 }

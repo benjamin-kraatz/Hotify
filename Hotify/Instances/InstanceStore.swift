@@ -16,6 +16,11 @@ final class InstanceStore {
         }
     }
 
+    init(instances: [CoolifyInstance]) {
+        self.instances = instances
+        selectedID = instances.first?.id
+    }
+
     var selected: CoolifyInstance? {
         instances.first { $0.id == selectedID }
     }
@@ -26,18 +31,32 @@ final class InstanceStore {
     }
 
     func add(name: String, baseURL: String, token: String) throws -> CoolifyInstance {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty, let url = URL(string: trimmedURL) else {
-            throw CoolifyError(message: "Name and URL are required.")
-        }
-        let saved = CoolifyInstance(name: trimmedName, baseURL: url)
-        _ = try CoolifyClient(instanceURL: url, token: token)
-        try TokenStore.save(token, for: saved.id)
+        let (saved, trimmedToken) = try validated(name: name, baseURL: baseURL, token: token)
+        try TokenStore.save(trimmedToken, for: saved.id)
         instances.append(saved)
         selectedID = saved.id
         persist()
         return saved
+    }
+
+    /// Saves a new name, URL, and token for an instance that is already in the list.
+    ///
+    /// Returns whether the URL or token changed. A name-only edit leaves the open dashboard alone.
+    @discardableResult
+    func update(id: CoolifyInstance.ID, name: String, baseURL: String, token: String) throws -> Bool {
+        guard let index = instances.firstIndex(where: { $0.id == id }) else {
+            throw CoolifyError(message: "That instance is no longer saved.")
+        }
+        let previous = instances[index]
+        let (saved, trimmedToken) = try validated(id: id, name: name, baseURL: baseURL, token: token)
+        let tokenChanged = TokenStore.load(for: id) != trimmedToken
+        // Rewriting an unchanged token deletes and recreates the Keychain item.
+        if tokenChanged {
+            try TokenStore.save(trimmedToken, for: id)
+        }
+        instances[index] = saved
+        persist()
+        return previous.baseURL != saved.baseURL || tokenChanged
     }
 
     func remove(_ instance: CoolifyInstance) {
@@ -57,6 +76,19 @@ final class InstanceStore {
             let token = environment["COOLIFY_DEMO_INSTANCE_API_KEY"], !token.isEmpty
         else { return }
         _ = try? add(name: "Demo", baseURL: baseURL, token: token)
+    }
+
+    private func validated(id: UUID = UUID(), name: String, baseURL: String, token: String) throws -> (
+        CoolifyInstance, String
+    ) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, let url = URL(string: trimmedURL) else {
+            throw CoolifyError(message: "Name and URL are required.")
+        }
+        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        _ = try CoolifyClient(instanceURL: url, token: trimmedToken)
+        return (CoolifyInstance(id: id, name: trimmedName, baseURL: url), trimmedToken)
     }
 
     private func load() {
