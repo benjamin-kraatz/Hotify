@@ -1,63 +1,34 @@
 import CoolifyAPI
 import SwiftUI
 
+/// The window: instances, then the selected instance's resources, then the open resource.
 struct ContentView: View {
     @SwiftUI.Environment(InstanceStore.self) private var store
     @State private var dashboard = DashboardModel()
     @State private var dashboards: [CoolifyInstance.ID: DashboardModel] = [:]
+    @State private var client: CoolifyClient?
+    @State private var boundID: CoolifyInstance.ID?
     @State private var isAdding = false
     @State private var editing: CoolifyInstance?
-    @State private var path = NavigationPath()
+    @State private var selectedResource: ResourceRoute?
 
     var body: some View {
-        @Bindable var store = store
-
-        NavigationSplitView {
-            InstancesListView(isAdding: $isAdding, editing: $editing)
-        } detail: {
-            NavigationStack(path: $path) {
-                Group {
-                    if store.selected == nil {
-                        Text("No instance")
-                    } else if selectedClient == nil {
-                        Text("No token for this instance")
-                    } else {
-                        resourceList
-                    }
-                }
-                .navigationTitle(dashboard.teamName.isEmpty ? "Hotify" : dashboard.teamName)
-                .toolbar {
-                    if path.isEmpty, !dashboard.version.isEmpty {
-                        Text(dashboard.version)
-                    }
-                    if path.isEmpty {
-                        Button("Refresh") {
-                            Task { await dashboard.refresh() }
-                        }
-                    }
-                }
-                .navigationDestination(for: ResourceRoute.self) { route in
-                    if let selectedClient {
-                        ResourceDetailScreen(
-                            client: selectedClient,
-                            route: route,
-                            title: title(for: route),
-                            status: status(for: route),
-                            isBusy: dashboard.busyTargets.contains(route.busyTarget),
-                            onStart: { run(.start, route: route) },
-                            onRestart: { run(.restart, route: route) },
-                            onStop: { run(.stop, route: route) }
-                        )
-                    }
-                }
+        ZStack {
+            if store.instances.isEmpty {
+                WelcomeView { isAdding = true }
+                    .transition(.opacity)
+            } else {
+                splitView
+                    .transition(.opacity)
             }
         }
-        .task {
+        .animation(.smooth, value: store.instances.isEmpty)
+        .onAppear {
             store.seedFromEnvironment()
             rebind()
         }
         .onChange(of: store.selectedID) { _, _ in
-            path = NavigationPath()
+            selectedResource = nil
             rebind()
         }
         .sheet(isPresented: $isAdding) {
@@ -83,10 +54,85 @@ struct ContentView: View {
                         token: token
                     )
                     guard store.selectedID == instance.id, connectionChanged else { return }
-                    path = NavigationPath()
+                    selectedResource = nil
                     rebind()
                 }
             )
+        }
+    }
+
+    private var splitView: some View {
+        NavigationSplitView {
+            InstanceSidebar(isAdding: $isAdding, editing: $editing, heat: heat(for:))
+                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
+        } content: {
+            dashboardColumn
+                .navigationSplitViewColumnWidth(min: 320, ideal: 390, max: 560)
+        } detail: {
+            detailColumn
+        }
+    }
+
+    @ViewBuilder
+    private var dashboardColumn: some View {
+        if let instance = store.selected {
+            if boundID == instance.id, client == nil {
+                ContentUnavailableView {
+                    Label("No API token", systemImage: "key.slash")
+                } description: {
+                    Text(
+                        "Hotify can't find a token for \(instance.name) in the Keychain. Edit the instance and paste it again."
+                    )
+                } actions: {
+                    Button("Edit \(instance.name)") {
+                        editing = instance
+                    }
+                    .glassButton(prominent: true)
+                }
+            } else {
+                DashboardView(
+                    instanceName: instance.name,
+                    host: instance.displayHost,
+                    snapshot: dashboard.snapshot,
+                    selection: $selectedResource,
+                    onRun: run,
+                    onRefresh: { await dashboard.refresh() }
+                )
+            }
+        } else {
+            ContentUnavailableView(
+                "Pick an instance",
+                systemImage: "sidebar.left",
+                description: Text("Choose a Coolify instance in the sidebar.")
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var detailColumn: some View {
+        let snapshot = dashboard.snapshot
+        if let route = selectedResource, let resource = snapshot.resource(route) {
+            ResourceDetailScreen(
+                client: client,
+                resource: resource,
+                pendingAction: snapshot.pendingAction(for: route),
+                onAction: { action in run(action, route) }
+            )
+            .id(route)
+        } else {
+            ContentUnavailableView {
+                Label {
+                    Text(selectedResource == nil ? "Nothing open" : "This resource is gone")
+                } icon: {
+                    FlameGlyph(heat: .cold, height: 48)
+                }
+            } description: {
+                Text(
+                    selectedResource == nil
+                        ? "Pick an application, database, or service to see its logs and deployments."
+                        : "Coolify no longer lists it. It may have been deleted."
+                )
+            }
         }
     }
 
@@ -97,158 +143,27 @@ struct ContentView: View {
             .presentationContentInteraction(.automatic)
     }
 
-    private var resourceListsAreEmpty: Bool {
-        dashboard.applications.isEmpty && dashboard.databases.isEmpty && dashboard.services.isEmpty
-    }
-
-    private var resourceList: some View {
-        List {
-            if let loadError = dashboard.loadError {
-                Text(loadError)
-            }
-            if let actionError = dashboard.actionError {
-                Text(actionError)
-            }
-            if let server = dashboard.servers.first {
-                Text("\(server.name) \(server.isReachable == true ? "reachable" : "unreachable")")
-            }
-            if dashboard.isLoading, resourceListsAreEmpty {
-                Text("Loading")
-            } else if resourceListsAreEmpty, dashboard.loadError == nil {
-                Text("No resources")
-            }
-            if !dashboard.applications.isEmpty {
-                Section("Applications") {
-                    ForEach(dashboard.applications, id: \.uuid) { application in
-                        NavigationLink(value: ResourceRoute.application(application.uuid)) {
-                            ResourceRow(
-                                title: application.name.isEmpty ? application.uuid : application.name,
-                                status: application.status ?? "unknown",
-                                detailLines: applicationLines(application),
-                                isBusy: dashboard.busyTargets.contains(.application(application.uuid)),
-                                onStart: { run(.start, on: application) },
-                                onRestart: { run(.restart, on: application) },
-                                onStop: { run(.stop, on: application) }
-                            )
-                        }
-                    }
-                }
-            }
-            if !dashboard.databases.isEmpty {
-                Section("Databases") {
-                    ForEach(dashboard.databases) { database in
-                        NavigationLink(value: ResourceRoute.database(database.uuid)) {
-                            ResourceRow(
-                                title: databaseTitle(database),
-                                status: database.status ?? "unknown",
-                                detailLines: [],
-                                isBusy: dashboard.busyTargets.contains(.database(database.uuid)),
-                                onStart: { run(.start, on: database) },
-                                onRestart: { run(.restart, on: database) },
-                                onStop: { run(.stop, on: database) }
-                            )
-                        }
-                    }
-                }
-            }
-            if !dashboard.services.isEmpty {
-                Section("Services") {
-                    ForEach(dashboard.services) { service in
-                        NavigationLink(value: ResourceRoute.service(service.uuid)) {
-                            ResourceRow(
-                                title: service.serviceType ?? service.name,
-                                status: service.status ?? "unknown",
-                                detailLines: (service.applications ?? []).map { container in
-                                    "\(container.humanName ?? container.name) \(container.status ?? "unknown")"
-                                },
-                                isBusy: dashboard.busyTargets.contains(.service(service.id)),
-                                onStart: { run(.start, on: service) },
-                                onRestart: { run(.restart, on: service) },
-                                onStop: { run(.stop, on: service) }
-                            )
-                        }
-                    }
-                }
-            }
+    private func heat(for instance: CoolifyInstance) -> Heat {
+        guard instance.id == boundID, client != nil else { return .unknown }
+        if dashboard.loadError != nil {
+            return .troubled
         }
+        return dashboard.lastUpdated == nil ? .warming : .lit
     }
 
-    private func applicationLines(_ application: Application) -> [String] {
-        guard let fqdn = application.fqdn, !fqdn.isEmpty else { return [] }
-        return [fqdn]
-    }
-
-    private func databaseTitle(_ database: Database) -> String {
-        if let name = database.name, !name.isEmpty {
-            return name
-        }
-        return database.uuid
-    }
-
-    private func run(_ action: ResourceAction, on application: Application) {
-        Task { await dashboard.perform(action, on: application) }
-    }
-
-    private func run(_ action: ResourceAction, on database: Database) {
-        Task { await dashboard.perform(action, on: database) }
-    }
-
-    private func run(_ action: ResourceAction, on service: Service) {
-        Task { await dashboard.perform(action, on: service) }
-    }
-
-    private var selectedClient: CoolifyClient? {
-        store.selected.flatMap { store.client(for: $0) }
-    }
-
-    private func title(for route: ResourceRoute) -> String {
-        switch route {
-        case .application(let uuid):
-            guard let application = dashboard.applications.first(where: { $0.uuid == uuid }) else {
-                return uuid
-            }
-            return application.name.isEmpty ? application.uuid : application.name
-        case .database(let uuid):
-            guard let database = dashboard.databases.first(where: { $0.uuid == uuid }) else {
-                return uuid
-            }
-            return databaseTitle(database)
-        case .service(let uuid):
-            guard let service = dashboard.services.first(where: { $0.uuid == uuid }) else {
-                return uuid
-            }
-            return service.serviceType ?? service.name
-        }
-    }
-
-    private func status(for route: ResourceRoute) -> String {
-        switch route {
-        case .application(let uuid):
-            dashboard.applications.first { $0.uuid == uuid }?.status ?? "unknown"
-        case .database(let uuid):
-            dashboard.databases.first { $0.uuid == uuid }?.status ?? "unknown"
-        case .service(let uuid):
-            dashboard.services.first { $0.uuid == uuid }?.status ?? "unknown"
-        }
-    }
-
-    private func run(_ action: ResourceAction, route: ResourceRoute) {
-        switch route {
-        case .application(let uuid):
-            guard let application = dashboard.applications.first(where: { $0.uuid == uuid }) else { return }
-            run(action, on: application)
-        case .database(let uuid):
-            guard let database = dashboard.databases.first(where: { $0.uuid == uuid }) else { return }
-            run(action, on: database)
-        case .service(let uuid):
-            guard let service = dashboard.services.first(where: { $0.uuid == uuid }) else { return }
-            run(action, on: service)
-        }
+    private func run(_ action: ResourceAction, _ route: ResourceRoute) {
+        Task { await dashboard.perform(action, route: route) }
     }
 
     private func rebind() {
         dashboard.stop()
-        guard let selected = store.selected else { return }
+        let ids = Set(store.instances.map(\.id))
+        dashboards = dashboards.filter { ids.contains($0.key) }
+        guard let selected = store.selected else {
+            client = nil
+            boundID = nil
+            return
+        }
 
         if let cachedDashboard = dashboards[selected.id] {
             dashboard = cachedDashboard
@@ -257,11 +172,14 @@ struct ContentView: View {
             dashboards[selected.id] = newDashboard
             dashboard = newDashboard
         }
-        dashboard.bind(store.client(for: selected))
+        // Read the Keychain once per switch rather than on every render.
+        client = store.client(for: selected)
+        boundID = selected.id
+        dashboard.bind(client)
     }
 }
 
 #Preview {
     ContentView()
-        .environment(InstanceStore())
+        .environment(InstanceStore(instances: []))
 }

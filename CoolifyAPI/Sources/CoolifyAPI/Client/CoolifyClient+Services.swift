@@ -27,15 +27,21 @@ extension CoolifyClient {
         )
     }
 
+    /// Reads one container's output. Coolify has no whole-service log, so `subServiceName` is required.
+    ///
+    /// Pass the container's `name`, not its `humanName` or Docker container name. Coolify appends the service
+    /// uuid itself, and answers 400 with "Container is not running." for a stopped container.
     public func serviceLogs(
         _ uuid: String,
+        subServiceName: String,
         window: LogWindow = .lines(100),
         showTimestamps: Bool = false
     ) async throws -> String {
         try await logs(
             "services/\(CoolifyURL.encodePathComponent(uuid))/logs",
             window: window,
-            showTimestamps: showTimestamps
+            showTimestamps: showTimestamps,
+            extraQuery: [URLQueryItem(name: "sub_service_name", value: subServiceName)]
         )
     }
 }

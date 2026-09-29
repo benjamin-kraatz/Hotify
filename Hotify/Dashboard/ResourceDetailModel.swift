@@ -1,35 +1,49 @@
 import CoolifyAPI
 import Foundation
 
-/// The application, database, or service open on the detail screen.
-enum ResourceRoute: Hashable {
-    case application(String)
-    case database(String)
-    case service(String)
-
-    var busyTarget: BusyTarget {
-        switch self {
-        case .application(let uuid): .application(uuid)
-        case .database(let uuid): .database(uuid)
-        case .service(let uuid): .service(uuid)
-        }
-    }
-
-    var showsDeployments: Bool {
-        if case .application = self {
-            return true
-        }
-        return false
-    }
-}
-
 /// One deployment row. Built from `Deployment` so the view can take plain values in a preview.
 struct DeploymentLine: Identifiable, Hashable {
     var id: String
     var status: String
-    var detail: String
-    var isPreview: Bool
+    var commit: String?
+    var message: String?
+    /// The pull request a preview deployment builds. `nil` for a production deployment.
+    var pullRequest: Int?
+    var isRestart = false
+    var startedAt: Date?
+    var finishedAt: Date?
     var url: URL?
+
+    var isPreview: Bool { pullRequest != nil }
+
+    var heat: Heat {
+        switch status {
+        case "finished": .lit
+        case "in_progress": .warming
+        case "failed": .troubled
+        case "queued": .unknown
+        default: .cold
+        }
+    }
+
+    var statusLabel: String {
+        switch status {
+        case "finished": "Deployed"
+        case "in_progress": "Deploying"
+        case "failed": "Failed"
+        case "queued": "Queued"
+        case "cancelled-by-user": "Cancelled"
+        default: status.prefix(1).uppercased() + status.dropFirst()
+        }
+    }
+
+    /// How long the deployment ran. Only known once it has ended.
+    var duration: Duration? {
+        guard heat == .lit || heat == .troubled, let startedAt, let finishedAt, finishedAt > startedAt else {
+            return nil
+        }
+        return .seconds(finishedAt.timeIntervalSince(startedAt).rounded())
+    }
 }
 
 extension DeploymentLine {
@@ -37,22 +51,19 @@ extension DeploymentLine {
         let identifier = deployment.deploymentUUID
         id = identifier.isEmpty ? fallbackID : identifier
         status = deployment.status ?? "unknown"
-        var parts: [String] = []
-        if deployment.isPreview {
-            parts.append("PR \(deployment.pullRequestID)")
+        if let commit = deployment.commit, !commit.isEmpty, commit != "HEAD" {
+            self.commit = String(commit.prefix(7))
         }
-        if let commit = deployment.commit, !commit.isEmpty {
-            parts.append(String(commit.prefix(7)))
+        if let message = deployment.commitMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
+            // Only the subject line. The body belongs in the git host, not a list row.
+            self.message = message.components(separatedBy: .newlines).first
         }
-        if deployment.restartOnly == true {
-            parts.append("restart")
-        }
-        detail = parts.joined(separator: " ")
-        isPreview = deployment.isPreview
+        pullRequest = deployment.isPreview ? deployment.pullRequestID : nil
+        isRestart = deployment.restartOnly == true
+        startedAt = deployment.createdAtDate
+        finishedAt = deployment.finishedAtDate
         if let raw = deployment.deploymentURL, !raw.isEmpty, let parsed = URL(string: raw) {
             url = parsed
-        } else {
-            url = nil
         }
     }
 }
@@ -60,12 +71,19 @@ extension DeploymentLine {
 /// Loads logs for one resource, and deployment history when that resource is an application.
 @Observable
 final class ResourceDetailModel {
-    var logs = ""
+    var logs = "" {
+        didSet { logLines = LogLine.parse(logs) }
+    }
+    private(set) var logLines: [LogLine] = []
     var deployments: [DeploymentLine] = []
     var loadError: String?
     var actionError: String?
     var isLoading = false
     var isDeploying = false
+    /// How many trailing log lines to ask Coolify for.
+    var logLineCount = 100
+    /// The service container whose logs to read, by its Coolify `name`. `nil` skips the request.
+    private(set) var logSource: String?
 
     private var client: CoolifyClient?
     private var route: ResourceRoute?
@@ -100,7 +118,7 @@ final class ResourceDetailModel {
         do {
             switch route {
             case .application(let uuid):
-                async let logs = client.applicationLogs(uuid, showTimestamps: true)
+                async let logs = client.applicationLogs(uuid, window: .lines(logLineCount), showTimestamps: true)
                 // One page. The history endpoint pages with skip and take and does not filter previews.
                 async let page = client.applicationDeployments(uuid, take: 20)
                 let loadedLogs = try await logs
@@ -111,12 +129,22 @@ final class ResourceDetailModel {
                     DeploymentLine(deployment: deployment, fallbackID: "\(index)")
                 }
             case .database(let uuid):
-                let loadedLogs = try await client.databaseLogs(uuid, showTimestamps: true)
+                let loadedLogs = try await client.databaseLogs(uuid, window: .lines(logLineCount), showTimestamps: true)
                 guard self.isCurrent(generation: generation, refreshSerial: refreshSerial) else { return }
                 logs = loadedLogs
                 deployments = []
             case .service(let uuid):
-                let loadedLogs = try await client.serviceLogs(uuid, showTimestamps: true)
+                guard let logSource else {
+                    logs = ""
+                    loadError = nil
+                    return
+                }
+                let loadedLogs = try await client.serviceLogs(
+                    uuid,
+                    subServiceName: logSource,
+                    window: .lines(logLineCount),
+                    showTimestamps: true
+                )
                 guard self.isCurrent(generation: generation, refreshSerial: refreshSerial) else { return }
                 logs = loadedLogs
                 deployments = []
@@ -128,6 +156,14 @@ final class ResourceDetailModel {
             guard isCurrent(generation: generation, refreshSerial: refreshSerial) else { return }
             loadError = (error as? CoolifyError)?.message ?? error.localizedDescription
         }
+    }
+
+    /// Points service logs at another container and reloads. Pass `nil` for a stopped one; Coolify refuses those.
+    func setLogSource(_ name: String?) async {
+        guard name != logSource else { return }
+        logSource = name
+        logs = ""
+        await refresh()
     }
 
     private func isCurrent(generation: Int, refreshSerial: Int) -> Bool {

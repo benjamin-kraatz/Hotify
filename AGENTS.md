@@ -6,8 +6,9 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
 
 - `Hotify/` is the app target.
   - `App/` has the entry point.
+  - `Design/` has the shared look: brand colors, the display font, the flame glyph, and `Heat`.
   - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource.
-  - `Instances/` adds, lists, and persists instances.
+  - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Storage/` wraps the Keychain.
 - `CoolifyAPI/` is a local Swift package the app depends on.
   - `Client/` has `CoolifyClient` and one `CoolifyClient+<Group>.swift` extension per endpoint group.
@@ -62,6 +63,14 @@ The live tests in `LiveCoolifyTests.swift` skip unless `COOLIFY_LIVE_TESTS=1` is
 - Every public type gets a `///` summary.
 - A public method gets a `///` summary when it does more than its name says, for example when it has default query flags or polls.
 - Comment a branch when the reason is not visible in the code, such as a Coolify quirk, a Keychain constraint, or a value picked to avoid a side effect. Do not comment what the code already says.
+
+### Look and feel
+
+- The window has three columns: instances, the selected instance's resources, then the open resource. iPhone pushes them as a stack.
+- Show status through `Heat` and `FlameGlyph`. A lit red flame means running, and a grey outline means stopped. Anything starting, unhealthy, or failed glows amber. Never use red for an error.
+- Use the asset colors `ember`, `glow`, and `core`, not raw hex. The accent is `ember`.
+- `Font.display` is the only custom type style. Use it for names that head a screen and nothing else.
+- Animate a state change the user can act on or should notice. Respect Reduce Motion.
 
 ### SwiftUI previews
 
