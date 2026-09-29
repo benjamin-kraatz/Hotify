@@ -21,10 +21,15 @@ extension CoolifyClient {
         return try decode(T.self, from: data, response: response)
     }
 
-    func logs(_ path: String, window: LogWindow, showTimestamps: Bool) async throws -> String {
+    func logs(
+        _ path: String,
+        window: LogWindow,
+        showTimestamps: Bool,
+        extraQuery: [URLQueryItem] = []
+    ) async throws -> String {
         let output: LogPayload = try await get(
             path,
-            query: [
+            query: extraQuery + [
                 URLQueryItem(name: "lines", value: window.queryValue),
                 URLQueryItem(name: "show_timestamps", value: Self.flag(showTimestamps)),
             ]

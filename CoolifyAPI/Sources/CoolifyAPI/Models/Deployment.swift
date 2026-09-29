@@ -9,11 +9,18 @@ public struct Deployment: Decodable, Sendable, Identifiable, Hashable {
     public var applicationName: String?
     public var restartOnly: Bool?
     public var commit: String?
+    public var commitMessage: String?
     public var isAPI: Bool?
     public var deploymentURL: String?
+    public var createdAt: String?
+    public var updatedAt: String?
+    /// Newer Coolify builds stamp this when the queue item ends. Older ones leave only `updatedAt`.
+    public var finishedAt: String?
 
     public var id: String { deploymentUUID }
     public var isPreview: Bool { pullRequestID > 0 }
+    public var createdAtDate: Date? { createdAt.flatMap(CoolifyTimestamp.parse) }
+    public var finishedAtDate: Date? { (finishedAt ?? updatedAt).flatMap(CoolifyTimestamp.parse) }
 
     /// Snake_case conversion yields `deploymentUuid` and `pullRequestId`, not the Swift acronym spellings.
     enum CodingKeys: String, CodingKey {
@@ -24,8 +31,12 @@ public struct Deployment: Decodable, Sendable, Identifiable, Hashable {
         case applicationName
         case restartOnly
         case commit
+        case commitMessage
         case isAPI = "isApi"
         case deploymentURL = "deploymentUrl"
+        case createdAt
+        case updatedAt
+        case finishedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -38,8 +49,12 @@ public struct Deployment: Decodable, Sendable, Identifiable, Hashable {
         applicationName = container.flexString(.applicationName)
         restartOnly = container.flexBool(.restartOnly)
         commit = container.flexString(.commit)
+        commitMessage = container.flexString(.commitMessage)
         isAPI = container.flexBool(.isAPI)
         deploymentURL = container.flexString(.deploymentURL)
+        createdAt = container.flexString(.createdAt)
+        updatedAt = container.flexString(.updatedAt)
+        finishedAt = container.flexString(.finishedAt)
     }
 }
 

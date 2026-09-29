@@ -14,7 +14,7 @@ final class DashboardModel {
     var loadError: String?
     var actionError: String?
     var isLoading = false
-    var busyTargets: Set<BusyTarget> = []
+    var pending: [BusyTarget: ResourceAction] = [:]
     var lastUpdated: Date?
 
     private var client: CoolifyClient?
@@ -27,7 +27,7 @@ final class DashboardModel {
         self.client = client
         loadError = nil
         actionError = nil
-        busyTargets = []
+        pending = [:]
         guard client != nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -42,7 +42,7 @@ final class DashboardModel {
         generation += 1
         pollTask?.cancel()
         pollTask = nil
-        busyTargets = []
+        pending = [:]
     }
 
     func refresh() async {
@@ -76,8 +76,45 @@ final class DashboardModel {
         }
     }
 
+    var snapshot: DashboardSnapshot {
+        DashboardSnapshot(
+            teamName: teamName,
+            version: version,
+            servers: servers.map { server in
+                ServerLine(
+                    id: server.uuid.isEmpty ? server.name : server.uuid,
+                    name: server.name,
+                    isReachable: server.isReachable ?? server.settings?.isReachable
+                )
+            },
+            resources: applications.map { ResourceSummary(application: $0) }
+                + databases.map { ResourceSummary(database: $0) }
+                + services.map { ResourceSummary(service: $0) },
+            pending: pending,
+            loadError: loadError,
+            actionError: actionError,
+            isLoading: isLoading,
+            hasLoaded: lastUpdated != nil
+        )
+    }
+
+    /// Runs an action on whichever resource the route points at, if it is still listed.
+    func perform(_ action: ResourceAction, route: ResourceRoute) async {
+        switch route {
+        case .application(let uuid):
+            guard let application = applications.first(where: { $0.uuid == uuid }) else { return }
+            await perform(action, on: application)
+        case .database(let uuid):
+            guard let database = databases.first(where: { $0.uuid == uuid }) else { return }
+            await perform(action, on: database)
+        case .service(let uuid):
+            guard let service = services.first(where: { $0.uuid == uuid }) else { return }
+            await perform(action, on: service)
+        }
+    }
+
     func perform(_ action: ResourceAction, on application: Application) async {
-        await run(target: .application(application.uuid)) { client in
+        await run(action, target: .application(application.uuid)) { client in
             switch action {
             case .start:
                 _ = try await client.startApplication(application.uuid)
@@ -91,7 +128,7 @@ final class DashboardModel {
     }
 
     func perform(_ action: ResourceAction, on database: Database) async {
-        await run(target: .database(database.uuid)) { client in
+        await run(action, target: .database(database.uuid)) { client in
             switch action {
             case .start:
                 _ = try await client.startDatabase(database.uuid)
@@ -105,7 +142,7 @@ final class DashboardModel {
     }
 
     func perform(_ action: ResourceAction, on service: Service) async {
-        await run(target: .service(service.id)) { client in
+        await run(action, target: .service(service.id)) { client in
             switch action {
             case .start:
                 _ = try await client.startService(service.id)
@@ -119,15 +156,16 @@ final class DashboardModel {
     }
 
     private func run(
+        _ action: ResourceAction,
         target: BusyTarget,
         operation: (CoolifyClient) async throws -> Void
     ) async {
         guard let client else { return }
         let generation = self.generation
-        busyTargets.insert(target)
+        pending[target] = action
         defer {
             if generation == self.generation {
-                busyTargets.remove(target)
+                pending[target] = nil
             }
         }
         do {
@@ -150,7 +188,7 @@ enum BusyTarget: Hashable {
     case service(String)
 }
 
-enum ResourceAction: String, Identifiable {
+enum ResourceAction: String, Identifiable, CaseIterable {
     case start
     case stop
     case restart
@@ -162,6 +200,14 @@ enum ResourceAction: String, Identifiable {
         case .start: "Start"
         case .stop: "Stop"
         case .restart: "Restart"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .start: "play.fill"
+        case .stop: "stop.fill"
+        case .restart: "arrow.clockwise"
         }
     }
 }

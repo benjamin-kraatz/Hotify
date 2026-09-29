@@ -40,7 +40,10 @@ final class CoolifyAPITests: XCTestCase {
               "deployments": [{
                 "deployment_uuid": "dep-1",
                 "pull_request_id": "18",
-                "is_api": 1
+                "is_api": 1,
+                "commit_message": "fix: login redirect",
+                "created_at": "2026-09-18T12:02:18.000000Z",
+                "updated_at": "2026-09-18T12:03:30.000000Z"
               }]
             }
             """.data(using: .utf8)!
@@ -49,6 +52,11 @@ final class CoolifyAPITests: XCTestCase {
         XCTAssertEqual(page.deployments[0].pullRequestID, 18)
         XCTAssertTrue(page.deployments[0].isPreview)
         XCTAssertEqual(page.deployments[0].isAPI, true)
+        XCTAssertEqual(page.deployments[0].commitMessage, "fix: login redirect")
+        // Without `finished_at`, the last update stands in for the end of the deployment.
+        let started = try XCTUnwrap(page.deployments[0].createdAtDate)
+        let finished = try XCTUnwrap(page.deployments[0].finishedAtDate)
+        XCTAssertEqual(finished.timeIntervalSince(started), 72, accuracy: 0.5)
     }
 
     func testServiceDecodeKeepsNestedContainerStatus() throws {
@@ -70,6 +78,26 @@ final class CoolifyAPITests: XCTestCase {
 
         let service = try CoolifyJSON.decoder().decode(Service.self, from: json)
         XCTAssertEqual(service.applications?.first?.parsedStatus?.isRunning, true)
+    }
+
+    func testServiceLogsNameTheSubService() async throws {
+        let client = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.path, "/api/v1/services/svc-1/logs")
+            let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            XCTAssertTrue(items.contains(URLQueryItem(name: "sub_service_name", value: "kibana")))
+            XCTAssertTrue(items.contains(URLQueryItem(name: "lines", value: "500")))
+            XCTAssertTrue(items.contains(URLQueryItem(name: "show_timestamps", value: "1")))
+            return (200, Data(#"{"logs":"ready"}"#.utf8), [:])
+        }
+
+        let logs = try await client.serviceLogs(
+            "svc-1",
+            subServiceName: "kibana",
+            window: .lines(500),
+            showTimestamps: true
+        )
+        XCTAssertEqual(logs, "ready")
     }
 
     func testPreviewDeleteAndDeployUsePullRequestID() async throws {

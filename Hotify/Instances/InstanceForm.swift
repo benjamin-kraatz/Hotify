@@ -51,10 +51,10 @@ struct InstanceForm: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Name", text: $name)
+                    TextField("Name", text: $name, prompt: Text("Production"))
                         .textContentType(.name)
 
-                    TextField("URL", text: $baseURL)
+                    TextField("URL", text: $baseURL, prompt: Text(verbatim: "https://coolify.example.com"))
                         .textContentType(.URL)
                         #if os(iOS)
                     .keyboardType(.URL)
@@ -62,61 +62,58 @@ struct InstanceForm: View {
                         #endif
                         .autocorrectionDisabled()
                 } header: {
-                    Text("Basic information")
+                    Text("Instance")
+                } footer: {
+                    Text("The address you open Coolify at. Plain http works on your own network.")
                 }
 
                 Section {
-                    HStack {
-                        if isTokenVisible {
-                            TextField("API token", text: $token)
-                                .textContentType(.password)
-                                .autocorrectionDisabled()
-                        } else {
-                            SecureField("API token", text: $token)
-                                .textContentType(.password)
-                                .autocorrectionDisabled()
+                    HStack(spacing: 10) {
+                        Group {
+                            if isTokenVisible {
+                                TextField("API token", text: $token)
+                            } else {
+                                SecureField("API token", text: $token)
+                            }
                         }
-                    }
+                        .textContentType(.password)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
 
-                    HStack {
+                        eyeButton
+
                         PasteButton(payloadType: String.self) { strings in
                             if let pastedToken = strings.first {
                                 token = pastedToken
                             }
                         }
-                        .labelStyle(.titleAndIcon)
-                        .frame(maxWidth: .infinity)
-
-                        eyeButton
-                            .frame(maxWidth: .infinity)
+                        .labelStyle(.iconOnly)
+                        .buttonBorderShape(.capsule)
+                        .help("Paste the token from the clipboard")
                     }
-                    .frame(maxWidth: .infinity)
-
                 } header: {
-                    Text("Authentication")
+                    Text("API token")
                 } footer: {
-                    Text(
-                        "Your tokens are stored securely on the device in the Keychain and never shared with anyone else."
-                    )
+                    Text("Create one in Coolify under Keys & Tokens. Hotify keeps it in the Keychain on this device.")
                 }
 
                 Section {
-                    HStack {
+                    HStack(alignment: .center, spacing: 12) {
+                        connectionStatus
+                        Spacer(minLength: 0)
                         TryConnectionButton(resetID: connectionGeneration) {
                             await tryConnection()
                         }
                         .disabled(!canTryConnection)
                     }
-                    .frame(maxWidth: .infinity)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                } footer: {
-                    connectionStatus
-                        .animation(.easeInOut(duration: 0.2), value: connectionError)
-                        .animation(.easeInOut(duration: 0.2), value: connectionSuccess)
-                        .animation(.easeInOut(duration: 0.2), value: saveError)
+                    .animation(.snappy, value: connectionError)
+                    .animation(.snappy, value: connectionSuccess)
+                    .animation(.snappy, value: saveError)
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle(title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -148,21 +145,41 @@ struct InstanceForm: View {
             }
         }
         #if os(macOS)
-        .padding()
+        .frame(minWidth: 440, idealWidth: 480, minHeight: 460)
         #endif
-        .frame(minWidth: 360)
         .interactiveDismissDisabled(isDirty)
     }
 
     @ViewBuilder
     private var connectionStatus: some View {
         if let message = overrideError ?? connectionError ?? saveError {
-            Text(message)
-                .foregroundStyle(.red)
+            statusLine(message, heat: .troubled)
         } else if let message = overrideSuccess ?? connectionSuccess {
-            Text(message)
-                .foregroundStyle(.green)
+            statusLine(message, heat: .lit)
+        } else {
+            statusLine("Check the URL and token before you save.", heat: .unknown)
         }
+    }
+
+    private func statusStyle(for heat: Heat) -> AnyShapeStyle {
+        switch heat {
+        case .lit: AnyShapeStyle(.primary)
+        case .troubled: AnyShapeStyle(.glow)
+        default: AnyShapeStyle(.secondary)
+        }
+    }
+
+    private func statusLine(_ message: String, heat: Heat) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            FlameGlyph(heat: heat, height: 18)
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(statusStyle(for: heat))
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .transition(.opacity)
     }
 
     private var canTryConnection: Bool {
@@ -182,14 +199,13 @@ struct InstanceForm: View {
         Button {
             isTokenVisible.toggle()
         } label: {
-            HStack {
-                Image(systemName: isTokenVisible ? "eye" : "eye.slash")
-                    .symbolRenderingMode(.hierarchical)
-                    .contentTransition(.symbolEffect(.replace))
-                Text(isTokenVisible ? "Hide" : "Show")
-            }
+            Image(systemName: isTokenVisible ? "eye.slash" : "eye")
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 22)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .help(isTokenVisible ? "Hide the token" : "Show the token")
         .accessibilityLabel(isTokenVisible ? "Hide API token" : "Show API token")
     }
 

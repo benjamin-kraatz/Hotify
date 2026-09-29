@@ -1,12 +1,6 @@
-//
-//  TryConnectionButon.swift
-//  Hotify
-//
-//  Created by Benjamin Kraatz on 29.09.26.
-//
-
 import SwiftUI
 
+/// Tests a URL and token without saving them. Shows a spinner while the request runs.
 struct TryConnectionButton: View {
     /// Bumps when the URL or token changes, which cancels an attempt in progress.
     var resetID: Int = 0
@@ -23,14 +17,9 @@ struct TryConnectionButton: View {
             }
     }
 
-    @ViewBuilder
     private var styledContent: some View {
-        if #available(iOS 26, *) {
-            content
-                .buttonStyle(.glassProminent)
-        } else {
-            content
-        }
+        content
+            .glassButton(prominent: true)
     }
 
     private var content: some View {
