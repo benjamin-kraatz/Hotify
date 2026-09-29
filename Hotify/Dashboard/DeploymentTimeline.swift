@@ -4,6 +4,9 @@ import SwiftUI
 struct DeploymentTimeline: View {
     var deployments: [DeploymentLine]
     var isLoading: Bool
+    var onSelect: (DeploymentLine) -> Void = { _ in }
+    var canLoadMore = false
+    var onLoadMore: () -> Void = {}
 
     private var production: [DeploymentLine] { deployments.filter { !$0.isPreview } }
     private var previews: [DeploymentLine] { deployments.filter(\.isPreview) }
@@ -16,6 +19,9 @@ struct DeploymentTimeline: View {
                 }
                 if !previews.isEmpty {
                     run("Previews", previews)
+                }
+                if canLoadMore {
+                    Button("Load older deployments", action: onLoadMore).disabled(isLoading)
                 }
             }
             .padding(.horizontal, 24)
@@ -48,8 +54,14 @@ struct DeploymentTimeline: View {
             }
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                    DeploymentRow(line: row, isLast: index == rows.count - 1)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                    Button {
+                        onSelect(row)
+                    } label: {
+                        DeploymentRow(line: row, isLast: index == rows.count - 1)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
         }

@@ -106,6 +106,8 @@ final class ResourceDetailModel {
     var isLoading = false
     /// How many trailing log lines to ask Coolify for.
     var logLineCount = 100
+    var deploymentLimit = 20
+    var canLoadMoreDeployments = false
     /// `nil` skips the log request. Coolify refuses one for a stopped container.
     private(set) var logSource: LogSource?
 
@@ -121,6 +123,8 @@ final class ResourceDetailModel {
         self.route = route
         logs = ""
         deployments = []
+        deploymentLimit = 20
+        canLoadMoreDeployments = false
         loadError = nil
     }
 
@@ -131,9 +135,7 @@ final class ResourceDetailModel {
         let generation = self.generation
         refreshSerial += 1
         let refreshSerial = self.refreshSerial
-        if logs.isEmpty, deployments.isEmpty {
-            isLoading = true
-        }
+        isLoading = true
         defer {
             if generation == self.generation, refreshSerial == self.refreshSerial {
                 isLoading = false
@@ -203,8 +205,9 @@ final class ResourceDetailModel {
     {
         guard case .application(let uuid) = route else { return nil }
         do {
-            // One page. The history endpoint pages with skip and take and does not filter previews.
-            let page = try await client.applicationDeployments(uuid, take: 20)
+            // Reload the expanded window so new deployments do not shift an offset and skip history.
+            let page = try await client.applicationDeployments(uuid, take: deploymentLimit)
+            canLoadMoreDeployments = page.deployments.count < page.count
             return .success(
                 page.deployments.enumerated().map { index, deployment in
                     DeploymentLine(

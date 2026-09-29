@@ -66,6 +66,12 @@ struct ResourceDetailScreen: View {
             loadError: model.loadError,
             actionError: actionError,
             isLoading: model.isLoading,
+            deploymentClient: client,
+            canLoadMoreDeployments: model.canLoadMoreDeployments,
+            onLoadMoreDeployments: {
+                model.deploymentLimit += 20
+                Task { await model.refresh() }
+            },
             onAction: onAction
         )
         .task(id: resource.route) {
@@ -106,8 +112,12 @@ struct ResourceDetail: View {
     var loadError: String?
     var actionError: String?
     var isLoading: Bool
+    var deploymentClient: CoolifyClient?
+    var canLoadMoreDeployments = false
+    var onLoadMoreDeployments: () -> Void = {}
     var onAction: (ResourceAction) -> Void
 
+    @State private var selectedDeployment: DeploymentLine?
     @State private var tab: DetailTab?
     @State private var stopCandidate: ResourceSummary?
 
@@ -193,7 +203,15 @@ struct ResourceDetail: View {
             Group {
                 switch currentTab {
                 case .deployments:
-                    DeploymentTimeline(deployments: deployments, isLoading: isLoading)
+                    if let selectedDeployment {
+                        DeploymentDetail(client: deploymentClient, initial: selectedDeployment) {
+                            self.selectedDeployment = nil
+                        }
+                    } else {
+                        DeploymentTimeline(
+                            deployments: deployments, isLoading: isLoading, onSelect: { selectedDeployment = $0 },
+                            canLoadMore: canLoadMoreDeployments, onLoadMore: onLoadMoreDeployments)
+                    }
                 case .containers:
                     ContainerList(containers: resource.containers)
                 case .variables:

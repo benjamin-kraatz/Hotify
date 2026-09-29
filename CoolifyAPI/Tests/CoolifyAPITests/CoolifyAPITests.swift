@@ -4,6 +4,34 @@ import XCTest
 @testable import CoolifyAPI
 
 final class CoolifyAPITests: XCTestCase {
+    func testDeploymentDetailAndHistoryRequests() async throws {
+        let client = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            if request.url?.path == "/api/v1/deployments/deploy-1" {
+                return (200, Data(#"{"deployment_uuid":"deploy-1","logs":"building"}"#.utf8), [:])
+            }
+            XCTAssertEqual(request.url?.path, "/api/v1/deployments/applications/app-1")
+            XCTAssertEqual(
+                queryItems(request), [URLQueryItem(name: "skip", value: "0"), URLQueryItem(name: "take", value: "40")])
+            return (200, Data(#"{"count":0,"deployments":[]}"#.utf8), [:])
+        }
+        let deployment = try await client.deployment("deploy-1")
+        XCTAssertEqual(deployment.logs, "building")
+        _ = try await client.applicationDeployments("app-1", take: 40)
+    }
+
+    func testDeploymentOutputAcceptsEncodedAndExpandedEntries() throws {
+        let entries = #"[{"output":"building","timestamp":"2026-09-29T10:00:00Z"},{"output":42}]"#
+        let expanded = try CoolifyJSON.decoder().decode(DeploymentOutput.self, from: Data(entries.utf8))
+        let encoded = try CoolifyJSON.decoder().decode(DeploymentOutput.self, from: JSONEncoder().encode(entries))
+        XCTAssertEqual(expanded.text, "2026-09-29T10:00:00Z building\n42")
+        XCTAssertEqual(encoded.text, expanded.text)
+        let plain = try CoolifyJSON.decoder().decode(DeploymentOutput.self, from: JSONEncoder().encode("plain output"))
+        XCTAssertEqual(plain.text, "plain output")
+        let hidden = try CoolifyJSON.decoder().decode(Deployment.self, from: Data(#"{"deployment_uuid":"d"}"#.utf8))
+        XCTAssertNil(hidden.logs)
+    }
+
     func testAPIBaseAcceptsInstanceRootAPIRootAndMCPURL() throws {
         let root = try CoolifyClient(instanceURL: "http://coolify.example:8000", token: "token")
         XCTAssertEqual(root.apiBaseURL.absoluteString, "http://coolify.example:8000/api/v1")
