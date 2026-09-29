@@ -1,87 +1,92 @@
 import SwiftUI
 
-/// A small flare and rising embers when the About flame is stoked.
+/// The About flame. Tap it and it flares, tongues of fire pulling up out of the logo. Hold it and it keeps burning.
+///
+/// With Reduce Motion on, the flame stays put and only glows hotter.
 struct AboutFlame: View {
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var ignition = 0
-
-    private struct Flare {
-        var heat = 0.0
-        var rise = 0.0
-        var embers = 0.0
-    }
+    @State private var stokes = StokeHistory()
+    /// When the fire goes out. Nil while it is cold, so the timeline stops drawing.
+    @State private var burnsUntil: Date?
+    /// Set when a pointer or touch press stoked the fire, so the button action that follows does not stoke it twice.
+    @State private var pressStoked = false
+    @State private var presses = 0
 
     var body: some View {
-        // Animation rendering is nonisolated; capture environment and asset values on the main actor.
-        let motionIsReduced = reduceMotion
-        let coreColor = Color.core
-        let emberColor = Color.ember
-        let glowColor = Color.glow
-        let coreShape = FlameShape()
+        let renderer = FireRenderer(
+            stokes: stokes,
+            palette: FireRenderer.Palette(ember: .ember, core: .core, hot: Color.core.mix(with: .white, by: 0.55)),
+            reduceMotion: reduceMotion
+        )
 
         Button {
-            ignition += 1
+            if pressStoked {
+                pressStoked = false
+            } else {
+                stokes.tap(at: Date.now.timeIntervalSinceReferenceDate)
+                presses += 1
+                burn(until: .now + StokeHistory.afterglow)
+            }
         } label: {
+            // The layout keeps a little headroom for the fire. The canvas reaches further, into the padding above
+            // and the gap below, so the flame sits where it always has.
             Color.clear
-                .frame(width: 88, height: 88)
-                .keyframeAnimator(initialValue: Flare(), trigger: ignition) { _, flare in
-                    ZStack {
-                        FlameGlyph(heat: .lit, height: 88)
-                            .overlay(alignment: .bottom) {
-                                coreShape
-                                    .fill(coreColor)
-                                    .frame(width: 24, height: 54)
-                                    .blur(radius: 5)
-                                    .padding(.bottom, 6)
-                                    .opacity(flare.heat * 0.7)
-                            }
-                            .scaleEffect(
-                                x: 1 - (motionIsReduced ? 0 : flare.heat * 0.06),
-                                y: 1 + (motionIsReduced ? 0 : flare.heat * 0.13),
-                                anchor: .bottom
-                            )
-                            .shadow(color: emberColor.opacity(0.18 + flare.heat * 0.3), radius: 24, y: 8)
-                            .shadow(color: glowColor.opacity(flare.heat * 0.3), radius: 12)
-
-                        if !motionIsReduced {
-                            ForEach(0..<6) { index in
-                                let side = index.isMultiple(of: 2) ? -1.0 : 1.0
-                                let spread = Double(index / 2 + 1)
-                                Capsule()
-                                    .fill(index.isMultiple(of: 2) ? coreColor : glowColor)
-                                    .frame(width: 2, height: 3 + spread)
-                                    .rotationEffect(.degrees(side * flare.rise * 25))
-                                    .offset(
-                                        x: side * (3 + spread * 4 * flare.rise),
-                                        y: -12 - flare.rise * (34 + spread * 7)
-                                    )
-                                    .opacity(flare.embers * (1 - flare.rise * 0.5))
-                                    .blur(radius: flare.rise * 0.5)
-                            }
+                .frame(width: 88, height: 112)
+                .overlay(alignment: .bottom) {
+                    TimelineView(.animation(paused: burnsUntil == nil)) { timeline in
+                        Canvas { context, size in
+                            renderer.draw(in: &context, size: size, time: timeline.date.timeIntervalSinceReferenceDate)
                         }
                     }
-                    .frame(width: 88, height: 88)
-                } keyframes: { _ in
-                    KeyframeTrack(\.heat) {
-                        CubicKeyframe(1, duration: 0.18)
-                        CubicKeyframe(0, duration: 1.0)
-                    }
-                    KeyframeTrack(\.rise) {
-                        LinearKeyframe(0, duration: 0.01)
-                        CubicKeyframe(1, duration: 1.17)
-                    }
-                    KeyframeTrack(\.embers) {
-                        LinearKeyframe(0, duration: 0.06)
-                        LinearKeyframe(1, duration: 0.12)
-                        CubicKeyframe(0, duration: 1.0)
-                    }
+                    .frame(width: FireRenderer.size.width, height: FireRenderer.size.height)
+                    .offset(y: FireRenderer.floor)
+                    .allowsHitTesting(false)
                 }
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(StokeButtonStyle(onPress: pressChanged))
+        .sensoryFeedback(.impact(weight: .light), trigger: presses)
+        .task(id: burnsUntil) {
+            guard let burnsUntil, burnsUntil != .distantFuture else { return }
+            do {
+                try await Task.sleep(for: .seconds(max(0, burnsUntil.timeIntervalSinceNow)))
+                self.burnsUntil = nil
+                stokes = StokeHistory()
+            } catch {}
+        }
         .accessibilityLabel("Stoke the flame")
-        .accessibilityHint("Makes the flame burn a little brighter")
+        .accessibilityHint("Makes the flame flare up")
         .help("Stoke the flame")
+    }
+
+    private func pressChanged(_ isPressed: Bool) {
+        let now = Date.now
+        if isPressed {
+            pressStoked = true
+            stokes.begin(at: now.timeIntervalSinceReferenceDate)
+            presses += 1
+            burn(until: .distantFuture)
+        } else {
+            stokes.end(at: now.timeIntervalSinceReferenceDate)
+            burn(until: now + StokeHistory.afterglow)
+        }
+    }
+
+    private func burn(until date: Date) {
+        // A press still held keeps the fire going, whatever ends before it.
+        burnsUntil = stokes.isHeld ? .distantFuture : date
+    }
+}
+
+/// Reports when the flame is pressed and let go, so holding it can keep the fire fed.
+private struct StokeButtonStyle: ButtonStyle {
+    var onPress: (Bool) -> Void
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                onPress(isPressed)
+            }
     }
 }
 

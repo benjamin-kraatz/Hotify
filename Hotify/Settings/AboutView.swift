@@ -121,7 +121,7 @@ struct AboutView: View {
             commit: "6bb32a8541fe95869881e3c7e542640ab4331267"
         )
     )
-    .frame(width: 400, height: 560)
+    .frame(width: 400, height: 584)
 }
 
 #Preview("Missing metadata") {
@@ -131,5 +131,5 @@ struct AboutView: View {
             commit: nil
         )
     )
-    .frame(width: 400, height: 600)
+    .frame(width: 400, height: 624)
 }
