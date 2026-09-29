@@ -4,6 +4,25 @@ import XCTest
 @testable import CoolifyAPI
 
 final class CoolifyAPITests: XCTestCase {
+    func testBackupFixturesAndManualRequest() async throws {
+        let fixture =
+            #"[{"uuid":"schedule","enabled":"1","frequency":"daily","executions":[{"uuid":"execution","status":"failed","size":"42","message":"Storage unavailable"}]}]"#
+        let client = try makeClient { request in
+            if request.httpMethod == "GET" { return (200, Data(fixture.utf8), [:]) }
+            XCTAssertEqual(request.httpMethod, "PATCH")
+            XCTAssertEqual(request.url?.path, "/api/v1/databases/database/backups/schedule")
+            XCTAssertTrue(queryItems(request).isEmpty)
+            let body = try JSONSerialization.jsonObject(with: Data((bodyText(request) ?? "").utf8)) as? NSDictionary
+            XCTAssertEqual(body, ["backup_now": true] as NSDictionary)
+            return (200, Data(#"{"message":"Database backup configuration updated"}"#.utf8), [:])
+        }
+        let backups = try await client.databaseBackups("database")
+        XCTAssertTrue(backups[0].enabled)
+        XCTAssertEqual(backups[0].executions[0].size, 42)
+        XCTAssertEqual(backups[0].executions[0].message, "Storage unavailable")
+        _ = try await client.backUpNow(database: "database", backup: "schedule")
+    }
+
     func testDeploymentDetailAndHistoryRequests() async throws {
         let client = try makeClient { request in
             XCTAssertEqual(request.httpMethod, "GET")
