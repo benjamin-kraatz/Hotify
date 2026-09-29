@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Draws the About flame, and the fire that rises out of it when stoked, for one moment in time.
+/// Draws a `StokableFlame`, and the fire that rises out of it when stoked, for one moment in time.
 ///
 /// Tongues of flame are soft blobs that rise, sway, and shrink. Blurring them together and cutting the blur at a
 /// threshold melts them into one flat shape, so they pull out of the logo, pinch off, and burn away in its own flat
@@ -12,11 +12,20 @@ nonisolated struct FireRenderer {
         var hot: Color
     }
 
-    /// The canvas reaches past the flame: up for the fire, down and out for the glow.
-    static let size = CGSize(width: 200, height: 180)
-    /// How far the canvas hangs below the bottom of the flame.
-    static let floor: CGFloat = 36
-    static let flameHeight: CGFloat = 88
+    /// The canvas for a flame of a given height. It reaches past the flame: up for the fire, down and out for the glow.
+    static func canvasSize(flameHeight: CGFloat) -> CGSize {
+        let scale = flameHeight / Self.flameHeight
+        return CGSize(width: size.width * scale, height: size.height * scale)
+    }
+
+    /// How far the canvas hangs below the bottom of a flame of a given height.
+    static func floor(flameHeight: CGFloat) -> CGFloat {
+        floor * flameHeight / Self.flameHeight
+    }
+
+    private static let size = CGSize(width: 200, height: 180)
+    private static let floor: CGFloat = 36
+    private static let flameHeight: CGFloat = 88
 
     var stokes: StokeHistory
     var palette: Palette
@@ -40,9 +49,13 @@ nonisolated struct FireRenderer {
     private static let slotsPerSecond = 60.0
     private static let longestLife = 2.0
 
-    func draw(in context: inout GraphicsContext, size: CGSize, time: TimeInterval) {
+    /// Draws into a canvas `size` sized for `flameHeight`, scaling everything else with it.
+    func draw(in context: inout GraphicsContext, size: CGSize, flameHeight: CGFloat, time: TimeInterval) {
+        // The fire is tuned in points for an 88-point flame. Scaling the whole context keeps its proportions.
+        let scale = flameHeight / Self.flameHeight
+        context.scaleBy(x: scale, y: scale)
         let heat = stokes.heat(at: time)
-        let flame = flameRect(in: size)
+        let flame = flameRect(in: Self.size)
         let stretch = reduceMotion ? 0 : heat
         let body = FlameShape().path(in: stretched(flame, by: stretch))
         let core = FlameShape().path(in: coreRect(in: flame, growth: stretch))

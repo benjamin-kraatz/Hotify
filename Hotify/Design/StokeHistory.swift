@@ -1,6 +1,6 @@
 import Foundation
 
-/// Every press on the About flame, and how hot they leave it at any moment.
+/// Every press on a `StokableFlame`, and how hot they leave it at any moment.
 ///
 /// Heat is a pure function of time, so the fire can be redrawn for any frame without keeping a simulation running.
 /// A tap flares and cools off over a couple of seconds. Holding on feeds the fire until it lets go.

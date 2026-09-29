@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The first screen, before any instance is saved. The flame lights, then the words and the button follow.
+/// The first screen, before any instance is saved. The flame flares up, then the words and the button follow.
 struct WelcomeView: View {
     var onAdd: () -> Void
 
@@ -10,7 +10,7 @@ struct WelcomeView: View {
 
     var body: some View {
         VStack(spacing: 30) {
-            FlameGlyph(heat: .lit, height: 128, ignitesOnAppear: true)
+            StokableFlame(height: 128, ignitesOnAppear: true)
 
             VStack(spacing: 10) {
                 Text("Hotify")

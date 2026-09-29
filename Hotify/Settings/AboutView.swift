@@ -17,7 +17,7 @@ struct AboutView: View {
         ScrollView {
             VStack(spacing: 28) {
                 VStack(spacing: 18) {
-                    AboutFlame()
+                    StokableFlame(height: 88, headroom: 24)
 
                     VStack(spacing: 8) {
                         Text("Hotify")

@@ -1,9 +1,18 @@
 import SwiftUI
 
-/// The About flame. Tap it and it flares, tongues of fire pulling up out of the logo. Hold it and it keeps burning.
+/// The logo flame, lit, that catches fire when touched. Tap it and tongues of fire pull up out of it. Hold it and it
+/// keeps burning.
 ///
 /// With Reduce Motion on, the flame stays put and only glows hotter.
-struct AboutFlame: View {
+struct StokableFlame: View {
+    /// The flame's height. Its width follows the logo's proportions, and the fire scales with it.
+    var height: CGFloat
+    /// Extra room the layout keeps above the flame for the fire. The fire reaches past it, so this only needs to
+    /// cover what the surrounding views would otherwise clip.
+    var headroom: CGFloat = 0
+    /// Flares once on its own shortly after the flame appears.
+    var ignitesOnAppear = false
+
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var stokes = StokeHistory()
     /// When the fire goes out. Nil while it is cold, so the timeline stops drawing.
@@ -11,6 +20,7 @@ struct AboutFlame: View {
     /// Set when a pointer or touch press stoked the fire, so the button action that follows does not stoke it twice.
     @State private var pressStoked = false
     @State private var presses = 0
+    @State private var hasIgnited = false
 
     var body: some View {
         let renderer = FireRenderer(
@@ -18,28 +28,34 @@ struct AboutFlame: View {
             palette: FireRenderer.Palette(ember: .ember, core: .core, hot: Color.core.mix(with: .white, by: 0.55)),
             reduceMotion: reduceMotion
         )
+        let canvas = FireRenderer.canvasSize(flameHeight: height)
+        let flameHeight = height
 
         Button {
             if pressStoked {
                 pressStoked = false
             } else {
-                stokes.tap(at: Date.now.timeIntervalSinceReferenceDate)
+                tap()
                 presses += 1
-                burn(until: .now + StokeHistory.afterglow)
             }
         } label: {
-            // The layout keeps a little headroom for the fire. The canvas reaches further, into the padding above
-            // and the gap below, so the flame sits where it always has.
+            // The canvas reaches past the layout frame, up for the fire and down for the glow, so the flame sits
+            // where a `FlameGlyph` of the same height would.
             Color.clear
-                .frame(width: 88, height: 112)
+                .frame(width: height / 1.5, height: height + headroom)
                 .overlay(alignment: .bottom) {
                     TimelineView(.animation(paused: burnsUntil == nil)) { timeline in
                         Canvas { context, size in
-                            renderer.draw(in: &context, size: size, time: timeline.date.timeIntervalSinceReferenceDate)
+                            renderer.draw(
+                                in: &context,
+                                size: size,
+                                flameHeight: flameHeight,
+                                time: timeline.date.timeIntervalSinceReferenceDate
+                            )
                         }
                     }
-                    .frame(width: FireRenderer.size.width, height: FireRenderer.size.height)
-                    .offset(y: FireRenderer.floor)
+                    .frame(width: canvas.width, height: canvas.height)
+                    .offset(y: FireRenderer.floor(flameHeight: height))
                     .allowsHitTesting(false)
                 }
                 .contentShape(Rectangle())
@@ -54,9 +70,23 @@ struct AboutFlame: View {
                 stokes = StokeHistory()
             } catch {}
         }
+        .task {
+            guard ignitesOnAppear, !hasIgnited else { return }
+            do {
+                try await Task.sleep(for: .milliseconds(180))
+                hasIgnited = true
+                tap()
+            } catch {}
+        }
         .accessibilityLabel("Stoke the flame")
         .accessibilityHint("Makes the flame flare up")
         .help("Stoke the flame")
+    }
+
+    private func tap() {
+        let now = Date.now
+        stokes.tap(at: now.timeIntervalSinceReferenceDate)
+        burn(until: now + StokeHistory.afterglow)
     }
 
     private func pressChanged(_ isPressed: Bool) {
@@ -90,7 +120,12 @@ private struct StokeButtonStyle: ButtonStyle {
     }
 }
 
-#Preview {
-    AboutFlame()
+#Preview("About") {
+    StokableFlame(height: 88, headroom: 24)
         .padding(60)
+}
+
+#Preview("Welcome") {
+    StokableFlame(height: 128, ignitesOnAppear: true)
+        .padding(90)
 }
