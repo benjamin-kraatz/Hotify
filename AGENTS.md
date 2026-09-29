@@ -6,7 +6,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
 
 - `Hotify/` is the app target.
   - `App/` has the entry point.
-  - `Dashboard/` shows the selected instance and its applications, databases, and services.
+  - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource.
   - `Instances/` adds, lists, and persists instances.
   - `Storage/` wraps the Keychain.
 - `CoolifyAPI/` is a local Swift package the app depends on.
