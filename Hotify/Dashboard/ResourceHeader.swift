@@ -1,31 +1,31 @@
 import SwiftUI
 
-/// The top of the detail column: the flame, the name, what it is, and the actions that fit its state.
+/// The top of the detail column: the flame, the name, where it lives, and the actions that fit its state.
 struct ResourceHeader: View {
     var resource: ResourceSummary
     var pendingAction: ResourceAction?
-    var isDeploying: Bool
+    /// The newest production deployment failed. With the app stopped, that is why.
+    var lastDeploymentFailed = false
     var onAction: (ResourceAction) -> Void
-    var onDeploy: () -> Void
+
+    private var hasFailed: Bool {
+        pendingAction == nil && !resource.isDeploying && resource.heat == .cold && lastDeploymentFailed
+    }
 
     private var heat: Heat {
-        pendingAction == nil ? resource.heat : .warming
+        hasFailed ? .troubled : resource.heat(pendingAction: pendingAction)
     }
 
     private var statusText: String {
-        pendingAction.map { StatusLabel.text(for: $0) } ?? StatusLabel.text(for: resource.status)
+        hasFailed ? "Deployment failed" : StatusLabel.text(for: resource, pendingAction: pendingAction)
     }
 
-    private var statusStyle: AnyShapeStyle {
-        switch heat {
-        case .lit: AnyShapeStyle(.ember)
-        case .warming, .troubled: AnyShapeStyle(.glow)
-        case .cold, .unknown: AnyShapeStyle(.secondary)
-        }
+    private var actions: [ResourceAction] {
+        ResourceAction.available(for: resource)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .center, spacing: 18) {
                 FlameGlyph(heat: heat, height: 56, ignitesOnAppear: true)
 
@@ -41,10 +41,20 @@ struct ResourceHeader: View {
                             .foregroundStyle(.secondary)
                         Text(statusText)
                             .fontWeight(.semibold)
-                            .foregroundStyle(statusStyle)
+                            .foregroundStyle(heat.tint)
                             .contentTransition(.interpolate)
                     }
                     .font(.subheadline)
+
+                    if let place = resource.place {
+                        Text(
+                            place.environmentName.isEmpty
+                                ? place.projectName : "\(place.projectName) · \(place.environmentName)"
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    }
 
                     if let link = resource.link {
                         Link(destination: link) {
@@ -58,46 +68,98 @@ struct ResourceHeader: View {
                 }
             }
 
-            actionBar
+            if !actions.isEmpty {
+                actionBar
+            }
         }
         .animation(.snappy, value: heat)
         .animation(.snappy, value: statusText)
+        .animation(.snappy, value: actions)
     }
 
+    /// Every label when they fit. Then the lead action keeps its label and the rest shrink to icons,
+    /// and on the narrowest screens the rest move into a menu.
     private var actionBar: some View {
-        HStack(spacing: 10) {
-            if resource.kind == .application {
-                Button(action: onDeploy) {
-                    Label(isDeploying ? "Deploying…" : "Deploy", systemImage: "arrow.up.circle.fill")
-                        .symbolEffect(.pulse, isActive: isDeploying)
-                        .contentTransition(.interpolate)
-                }
-                .glassButton(prominent: true)
-                .disabled(isDeploying)
-                .keyboardShortcut("d", modifiers: [.command, .shift])
-            }
-
-            Group {
-                if heat == .cold || heat == .unknown {
-                    actionButton(.start, prominent: resource.kind != .application)
-                }
-                if heat != .cold {
-                    actionButton(.restart, prominent: false)
-                    actionButton(.stop, prominent: false)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                ForEach(actions) { action in
+                    button(action, showsTitle: true)
                 }
             }
-            .disabled(pendingAction != nil)
+            HStack(spacing: 10) {
+                ForEach(actions) { action in
+                    button(action, showsTitle: action == actions.first)
+                }
+            }
+            HStack(spacing: 10) {
+                if let lead = actions.first {
+                    button(lead, showsTitle: true)
+                }
+                moreMenu
+            }
         }
         .controlSize(.large)
-        .labelStyle(.titleAndIcon)
     }
 
-    private func actionButton(_ action: ResourceAction, prominent: Bool) -> some View {
+    private func button(_ action: ResourceAction, showsTitle: Bool) -> some View {
         Button(action.title, systemImage: action.systemImage) {
             onAction(action)
         }
-        .glassButton(prominent: prominent)
+        .labelStyle(ActionLabelStyle(showsTitle: showsTitle))
+        // The first action is the likely one, unless it takes the resource down.
+        .glassButton(prominent: action == actions.first && action != .stop && action != .cancelDeployment)
+        .disabled(action.isBlocked(by: pendingAction))
+        .help(action.explanation(for: resource.kind))
+        .accessibilityHint(action.explanation(for: resource.kind))
+        .keyboardShortcut(action.shortcut)
         .transition(.scale(scale: 0.85).combined(with: .opacity))
+    }
+
+    @ViewBuilder
+    private var moreMenu: some View {
+        let rest = actions.dropFirst()
+        if !rest.isEmpty {
+            Menu {
+                ForEach(Array(rest)) { action in
+                    Button(action == .stop ? "Stop…" : action.title, systemImage: action.systemImage) {
+                        onAction(action)
+                    }
+                    .disabled(action.isBlocked(by: pendingAction))
+                }
+            } label: {
+                Label("More Actions", systemImage: "ellipsis")
+                    .labelStyle(.iconOnly)
+            }
+            .menuIndicator(.hidden)
+            .glassButton()
+        }
+    }
+}
+
+/// Title and icon, or the icon alone while the title still reaches VoiceOver.
+private struct ActionLabelStyle: LabelStyle {
+    var showsTitle: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if showsTitle {
+            Label(configuration)
+                .labelStyle(.titleAndIcon)
+        } else {
+            Label(configuration)
+                .labelStyle(.iconOnly)
+        }
+    }
+}
+
+extension ResourceAction {
+    /// Shortcuts for the actions that do not take anything down.
+    fileprivate var shortcut: KeyboardShortcut? {
+        switch self {
+        case .start: KeyboardShortcut("s", modifiers: [.command, .shift])
+        case .deploy: KeyboardShortcut("d", modifiers: [.command, .shift])
+        case .restart: KeyboardShortcut("r", modifiers: [.command, .shift])
+        case .stop, .cancelDeployment: nil
+        }
     }
 }
 
@@ -113,26 +175,33 @@ private struct TrailingIconLabelStyle: LabelStyle {
 }
 
 #Preview {
-    VStack(alignment: .leading, spacing: 40) {
-        ResourceHeader(
-            resource: ResourceSummary(
-                route: .application("web"),
-                name: "marketing-site",
-                status: "running:healthy",
-                link: URL(string: "https://hotify.example.com")
-            ),
-            pendingAction: nil,
-            isDeploying: false,
-            onAction: { _ in },
-            onDeploy: {}
-        )
-        ResourceHeader(
-            resource: ResourceSummary(route: .database("pg"), name: "postgres", status: "exited"),
-            pendingAction: nil,
-            isDeploying: false,
-            onAction: { _ in },
-            onDeploy: {}
-        )
+    ScrollView {
+        VStack(alignment: .leading, spacing: 40) {
+            ResourceHeader(
+                resource: ResourceSummary(
+                    route: .application("web"),
+                    name: "marketing-site",
+                    status: "running:healthy",
+                    link: URL(string: "https://hotify.example.com"),
+                    place: ResourcePlace(projectName: "Website", environmentName: "production", environmentID: 1)
+                ),
+                onAction: { _ in }
+            )
+            ResourceHeader(
+                resource: ResourceSummary(route: .application("api"), name: "api", status: "exited"),
+                lastDeploymentFailed: true,
+                onAction: { _ in }
+            )
+            ResourceHeader(
+                resource: ResourceSummary(route: .application("docs"), name: "docs", status: "exited"),
+                pendingAction: .start,
+                onAction: { _ in }
+            )
+            ResourceHeader(
+                resource: ResourceSummary(route: .database("pg"), name: "postgres", status: "exited"),
+                onAction: { _ in }
+            )
+        }
+        .padding(24)
     }
-    .padding(24)
 }

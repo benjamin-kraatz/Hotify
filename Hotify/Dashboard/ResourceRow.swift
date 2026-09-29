@@ -6,11 +6,11 @@ struct ResourceRow: View {
     var pendingAction: ResourceAction?
 
     private var heat: Heat {
-        pendingAction == nil ? resource.heat : .warming
+        resource.heat(pendingAction: pendingAction)
     }
 
     private var statusText: String {
-        pendingAction.map { StatusLabel.text(for: $0) } ?? StatusLabel.text(for: resource.status)
+        StatusLabel.text(for: resource, pendingAction: pendingAction)
     }
 
     var body: some View {
@@ -32,20 +32,21 @@ struct ResourceRow: View {
                         .contentTransition(.interpolate)
                         .lineLimit(1)
                 }
-                if resource.subtitle != nil || !resource.containers.isEmpty {
-                    HStack(spacing: 8) {
-                        if !resource.containers.isEmpty {
-                            HeatStrip(heats: resource.containers.map(\.heat), tickWidth: 4, height: 7)
-                                .fixedSize()
-                        }
-                        if let subtitle = resource.subtitle {
-                            Text(subtitle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
+                // Sections group by project, so the kind rides along on every row.
+                HStack(spacing: 8) {
+                    Image(systemName: resource.kind.systemImage)
+                        .imageScale(.small)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(resource.kind.title)
+                    if !resource.containers.isEmpty {
+                        HeatStrip(heats: resource.containers.map(\.heat), tickWidth: 4, height: 7)
+                            .fixedSize()
                     }
+                    Text(resource.subtitle ?? resource.kind.title)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
             }
         }
@@ -80,7 +81,17 @@ struct ResourceRow: View {
             pendingAction: .restart
         )
         ResourceRow(
-            resource: ResourceSummary(route: .database("pg"), name: "postgres", status: "exited")
+            resource: ResourceSummary(
+                route: .database("pg"), name: "postgres", status: "exited", subtitle: "PostgreSQL")
+        )
+        ResourceRow(
+            resource: ResourceSummary(
+                route: .application("api"),
+                name: "api",
+                status: "exited",
+                subtitle: "example/api",
+                isDeploying: true
+            )
         )
         ResourceRow(
             resource: ResourceSummary(route: .database("redis"), name: "redis", status: "running:unhealthy")

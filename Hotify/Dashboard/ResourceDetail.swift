@@ -6,6 +6,8 @@ struct ResourceDetailScreen: View {
     var client: CoolifyClient?
     var resource: ResourceSummary
     var pendingAction: ResourceAction?
+    /// The last action that failed, from the dashboard. The middle column is off screen on iPhone.
+    var actionError: String?
     var onAction: (ResourceAction) -> Void
 
     @State private var model: ResourceDetailModel
@@ -15,12 +17,14 @@ struct ResourceDetailScreen: View {
         client: CoolifyClient?,
         resource: ResourceSummary,
         pendingAction: ResourceAction?,
+        actionError: String? = nil,
         model: ResourceDetailModel = ResourceDetailModel(),
         onAction: @escaping (ResourceAction) -> Void
     ) {
         self.client = client
         self.resource = resource
         self.pendingAction = pendingAction
+        self.actionError = actionError
         self.onAction = onAction
         _model = State(initialValue: model)
     }
@@ -33,9 +37,14 @@ struct ResourceDetailScreen: View {
             ?? containers.first
     }
 
-    private var logSourceName: String? {
-        guard let logContainer, logContainer.heat != .cold, !logContainer.serviceName.isEmpty else { return nil }
-        return logContainer.serviceName
+    private var logSource: LogSource? {
+        switch resource.kind {
+        case .application, .database:
+            return resource.heat == .cold ? nil : .resource
+        case .service:
+            guard let logContainer, logContainer.heat != .cold, !logContainer.serviceName.isEmpty else { return nil }
+            return .container(logContainer.serviceName)
+        }
     }
 
     var body: some View {
@@ -51,16 +60,14 @@ struct ResourceDetailScreen: View {
             logLineCount: $model.logLineCount,
             deployments: model.deployments,
             loadError: model.loadError,
-            actionError: model.actionError,
+            actionError: actionError,
             isLoading: model.isLoading,
-            isDeploying: model.isDeploying,
-            onDeploy: { Task { await model.deploy() } },
             onAction: onAction
         )
         .task(id: resource.route) {
             guard let client else { return }
             model.prepare(client, route: resource.route)
-            await model.setLogSource(logSourceName)
+            await model.setLogSource(logSource)
             while !Task.isCancelled {
                 await model.refresh()
                 if Task.isCancelled { return }
@@ -70,8 +77,12 @@ struct ResourceDetailScreen: View {
         .onChange(of: model.logLineCount) { _, _ in
             Task { await model.refresh() }
         }
-        .onChange(of: logSourceName) { _, name in
-            Task { await model.setLogSource(name) }
+        .onChange(of: logSource) { _, source in
+            Task { await model.setLogSource(source) }
+        }
+        // Pick up the finished deployment now rather than on the next poll.
+        .onChange(of: resource.isDeploying) { _, _ in
+            Task { await model.refresh() }
         }
     }
 }
@@ -89,8 +100,6 @@ struct ResourceDetail: View {
     var loadError: String?
     var actionError: String?
     var isLoading: Bool
-    var isDeploying: Bool
-    var onDeploy: () -> Void
     var onAction: (ResourceAction) -> Void
 
     @State private var tab: DetailTab?
@@ -98,20 +107,40 @@ struct ResourceDetail: View {
 
     private var tabs: [DetailTab] {
         switch resource.kind {
-        case .application: [.deployments, .logs]
-        case .service: [.containers, .logs]
+        case .application: [.logs, .deployments]
+        case .service: [.logs, .containers]
         case .database: [.logs]
         }
     }
 
-    /// Coolify only serves logs for running containers, so a stopped one gets a note instead of an error.
-    private var pausedMessage: String? {
-        guard let logContainer, logContainer.heat == .cold else { return nil }
-        return "\(logContainer.name) isn't running. Start the service to read its output."
+    private var lastDeploymentFailed: Bool {
+        deployments.first { !$0.isPreview }?.status == "failed"
     }
 
+    /// Coolify only serves logs for running containers, so a stopped one gets a note instead of an error.
+    private var pausedMessage: String? {
+        switch resource.kind {
+        case .application, .database:
+            guard resource.heat == .cold else { return nil }
+            if resource.isDeploying || pendingAction == .start {
+                return "\(resource.name) is on its way up. Its output shows here once it runs."
+            }
+            return "\(resource.name) isn't running, so there is no output. Start it to see its logs."
+        case .service:
+            guard let logContainer, logContainer.heat == .cold else { return nil }
+            return "\(logContainer.name) isn't running. Start the service to read its output."
+        }
+    }
+
+    /// Until the user picks a tab, an app that is building or stopped opens on its deployments, which say why.
     private var currentTab: DetailTab {
-        tab.flatMap { tabs.contains($0) ? $0 : nil } ?? tabs[0]
+        if let tab, tabs.contains(tab) {
+            return tab
+        }
+        if resource.kind == .application, resource.isDeploying || resource.heat == .cold {
+            return .deployments
+        }
+        return tabs[0]
     }
 
     var body: some View {
@@ -119,15 +148,14 @@ struct ResourceDetail: View {
             ResourceHeader(
                 resource: resource,
                 pendingAction: pendingAction,
-                isDeploying: isDeploying,
+                lastDeploymentFailed: lastDeploymentFailed,
                 onAction: { action in
                     if action == .stop {
                         stopCandidate = resource
                     } else {
                         onAction(action)
                     }
-                },
-                onDeploy: onDeploy
+                }
             )
             .padding(.horizontal, 24)
             .padding(.top, 20)
@@ -186,6 +214,11 @@ struct ResourceDetail: View {
         .navigationTitle(resource.kind.title)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                ResourceGuideButton(kind: resource.kind)
+            }
+        }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
         }

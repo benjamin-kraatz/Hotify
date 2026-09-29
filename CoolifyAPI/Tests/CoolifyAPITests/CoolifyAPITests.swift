@@ -80,6 +80,27 @@ final class CoolifyAPITests: XCTestCase {
         XCTAssertEqual(service.applications?.first?.parsedStatus?.isRunning, true)
     }
 
+    func testResourcesReadEnvironmentIDAsNumberOrString() throws {
+        let application = try CoolifyJSON.decoder().decode(
+            Application.self,
+            from: Data(#"{"uuid":"app-1","name":"Web","environment_id":"3"}"#.utf8)
+        )
+        XCTAssertEqual(application.environmentID, 3)
+
+        let database = try CoolifyJSON.decoder().decode(
+            Database.self,
+            from: Data(#"{"uuid":"db-1","database_type":"standalone-postgresql","environment_id":4}"#.utf8)
+        )
+        XCTAssertEqual(database.environmentID, 4)
+        XCTAssertEqual(database.databaseType, "standalone-postgresql")
+
+        let service = try CoolifyJSON.decoder().decode(
+            Service.self,
+            from: Data(#"{"uuid":"svc-1","name":"convex","environment_id":5}"#.utf8)
+        )
+        XCTAssertEqual(service.environmentID, 5)
+    }
+
     func testServiceLogsNameTheSubService() async throws {
         let client = try makeClient { request in
             XCTAssertEqual(request.httpMethod, "GET")
@@ -121,7 +142,7 @@ final class CoolifyAPITests: XCTestCase {
         XCTAssertEqual(started.deployments.first?.deploymentUUID, "dep-2")
     }
 
-    func testApplicationAndDatabaseListControls() async throws {
+    func testResourceListControls() async throws {
         let queued = Data(#"{"message":"queued"}"#.utf8)
         let client = try makeClient { request in
             XCTAssertEqual(request.httpMethod, "POST")
@@ -146,6 +167,14 @@ final class CoolifyAPITests: XCTestCase {
                 XCTAssertEqual(queryItems(request), [URLQueryItem(name: "docker_cleanup", value: "0")])
             case "/api/v1/databases/db-1/restart":
                 XCTAssertNil(request.url?.query)
+            case "/api/v1/services/svc-1/start":
+                XCTAssertNil(request.url?.query)
+            case "/api/v1/services/svc-1/stop":
+                XCTAssertEqual(queryItems(request), [URLQueryItem(name: "docker_cleanup", value: "0")])
+            case "/api/v1/services/svc-1/restart":
+                XCTAssertEqual(queryItems(request), [URLQueryItem(name: "latest", value: "0")])
+            case "/api/v1/deployments/dep-1/cancel":
+                XCTAssertNil(request.url?.query)
             default:
                 XCTFail("Unexpected \(request.httpMethod ?? "") \(request.url?.path ?? "")")
             }
@@ -158,6 +187,25 @@ final class CoolifyAPITests: XCTestCase {
         _ = try await client.startDatabase("db-1")
         _ = try await client.stopDatabase("db-1", dockerCleanup: false)
         _ = try await client.restartDatabase("db-1")
+        _ = try await client.startService("svc-1")
+        _ = try await client.stopService("svc-1", dockerCleanup: false)
+        _ = try await client.restartService("svc-1")
+        _ = try await client.cancelDeployment("dep-1")
+    }
+
+    func testRedeployQueuesTheApplication() async throws {
+        let client = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/api/v1/deploy")
+            XCTAssertEqual(
+                queryItems(request),
+                [URLQueryItem(name: "force", value: "0"), URLQueryItem(name: "uuid", value: "app-1")]
+            )
+            return (200, Data(#"{"deployments":[{"resource_uuid":"app-1","deployment_uuid":"dep-3"}]}"#.utf8), [:])
+        }
+
+        let result = try await client.deploy(uuid: "app-1")
+        XCTAssertEqual(result.deployments.first?.deploymentUUID, "dep-3")
     }
 }
 

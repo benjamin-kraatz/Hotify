@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The middle column: one instance's applications, databases, and services, with actions on each row.
+/// The middle column: one instance's resources, grouped by project and environment, with actions on each row.
 struct DashboardView: View {
     var instanceName: String
     var host: String
@@ -19,15 +19,15 @@ struct DashboardView: View {
         return snapshot.resources.filter { resource in
             resource.name.localizedStandardContains(trimmed)
                 || resource.subtitle?.localizedStandardContains(trimmed) == true
+                || resource.place?.projectName.localizedStandardContains(trimmed) == true
+                || resource.place?.environmentName.localizedStandardContains(trimmed) == true
                 || resource.containers.contains { $0.name.localizedStandardContains(trimmed) }
         }
     }
 
-    /// Heat for the summary strip. A resource with an action in flight counts as warming.
+    /// Heat for the summary strip. A resource with an action or deployment in flight counts as warming.
     private var heats: [Heat] {
-        snapshot.resources.map { resource in
-            snapshot.pendingAction(for: resource.route) == nil ? resource.heat : .warming
-        }
+        snapshot.resources.map { $0.heat(pendingAction: snapshot.pendingAction(for: $0.route)) }
     }
 
     var body: some View {
@@ -49,14 +49,13 @@ struct DashboardView: View {
             }
             .listRowSeparator(.hidden)
 
-            ForEach(ResourceKind.allCases, id: \.self) { kind in
-                let rows = visible.filter { $0.kind == kind }
-                if !rows.isEmpty {
-                    Section(kind.pluralTitle) {
-                        ForEach(rows) { resource in
-                            row(resource)
-                        }
+            ForEach(ResourceGroup.grouping(visible)) { group in
+                Section {
+                    ForEach(group.resources) { resource in
+                        row(resource)
                     }
+                } header: {
+                    GroupHeader(place: group.place)
                 }
             }
         }
@@ -108,16 +107,12 @@ struct DashboardView: View {
 
     private func row(_ resource: ResourceSummary) -> some View {
         let pendingAction = snapshot.pendingAction(for: resource.route)
-        let heat = resource.heat
+        let actions = ResourceAction.available(for: resource)
         return ResourceRow(resource: resource, pendingAction: pendingAction)
             .tag(resource.route)
             .contextMenu {
-                ResourceActionButtons(heat: heat, isBusy: pendingAction != nil) { action in
-                    if action == .stop {
-                        stopCandidate = resource
-                    } else {
-                        onRun(action, resource.route)
-                    }
+                ResourceActionButtons(resource: resource, pendingAction: pendingAction) { action in
+                    run(action, on: resource)
                 }
                 if let link = resource.link {
                     Divider()
@@ -128,30 +123,34 @@ struct DashboardView: View {
             }
             #if os(iOS)
         .swipeActions(edge: .leading) {
-            if heat != .cold {
-                Button("Restart", systemImage: ResourceAction.restart.systemImage) {
-                    onRun(.restart, resource.route)
-                }
-                .tint(.glow)
-                .disabled(pendingAction != nil)
+            ForEach(actions.filter { $0 == .deploy || $0 == .restart }) { action in
+                swipeButton(action, on: resource, isBusy: action.isBlocked(by: pendingAction))
             }
         }
         .swipeActions(edge: .trailing) {
-            if heat == .cold || heat == .unknown {
-                Button("Start", systemImage: ResourceAction.start.systemImage) {
-                    onRun(.start, resource.route)
-                }
-                .tint(.ember)
-                .disabled(pendingAction != nil)
-            } else {
-                Button("Stop", systemImage: ResourceAction.stop.systemImage) {
-                    stopCandidate = resource
-                }
-                .tint(.gray)
-                .disabled(pendingAction != nil)
+            ForEach(actions.filter { $0 == .start || $0 == .stop || $0 == .cancelDeployment }) { action in
+                swipeButton(action, on: resource, isBusy: action.isBlocked(by: pendingAction))
             }
         }
             #endif
+    }
+
+    #if os(iOS)
+    private func swipeButton(_ action: ResourceAction, on resource: ResourceSummary, isBusy: Bool) -> some View {
+        Button(action.title, systemImage: action.systemImage) {
+            run(action, on: resource)
+        }
+        .tint(action.swipeTint)
+        .disabled(isBusy)
+    }
+    #endif
+
+    private func run(_ action: ResourceAction, on resource: ResourceSummary) {
+        if action == .stop {
+            stopCandidate = resource
+        } else {
+            onRun(action, resource.route)
+        }
     }
 
     @ViewBuilder
@@ -180,6 +179,7 @@ struct DashboardView: View {
 
 #Preview {
     @Previewable @State var selection: ResourceRoute?
+    let website = ResourcePlace(projectName: "Website", environmentName: "production", environmentID: 1)
     NavigationStack {
         DashboardView(
             instanceName: "Home lab",
@@ -193,9 +193,24 @@ struct DashboardView: View {
                         route: .application("web"),
                         name: "marketing-site",
                         status: "running:healthy",
-                        subtitle: "hotify.example.com"
+                        subtitle: "hotify.example.com",
+                        place: website
                     ),
-                    ResourceSummary(route: .database("pg"), name: "postgres", status: "running:healthy"),
+                    ResourceSummary(
+                        route: .application("api"),
+                        name: "api",
+                        status: "exited",
+                        subtitle: "example/api",
+                        place: website,
+                        isDeploying: true
+                    ),
+                    ResourceSummary(
+                        route: .database("pg"),
+                        name: "postgres",
+                        status: "running:healthy",
+                        subtitle: "PostgreSQL",
+                        place: website
+                    ),
                     ResourceSummary(
                         route: .service("kibana"),
                         name: "elasticsearch-with-kibana",
@@ -205,7 +220,8 @@ struct DashboardView: View {
                             ContainerSummary(id: 1, name: "kibana", status: "exited"),
                             ContainerSummary(id: 2, name: "elasticsearch", status: "exited"),
                             ContainerSummary(id: 3, name: "token-generator", status: "exited"),
-                        ]
+                        ],
+                        place: ResourcePlace(projectName: "Observability", environmentName: "staging", environmentID: 3)
                     ),
                 ],
                 pending: [.database("pg"): .restart],
@@ -230,3 +246,16 @@ struct DashboardView: View {
         )
     }
 }
+
+#if os(iOS)
+extension ResourceAction {
+    /// Ember for actions that bring something up, amber for a bounce, grey for ones that take it down.
+    fileprivate var swipeTint: Color {
+        switch self {
+        case .start, .deploy: .ember
+        case .restart: .glow
+        case .stop, .cancelDeployment: .gray
+        }
+    }
+}
+#endif

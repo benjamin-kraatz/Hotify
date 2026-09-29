@@ -52,8 +52,4 @@ enum ResourceRoute: Hashable {
         case .service(let uuid): .service(uuid)
         }
     }
-
-    var showsDeployments: Bool {
-        kind == .application
-    }
 }

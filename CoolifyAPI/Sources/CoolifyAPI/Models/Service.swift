@@ -39,6 +39,26 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
     public var status: String?
     public var serviceType: String?
     public var applications: [ServiceApplication]?
+    public var environmentID: Int?
 
     public var id: String { uuid }
+
+    enum CodingKeys: String, CodingKey {
+        case uuid
+        case name
+        case status
+        case serviceType
+        case applications
+        case environmentID = "environmentId"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try container.decode(String.self, forKey: .uuid)
+        name = container.flexString(.name) ?? ""
+        status = container.flexString(.status)
+        serviceType = container.flexString(.serviceType)
+        applications = try container.decodeIfPresent([ServiceApplication].self, forKey: .applications)
+        environmentID = container.flexInt(.environmentID)
+    }
 }

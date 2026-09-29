@@ -1,25 +1,18 @@
 import SwiftUI
 
-/// Start, restart, and stop, offered by what makes sense for the resource's heat.
+/// The actions `ResourceAction.available(for:)` offers, as menu buttons. Stop asks first, so it carries an ellipsis.
 struct ResourceActionButtons: View {
-    var heat: Heat
-    var isBusy: Bool
+    var resource: ResourceSummary
+    var pendingAction: ResourceAction?
     var onAction: (ResourceAction) -> Void
 
     var body: some View {
-        if heat == .cold || heat == .unknown {
-            button(.start)
+        ForEach(ResourceAction.available(for: resource)) { action in
+            Button(action == .stop ? "Stop…" : action.title, systemImage: action.systemImage) {
+                onAction(action)
+            }
+            .help(action.explanation(for: resource.kind))
+            .disabled(action.isBlocked(by: pendingAction))
         }
-        if heat != .cold {
-            button(.restart)
-            button(.stop)
-        }
-    }
-
-    private func button(_ action: ResourceAction) -> some View {
-        Button(action == .stop ? "Stop…" : action.title, systemImage: action.systemImage) {
-            onAction(action)
-        }
-        .disabled(isBusy)
     }
 }

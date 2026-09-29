@@ -31,6 +31,39 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
     public var buildPack: String?
     public var createdAt: String?
     public var settings: ApplicationSettings?
+    /// The environment the application lives in. Match it against `Project.environments` to find its project.
+    public var environmentID: Int?
 
     public var createdAtDate: Date? { createdAt.flatMap(CoolifyTimestamp.parse) }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case uuid
+        case name
+        case description
+        case status
+        case fqdn
+        case gitRepository
+        case gitBranch
+        case buildPack
+        case createdAt
+        case settings
+        case environmentID = "environmentId"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = container.flexInt(.id)
+        uuid = try container.decode(String.self, forKey: .uuid)
+        name = container.flexString(.name) ?? ""
+        description = container.flexString(.description)
+        status = container.flexString(.status)
+        fqdn = container.flexString(.fqdn)
+        gitRepository = container.flexString(.gitRepository)
+        gitBranch = container.flexString(.gitBranch)
+        buildPack = container.flexString(.buildPack)
+        createdAt = container.flexString(.createdAt)
+        settings = try container.decodeIfPresent(ApplicationSettings.self, forKey: .settings)
+        environmentID = container.flexInt(.environmentID)
+    }
 }
