@@ -1,31 +1,64 @@
 import SwiftUI
 
-/// The top of the detail column: the flame, the name, what it is, and the actions that fit its state.
+/// The top of the detail column: the flame, the name, where it lives, and the actions that fit its state.
 struct ResourceHeader: View {
     var resource: ResourceSummary
     var pendingAction: ResourceAction?
-    var isDeploying: Bool
+    /// The newest production deployment failed. With the app stopped, that is why.
+    var lastDeploymentFailed = false
     var onAction: (ResourceAction) -> Void
-    var onDeploy: () -> Void
+
+    private var hasFailed: Bool {
+        pendingAction == nil && !resource.isDeploying && resource.heat == .cold && lastDeploymentFailed
+    }
 
     private var heat: Heat {
-        pendingAction == nil ? resource.heat : .warming
+        hasFailed ? .troubled : resource.heat(pendingAction: pendingAction)
     }
 
     private var statusText: String {
-        pendingAction.map { StatusLabel.text(for: $0) } ?? StatusLabel.text(for: resource.status)
+        hasFailed ? "Deployment failed" : StatusLabel.text(for: resource, pendingAction: pendingAction)
     }
 
-    private var statusStyle: AnyShapeStyle {
-        switch heat {
-        case .lit: AnyShapeStyle(.ember)
-        case .warming, .troubled: AnyShapeStyle(.glow)
-        case .cold, .unknown: AnyShapeStyle(.secondary)
+    private var actions: [ResourceAction] {
+        ResourceAction.available(for: resource)
+    }
+
+    /// One line on what is happening, or on what the buttons do. Start and Redeploy read alike otherwise.
+    private var caption: String? {
+        let isApplication = resource.kind == .application
+        switch pendingAction {
+        case .start?:
+            return isApplication
+                ? "Coolify is building the latest commit, then starts it. Deployments shows the progress."
+                : "Coolify is starting the containers."
+        case .deploy?:
+            return "Coolify is building the latest commit. Deployments shows the progress."
+        case .restart?:
+            return "Coolify is restarting the containers."
+        case .stop?:
+            return "Coolify is stopping the containers."
+        case .cancelDeployment?:
+            return "Coolify is cancelling the deployment."
+        case nil:
+            break
+        }
+        if resource.isDeploying {
+            return "A deployment is running. Deployments shows the progress."
+        }
+        guard isApplication else { return nil }
+        if hasFailed {
+            return "Check Deployments for what went wrong. Start tries again with the latest commit."
+        }
+        switch resource.heat {
+        case .cold: return "Start builds the latest commit and runs it."
+        case .lit, .warming, .troubled: return "Redeploy builds the latest commit. Restart keeps the current build."
+        case .unknown: return nil
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .center, spacing: 18) {
                 FlameGlyph(heat: heat, height: 56, ignitesOnAppear: true)
 
@@ -41,10 +74,20 @@ struct ResourceHeader: View {
                             .foregroundStyle(.secondary)
                         Text(statusText)
                             .fontWeight(.semibold)
-                            .foregroundStyle(statusStyle)
+                            .foregroundStyle(heat.tint)
                             .contentTransition(.interpolate)
                     }
                     .font(.subheadline)
+
+                    if let place = resource.place {
+                        Text(
+                            place.environmentName.isEmpty
+                                ? place.projectName : "\(place.projectName) · \(place.environmentName)"
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    }
 
                     if let link = resource.link {
                         Link(destination: link) {
@@ -58,46 +101,63 @@ struct ResourceHeader: View {
                 }
             }
 
-            actionBar
+            if !actions.isEmpty || caption != nil {
+                VStack(alignment: .leading, spacing: 8) {
+                    actionBar
+                    if let caption {
+                        Text(caption)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                    }
+                }
+            }
         }
         .animation(.snappy, value: heat)
         .animation(.snappy, value: statusText)
+        .animation(.snappy, value: actions)
+        .animation(.snappy, value: caption)
     }
 
     private var actionBar: some View {
-        HStack(spacing: 10) {
-            if resource.kind == .application {
-                Button(action: onDeploy) {
-                    Label(isDeploying ? "Deploying…" : "Deploy", systemImage: "arrow.up.circle.fill")
-                        .symbolEffect(.pulse, isActive: isDeploying)
-                        .contentTransition(.interpolate)
-                }
-                .glassButton(prominent: true)
-                .disabled(isDeploying)
-                .keyboardShortcut("d", modifiers: [.command, .shift])
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                buttons
             }
-
-            Group {
-                if heat == .cold || heat == .unknown {
-                    actionButton(.start, prominent: resource.kind != .application)
-                }
-                if heat != .cold {
-                    actionButton(.restart, prominent: false)
-                    actionButton(.stop, prominent: false)
-                }
+            VStack(alignment: .leading, spacing: 10) {
+                buttons
             }
-            .disabled(pendingAction != nil)
         }
         .controlSize(.large)
         .labelStyle(.titleAndIcon)
     }
 
-    private func actionButton(_ action: ResourceAction, prominent: Bool) -> some View {
-        Button(action.title, systemImage: action.systemImage) {
-            onAction(action)
+    private var buttons: some View {
+        ForEach(actions) { action in
+            Button(action.title, systemImage: action.systemImage) {
+                onAction(action)
+            }
+            // The first action is the likely one, unless it takes the resource down.
+            .glassButton(prominent: action == actions.first && action != .stop && action != .cancelDeployment)
+            .disabled(action.isBlocked(by: pendingAction))
+            .help(action.explanation(for: resource.kind))
+            .accessibilityHint(action.explanation(for: resource.kind))
+            .keyboardShortcut(action.shortcut)
+            .transition(.scale(scale: 0.85).combined(with: .opacity))
         }
-        .glassButton(prominent: prominent)
-        .transition(.scale(scale: 0.85).combined(with: .opacity))
+    }
+}
+
+extension ResourceAction {
+    /// Shortcuts for the actions that do not take anything down.
+    fileprivate var shortcut: KeyboardShortcut? {
+        switch self {
+        case .start: KeyboardShortcut("s", modifiers: [.command, .shift])
+        case .deploy: KeyboardShortcut("d", modifiers: [.command, .shift])
+        case .restart: KeyboardShortcut("r", modifiers: [.command, .shift])
+        case .stop, .cancelDeployment: nil
+        }
     }
 }
 
@@ -113,26 +173,33 @@ private struct TrailingIconLabelStyle: LabelStyle {
 }
 
 #Preview {
-    VStack(alignment: .leading, spacing: 40) {
-        ResourceHeader(
-            resource: ResourceSummary(
-                route: .application("web"),
-                name: "marketing-site",
-                status: "running:healthy",
-                link: URL(string: "https://hotify.example.com")
-            ),
-            pendingAction: nil,
-            isDeploying: false,
-            onAction: { _ in },
-            onDeploy: {}
-        )
-        ResourceHeader(
-            resource: ResourceSummary(route: .database("pg"), name: "postgres", status: "exited"),
-            pendingAction: nil,
-            isDeploying: false,
-            onAction: { _ in },
-            onDeploy: {}
-        )
+    ScrollView {
+        VStack(alignment: .leading, spacing: 40) {
+            ResourceHeader(
+                resource: ResourceSummary(
+                    route: .application("web"),
+                    name: "marketing-site",
+                    status: "running:healthy",
+                    link: URL(string: "https://hotify.example.com"),
+                    place: ResourcePlace(projectName: "Website", environmentName: "production", environmentID: 1)
+                ),
+                onAction: { _ in }
+            )
+            ResourceHeader(
+                resource: ResourceSummary(route: .application("api"), name: "api", status: "exited"),
+                lastDeploymentFailed: true,
+                onAction: { _ in }
+            )
+            ResourceHeader(
+                resource: ResourceSummary(route: .application("docs"), name: "docs", status: "exited"),
+                pendingAction: .start,
+                onAction: { _ in }
+            )
+            ResourceHeader(
+                resource: ResourceSummary(route: .database("pg"), name: "postgres", status: "exited"),
+                onAction: { _ in }
+            )
+        }
+        .padding(24)
     }
-    .padding(24)
 }

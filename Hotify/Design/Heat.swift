@@ -63,12 +63,22 @@ enum StatusLabel {
         return status.state.prefix(1).uppercased() + status.state.dropFirst()
     }
 
-    /// The label while Hotify waits for Coolify to accept an action.
+    /// The label while an action runs, from the request until a poll shows the result.
     static func text(for action: ResourceAction) -> String {
         switch action {
         case .start: "Starting…"
+        case .deploy: "Deploying…"
         case .stop: "Stopping…"
         case .restart: "Restarting…"
+        case .cancelDeployment: "Cancelling…"
         }
+    }
+
+    /// The label for a resource, in order of what matters most: an action of ours, a deployment, then Coolify's status.
+    static func text(for resource: ResourceSummary, pendingAction: ResourceAction?) -> String {
+        if let pendingAction {
+            return text(for: pendingAction)
+        }
+        return resource.isDeploying ? "Deploying…" : text(for: resource.status)
     }
 }

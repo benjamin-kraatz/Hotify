@@ -31,7 +31,7 @@ struct DeploymentTimeline: View {
                     ContentUnavailableView(
                         "No deployments yet",
                         systemImage: "arrow.up.circle",
-                        description: Text("Deploy this application and its history shows up here.")
+                        description: Text("Start or redeploy this application and each build shows up here.")
                     )
                 }
             }

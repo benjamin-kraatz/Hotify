@@ -68,6 +68,14 @@ extension DeploymentLine {
     }
 }
 
+/// Which log the detail screen reads.
+enum LogSource: Hashable {
+    /// The application's or database's own container.
+    case resource
+    /// One container of a service, by its Coolify `name`.
+    case container(String)
+}
+
 /// Loads logs for one resource, and deployment history when that resource is an application.
 @Observable
 final class ResourceDetailModel {
@@ -77,13 +85,11 @@ final class ResourceDetailModel {
     private(set) var logLines: [LogLine] = []
     var deployments: [DeploymentLine] = []
     var loadError: String?
-    var actionError: String?
     var isLoading = false
-    var isDeploying = false
     /// How many trailing log lines to ask Coolify for.
     var logLineCount = 100
-    /// The service container whose logs to read, by its Coolify `name`. `nil` skips the request.
-    private(set) var logSource: String?
+    /// `nil` skips the log request. Coolify refuses one for a stopped container.
+    private(set) var logSource: LogSource?
 
     private var client: CoolifyClient?
     private var route: ResourceRoute?
@@ -98,10 +104,10 @@ final class ResourceDetailModel {
         logs = ""
         deployments = []
         loadError = nil
-        actionError = nil
-        isDeploying = false
     }
 
+    /// Loads the log and the deployment history side by side. One failing leaves the other on screen,
+    /// because a stopped app has no log but still has the history that explains why.
     func refresh() async {
         guard let client, let route else { return }
         let generation = self.generation
@@ -115,81 +121,97 @@ final class ResourceDetailModel {
                 isLoading = false
             }
         }
+
+        async let loadedLogs = loadLogs(client, route: route, source: logSource)
+        async let loadedDeployments = loadDeployments(client, route: route)
+        let logResult = await loadedLogs
+        let deploymentResult = await loadedDeployments
+        guard isCurrent(generation: generation, refreshSerial: refreshSerial) else { return }
+
+        var errors: [String] = []
+        switch logResult {
+        case .success(let text):
+            logs = text ?? ""
+        case .failure(let error):
+            errors.append(Self.message(for: error))
+        case nil:
+            break
+        }
+        switch deploymentResult {
+        case .success(let lines):
+            deployments = lines
+        case .failure(let error):
+            errors.append(Self.message(for: error))
+        case nil:
+            break
+        }
+        loadError = errors.first
+    }
+
+    /// `.success(nil)` when there is no log to ask for. `nil` when the request was cancelled.
+    private func loadLogs(_ client: CoolifyClient, route: ResourceRoute, source: LogSource?) async
+        -> Result<String?, any Error>?
+    {
+        guard let source else { return .success(nil) }
         do {
-            switch route {
-            case .application(let uuid):
-                async let logs = client.applicationLogs(uuid, window: .lines(logLineCount), showTimestamps: true)
-                // One page. The history endpoint pages with skip and take and does not filter previews.
-                async let page = client.applicationDeployments(uuid, take: 20)
-                let loadedLogs = try await logs
-                let loadedPage = try await page
-                guard self.isCurrent(generation: generation, refreshSerial: refreshSerial) else { return }
-                self.logs = loadedLogs
-                deployments = loadedPage.deployments.enumerated().map { index, deployment in
-                    DeploymentLine(deployment: deployment, fallbackID: "\(index)")
-                }
-            case .database(let uuid):
-                let loadedLogs = try await client.databaseLogs(uuid, window: .lines(logLineCount), showTimestamps: true)
-                guard self.isCurrent(generation: generation, refreshSerial: refreshSerial) else { return }
-                logs = loadedLogs
-                deployments = []
-            case .service(let uuid):
-                guard let logSource else {
-                    logs = ""
-                    loadError = nil
-                    return
-                }
-                let loadedLogs = try await client.serviceLogs(
-                    uuid,
-                    subServiceName: logSource,
-                    window: .lines(logLineCount),
-                    showTimestamps: true
+            switch (route, source) {
+            case (.application(let uuid), _):
+                return .success(
+                    try await client.applicationLogs(uuid, window: .lines(logLineCount), showTimestamps: true))
+            case (.database(let uuid), _):
+                return .success(try await client.databaseLogs(uuid, window: .lines(logLineCount), showTimestamps: true))
+            case (.service(let uuid), .container(let name)):
+                return .success(
+                    try await client.serviceLogs(
+                        uuid,
+                        subServiceName: name,
+                        window: .lines(logLineCount),
+                        showTimestamps: true
+                    )
                 )
-                guard self.isCurrent(generation: generation, refreshSerial: refreshSerial) else { return }
-                logs = loadedLogs
-                deployments = []
+            case (.service, .resource):
+                return .success(nil)
             }
-            loadError = nil
         } catch is CancellationError {
-            return
+            return nil
         } catch {
-            guard isCurrent(generation: generation, refreshSerial: refreshSerial) else { return }
-            loadError = (error as? CoolifyError)?.message ?? error.localizedDescription
+            return .failure(error)
         }
     }
 
-    /// Points service logs at another container and reloads. Pass `nil` for a stopped one; Coolify refuses those.
-    func setLogSource(_ name: String?) async {
-        guard name != logSource else { return }
-        logSource = name
+    /// `nil` for a database or service, which have no deployments, or when the request was cancelled.
+    private func loadDeployments(_ client: CoolifyClient, route: ResourceRoute) async
+        -> Result<[DeploymentLine], any Error>?
+    {
+        guard case .application(let uuid) = route else { return nil }
+        do {
+            // One page. The history endpoint pages with skip and take and does not filter previews.
+            let page = try await client.applicationDeployments(uuid, take: 20)
+            return .success(
+                page.deployments.enumerated().map { index, deployment in
+                    DeploymentLine(deployment: deployment, fallbackID: "\(index)")
+                }
+            )
+        } catch is CancellationError {
+            return nil
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private static func message(for error: Error) -> String {
+        (error as? CoolifyError)?.message ?? error.localizedDescription
+    }
+
+    /// Points the log at another source and reloads. Pass `nil` for a stopped one.
+    func setLogSource(_ source: LogSource?) async {
+        guard source != logSource else { return }
+        logSource = source
         logs = ""
         await refresh()
     }
 
     private func isCurrent(generation: Int, refreshSerial: Int) -> Bool {
         generation == self.generation && refreshSerial == self.refreshSerial
-    }
-
-    /// Queues a deployment of the open application.
-    func deploy() async {
-        guard let client, case .application(let uuid) = route else { return }
-        let generation = self.generation
-        isDeploying = true
-        defer {
-            if generation == self.generation {
-                isDeploying = false
-            }
-        }
-        do {
-            _ = try await client.deploy(uuid: uuid)
-            guard generation == self.generation else { return }
-            actionError = nil
-            await refresh()
-        } catch is CancellationError {
-            return
-        } catch {
-            guard generation == self.generation else { return }
-            actionError = (error as? CoolifyError)?.message ?? error.localizedDescription
-        }
     }
 }

@@ -9,10 +9,20 @@ struct ResourceSummary: Identifiable, Hashable {
     var subtitle: String?
     var link: URL?
     var containers: [ContainerSummary] = []
+    var place: ResourcePlace?
+    /// An application with a production deployment queued or building, whoever started it.
+    var isDeploying = false
+    /// The deployment to cancel while `isDeploying` is true.
+    var activeDeploymentID: String?
 
     var id: ResourceRoute { route }
     var kind: ResourceKind { route.kind }
     var heat: Heat { Heat(status: status) }
+
+    /// Warming while an action or a deployment runs, so every screen agrees on the flame.
+    func heat(pendingAction: ResourceAction?) -> Heat {
+        pendingAction == nil && !isDeploying ? heat : .warming
+    }
 }
 
 /// One container inside a service.
@@ -29,27 +39,32 @@ struct ContainerSummary: Identifiable, Hashable {
 }
 
 extension ResourceSummary {
-    init(application: Application) {
+    init(application: Application, place: ResourcePlace? = nil, activeDeployment: Deployment? = nil) {
         let link = Self.firstURL(in: application.fqdn)
         self.init(
             route: .application(application.uuid),
             name: application.name.isEmpty ? application.uuid : application.name,
             status: application.status,
             subtitle: link?.host() ?? Self.repositoryName(application.gitRepository),
-            link: link
+            link: link,
+            place: place,
+            isDeploying: activeDeployment != nil,
+            activeDeploymentID: activeDeployment.flatMap { $0.deploymentUUID.isEmpty ? nil : $0.deploymentUUID }
         )
     }
 
-    init(database: Database) {
+    init(database: Database, place: ResourcePlace? = nil) {
         let name = database.name ?? ""
         self.init(
             route: .database(database.uuid),
             name: name.isEmpty ? database.uuid : name,
-            status: database.status
+            status: database.status,
+            subtitle: Self.engineName(database.databaseType),
+            place: place
         )
     }
 
-    init(service: Service) {
+    init(service: Service, place: ResourcePlace? = nil) {
         let containers = (service.applications ?? []).map { container in
             ContainerSummary(
                 id: container.id,
@@ -67,8 +82,26 @@ extension ResourceSummary {
             status: service.status,
             subtitle: count == 1 ? "1 container" : "\(count) containers",
             link: containers.lazy.compactMap(\.link).first,
-            containers: containers
+            containers: containers,
+            place: place
         )
+    }
+
+    /// Turns `standalone-postgresql` into `PostgreSQL`.
+    private static func engineName(_ type: String?) -> String? {
+        guard let type, !type.isEmpty else { return nil }
+        let engine = type.hasPrefix("standalone-") ? String(type.dropFirst("standalone-".count)) : type
+        let names = [
+            "postgresql": "PostgreSQL",
+            "mysql": "MySQL",
+            "mariadb": "MariaDB",
+            "mongodb": "MongoDB",
+            "redis": "Redis",
+            "keydb": "KeyDB",
+            "dragonfly": "Dragonfly",
+            "clickhouse": "ClickHouse",
+        ]
+        return names[engine] ?? engine.capitalized
     }
 
     /// Coolify joins several domains with commas in one `fqdn` string.

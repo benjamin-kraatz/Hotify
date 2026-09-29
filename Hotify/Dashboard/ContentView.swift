@@ -116,6 +116,7 @@ struct ContentView: View {
                 client: client,
                 resource: resource,
                 pendingAction: snapshot.pendingAction(for: route),
+                actionError: snapshot.actionError,
                 onAction: { action in run(action, route) }
             )
             .id(route)

@@ -23,7 +23,9 @@ extension View {
             }
         } message: { summary in
             Text(
-                "Coolify stops its containers. Volumes and data stay in place, and you can start \(summary.name) again."
+                summary.kind == .application
+                    ? "Coolify stops its containers. Volumes and data stay in place. Starting \(summary.name) again runs a new deployment."
+                    : "Coolify stops its containers. Volumes and data stay in place, and you can start \(summary.name) again."
             )
         }
     }
