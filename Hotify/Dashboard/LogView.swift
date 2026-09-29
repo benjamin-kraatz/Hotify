@@ -7,6 +7,7 @@ struct LogView: View {
     var isLoading: Bool
     @Binding var lineCount: Int
     /// Service containers to choose from. Empty for applications and databases, which have one log.
+    var showsLineCount = true
     var sources: [ContainerSummary] = []
     var sourceID: Binding<Int?> = .constant(nil)
     /// Shown in place of the log when there is nothing Coolify will serve, such as a stopped container.
@@ -77,20 +78,22 @@ struct LogView: View {
             .background(.quaternary.opacity(0.6), in: .capsule)
             .animation(.snappy, value: filter.isEmpty)
 
-            Menu {
-                Picker("Lines", selection: $lineCount) {
-                    ForEach(Self.lineCounts, id: \.self) { count in
-                        Text("Last \(count) lines").tag(count)
+            if showsLineCount {
+                Menu {
+                    Picker("Lines", selection: $lineCount) {
+                        ForEach(Self.lineCounts, id: \.self) { count in
+                            Text("Last \(count) lines").tag(count)
+                        }
                     }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label("\(lineCount) lines", systemImage: "text.alignleft")
+                        .monospacedDigit()
                 }
-                .pickerStyle(.inline)
-            } label: {
-                Label("\(lineCount) lines", systemImage: "text.alignleft")
-                    .monospacedDigit()
+                .menuStyle(.button)
+                .fixedSize()
+                .help("How many recent lines to load")
             }
-            .menuStyle(.button)
-            .fixedSize()
-            .help("How many recent lines to load")
 
             Button {
                 copyLogs()
