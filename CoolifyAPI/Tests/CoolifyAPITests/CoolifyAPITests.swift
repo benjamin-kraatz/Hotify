@@ -4,6 +4,133 @@ import XCTest
 @testable import CoolifyAPI
 
 final class CoolifyAPITests: XCTestCase {
+    func testPreviewDeploymentRejectsProductionAndHTTP200Failures() async throws {
+        let client = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/api/v1/deploy")
+            XCTAssertEqual(
+                queryItems(request),
+                [
+                    URLQueryItem(name: "force", value: "0"),
+                    URLQueryItem(name: "uuid", value: "app-1"),
+                    URLQueryItem(name: "pull_request_id", value: "18"),
+                ])
+            XCTAssertNil(bodyText(request))
+            return (
+                200,
+                Data(
+                    #"{"deployments":[{"message":"Pull request 18 not found for this resource.","resource_uuid":"app-1"}]}"#
+                        .utf8), [:]
+            )
+        }
+        for number in [0, -1, 18] {
+            do {
+                _ = try await client.deployPreview(applicationUUID: "app-1", pullRequestID: number)
+                XCTFail("Preview must not deploy production or report an unqueued deployment as success")
+            } catch let error as CoolifyError {
+                XCTAssertTrue(error.message.contains(number == 18 ? "not found" : "positive"))
+            }
+        }
+        do {
+            _ = try await client.deployPreview(applicationUUID: "", pullRequestID: 18)
+            XCTFail("Empty UUID must not reach deploy")
+        } catch {}
+    }
+
+    func testPreviewDeploymentRequiresMatchingResourceAndDeploymentID() async throws {
+        for fixture in [
+            #"{"deployments":[{"resource_uuid":"other","deployment_uuid":"queued"}]}"#,
+            #"{"deployments":[{"resource_uuid":"app","deployment_uuid":""}]}"#,
+            #"{"message":"Skipped","deployments":[]}"#,
+        ] {
+            let client = try makeClient { _ in (200, Data(fixture.utf8), [:]) }
+            do {
+                _ = try await client.deployPreview(applicationUUID: "app", pullRequestID: 42)
+                XCTFail("Unacknowledged preview should fail")
+            } catch {}
+        }
+    }
+
+    func testGitHubRepositoryParsingRejectsUntrustedHostsAndPaths() throws {
+        for value in [
+            "owner/repo", "https://github.com/owner/repo.git", "git@github.com:owner/repo.git",
+            "ssh://git@github.com/owner/repo.git",
+        ] {
+            XCTAssertEqual(try GitHubRepository(value).label, "owner/repo")
+        }
+        for value in [
+            "https://evil.example/owner/repo", "https://github.com.evil.example/owner/repo",
+            "https://github.com/owner/repo?token=x", "../repo", "owner/..", "owner/repo/issues", "owner/%2F",
+            "owner//repo", "http://github.com/owner/repo",
+        ] {
+            XCTAssertThrowsError(try GitHubRepository(value), value)
+        }
+    }
+
+    func testGitHubPRRequestIsSeparateAndPaginated() async throws {
+        MockURLProtocol.responder = { request in
+            XCTAssertEqual(request.url?.host, "api.github.com")
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.path, "/repos/owner/repo/pulls")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer github-only")
+            XCTAssertEqual(
+                queryItems(request),
+                [
+                    URLQueryItem(name: "state", value: "open"),
+                    URLQueryItem(name: "sort", value: "created"),
+                    URLQueryItem(name: "direction", value: "desc"),
+                    URLQueryItem(name: "per_page", value: "50"),
+                    URLQueryItem(name: "page", value: "2"),
+                ])
+            XCTAssertNil(bodyText(request))
+            return (
+                200, Data(#"[{"number":18,"title":"New checkout","draft":true,"head":{"ref":"feat/checkout"}}]"#.utf8),
+                [:]
+            )
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let client = GitHubPullRequestClient(session: URLSession(configuration: configuration))
+        let prs = try await client.pullRequests(
+            repository: GitHubRepository("owner/repo"), token: "github-only", page: 2)
+        XCTAssertEqual(prs.first?.number, 18)
+        XCTAssertEqual(prs.first?.head.ref, "feat/checkout")
+        XCTAssertEqual(prs.first?.draft, true)
+    }
+
+    func testGitHubRedirectPolicyKeepsCredentialsOnTrustedOrigin() {
+        for value in [
+            "https://api.github.com/repositories/42/pulls", "https://api.github.com:443/repos/new/repo/pulls",
+        ] {
+            XCTAssertTrue(GitHubRedirectPolicy.permits(URL(string: value)))
+        }
+        for value in [
+            "http://api.github.com/repos/o/r/pulls", "https://api.github.com:8443/pulls", "https://evil.example/pulls",
+            "https://api.github.com.evil.example/pulls", "https://user@api.github.com/pulls",
+        ] {
+            XCTAssertFalse(GitHubRedirectPolicy.permits(URL(string: value)))
+        }
+        XCTAssertFalse(GitHubRedirectPolicy.permits(nil))
+    }
+
+    func testGitHubPublicRequestAndSanitizedErrors() async throws {
+        MockURLProtocol.responder = { request in
+            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            return (404, Data(#"{"message":"secret response not displayed"}"#.utf8), [:])
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let client = GitHubPullRequestClient(session: URLSession(configuration: configuration))
+        do {
+            _ = try await client.pullRequests(repository: GitHubRepository("owner/repo"))
+            XCTFail("Private repository must require access")
+        } catch let error as CoolifyError {
+            XCTAssertEqual(error.statusCode, 404)
+            XCTAssertTrue(error.message.contains("private repository"))
+            XCTAssertFalse(error.message.contains("secret response"))
+        }
+    }
+
     func testVariableSyncPreservesScopesReferencesAndUnavailableValues() throws {
         let source = try CoolifyJSON.decoder().decode(
             [EnvironmentVariable].self,

@@ -124,6 +124,8 @@ struct ResourceDetail: View {
     @State private var selectedDeployment: DeploymentLine?
     @State private var tab: DetailTab?
     @State private var stopCandidate: ResourceSummary?
+    @State private var showsPreviewDeployment = false
+    @State private var previewGeneration = 0
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var tabs: [DetailTab] {
@@ -192,6 +194,19 @@ struct ResourceDetail: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, loadError == nil && actionError == nil ? 0 : 12)
+
+            if resource.kind == .application {
+                HStack {
+                    Button("Deploy Preview…", systemImage: "arrow.triangle.pull") {
+                        showsPreviewDeployment = true
+                    }
+                    .glassButton()
+                    .disabled(deploymentClient == nil || pendingAction != nil)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 14)
+            }
 
             if tabs.count > 1 {
                 Picker("Show", selection: Binding(get: { currentTab }, set: { tab = $0 })) {
@@ -282,6 +297,31 @@ struct ResourceDetail: View {
             ToolbarItem(placement: .primaryAction) {
                 ResourceGuideButton(kind: resource.kind)
             }
+        }
+        .sheet(isPresented: $showsPreviewDeployment) {
+            if case .application(let uuid) = resource.route {
+                let generation = previewGeneration
+                PreviewDeploymentSheet(
+                    client: deploymentClient, application: uuid, previousPRs: deployments.compactMap(\.pullRequest),
+                    resourceName: resource.name
+                ) {
+                    queued, number in
+                    guard generation == previewGeneration else { return }
+                    tab = .deployments
+                    selectedDeployment = DeploymentLine(
+                        id: queued.deploymentUUID ?? "",
+                        status: "queued",
+                        pullRequest: number,
+                        startedAt: .now
+                    )
+                }
+                .id(uuid)
+            }
+        }
+        .onChange(of: resource.route) { _, _ in
+            previewGeneration += 1
+            showsPreviewDeployment = false
+            selectedDeployment = nil
         }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
