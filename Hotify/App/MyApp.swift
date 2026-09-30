@@ -74,10 +74,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .environment(menuBar)
         }
 
-        MenuBarExtra(
-            "Hotify", systemImage: "flame", isInserted: Binding(get: { menuBar.enabled }, set: { menuBar.enabled = $0 })
-        ) {
+        MenuBarExtra(isInserted: Binding(get: { menuBar.enabled }, set: { menuBar.enabled = $0 })) {
             MenuBarView().environment(menuBar)
+        } label: {
+            MenuBarIcon(model: menuBar)
         }
         .menuBarExtraStyle(.window)
 

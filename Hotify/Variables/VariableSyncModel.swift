@@ -10,8 +10,15 @@ final class VariableSyncModel {
     var reviewing = false
     var busy = false
     var message: String?
+    /// The message reports a write or an action that went through, not a problem.
+    var messageIsGood = false
     var changedDestination: ResourceEndpoint?
     var changedPreview = false
+
+    /// The keys a copy can create or overwrite.
+    var selectable: Set<String> {
+        Set((plan?.changes ?? []).filter { $0.kind == .create || $0.kind == .update }.map(\.key))
+    }
 
     var writes: [VariableSyncChange] {
         guard let plan else { return [] }
@@ -31,6 +38,7 @@ final class VariableSyncModel {
         matchDestination = false
         reviewing = false
         message = nil
+        messageIsGood = false
     }
 
     func compare(
@@ -78,6 +86,7 @@ final class VariableSyncModel {
             let sourceNow = try await sourceClient.environmentVariables(of: source.resource.route.variableOwner).filter
             { $0.isPreview == sourcePreview }
             guard Set(sourceNow) == Set(plan.source) else {
+                messageIsGood = false
                 message = "Source variables changed after comparison. Compare again before applying."
                 return
             }
@@ -87,13 +96,16 @@ final class VariableSyncModel {
                 changedDestination = destination
                 changedPreview = plan.destinationPreview
             }
+            messageIsGood = result.failedKey == nil
             if let failed = result.failedKey {
                 message =
                     "\(result.appliedKeys.count) changes confirmed. The write for \(failed) could not be confirmed; remaining writes were stopped. Compare again to inspect the actual destination before retrying."
             } else {
-                message = "\(result.appliedKeys.count) changes saved to \(destination.label)."
+                let count = result.appliedKeys.count
+                message = "\(count == 1 ? "1 change" : "\(count) changes") saved to \(destination.label)."
             }
         } catch {
+            messageIsGood = false
             message =
                 "The destination could not be verified or changed after comparison. Compare again before applying."
         }
@@ -110,8 +122,12 @@ final class VariableSyncModel {
             case .service(let uuid): _ = try await client.restartService(uuid)
             }
             changedDestination = nil
+            messageIsGood = true
             message =
                 "\(endpoint.resource.kind == .application ? "Redeploy" : "Restart") requested for \(endpoint.label)."
-        } catch { message = "The action could not be confirmed. Check the resource before trying again." }
+        } catch {
+            messageIsGood = false
+            message = "The action could not be confirmed. Check the resource before trying again."
+        }
     }
 }

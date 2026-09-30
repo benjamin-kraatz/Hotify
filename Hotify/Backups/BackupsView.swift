@@ -1,7 +1,7 @@
 import CoolifyAPI
 import SwiftUI
 
-/// Existing backup schedules, execution details, and a manual backup action.
+/// A database's backup configurations with their run history, and a way to run one now.
 struct BackupsView: View {
     var client: CoolifyClient?
     var database: String
@@ -10,54 +10,55 @@ struct BackupsView: View {
     @State private var candidate: DatabaseBackup?
 
     var body: some View {
-        List {
-            if let error = model.error { NoticeBanner(message: error) }
-            if let notice = model.notice { Text(notice).font(.callout) }
-            ForEach(model.backups) { backup in
-                Section {
-                    LabeledContent("Schedule", value: backup.enabled ? (backup.frequency ?? "Unknown") : "Disabled")
-                    if let databases = backup.databasesToBackup, !databases.isEmpty {
-                        LabeledContent("Databases", value: databases)
-                    }
-                    Button("Back up now", systemImage: "externaldrive.badge.plus") { candidate = backup }
-                        .disabled(client == nil || model.isBusy(backup) || backup.id.isEmpty)
-                    ForEach(
-                        backup.executions.sorted {
-                            ($0.createdAtDate ?? .distantPast) > ($1.createdAtDate ?? .distantPast)
-                        }
-                    ) { execution in
-                        BackupExecutionRow(execution: execution)
-                    }
-                    if backup.executions.isEmpty { Text("No executions yet").foregroundStyle(.secondary) }
-                } header: {
-                    Text(backup.databasesToBackup ?? "Database backup")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                if let error = model.error {
+                    NoticeBanner(message: error)
+                }
+                ForEach(model.backups) { backup in
+                    BackupCard(
+                        backup: backup,
+                        fallbackName: resourceName,
+                        pendingSince: model.pendingSince(backup),
+                        isBusy: model.isBusy(backup),
+                        canRun: client != nil && !backup.id.isEmpty,
+                        onRun: { candidate = backup }
+                    )
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .overlay {
             if model.isLoading, !model.hasLoaded {
                 ProgressView()
             } else if model.hasLoaded, model.backups.isEmpty {
                 ContentUnavailableView(
-                    "No backup configurations", systemImage: "externaldrive",
+                    "No backups set up",
+                    systemImage: "externaldrive",
                     description: Text(
-                        "Configure a backup for this database in Coolify first. Some database engines do not support scheduled backups."
-                    ))
+                        "Add a scheduled backup to \(resourceName) in Coolify and its runs show up here. Not every database engine can be backed up."
+                    )
+                )
             }
         }
+        .animation(.snappy, value: model.error)
         .refreshable { if let client { await model.refresh(client: client, database: database) } }
         .task(id: database) { await followHistory() }
         .confirmationDialog(
-            "Back up \(resourceName) now?",
+            "Back up \(candidate?.databaseNames ?? resourceName) now?",
             isPresented: Binding(get: { candidate != nil }, set: { if !$0 { candidate = nil } }),
-            titleVisibility: .visible, presenting: candidate
+            titleVisibility: .visible,
+            presenting: candidate
         ) { backup in
-            Button("Back up now") {
+            Button("Back Up Now") {
                 guard let client else { return }
                 Task { await model.run(backup, client: client, database: database) }
             }
         } message: { _ in
-            Text("Uses the selected backup configuration. Its schedule stays unchanged.")
+            Text("Coolify runs this backup once, with the storage it already uses. Its schedule stays as it is.")
         }
     }
 
@@ -72,4 +73,5 @@ struct BackupsView: View {
 
 #Preview {
     BackupsView(client: nil, database: "preview", resourceName: "Postgres")
+        .frame(width: 560, height: 420)
 }

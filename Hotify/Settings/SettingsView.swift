@@ -3,6 +3,9 @@ import SwiftUI
 /// Hotify's settings. The Settings window on the Mac, and a sheet from the instance list on iPhone and iPad.
 struct SettingsView: View {
     @SwiftUI.Environment(VariableLock.self) private var lock
+    #if os(macOS)
+    @SwiftUI.Environment(MenuBarModel.self) private var menuBar
+    #endif
 
     private var lockMinutes: Int {
         Int(VariableLock.unlockDuration.components.seconds / 60)
@@ -65,6 +68,10 @@ struct SettingsView: View {
         .animation(.snappy, value: lock.isRequired)
         .animation(.snappy, value: lock.unlockedUntil)
         .animation(.snappy, value: lock.failure)
+        #if os(macOS)
+        .animation(.snappy, value: menuBar.enabled)
+        .animation(.snappy, value: menuBar.watched)
+        #endif
         #if os(macOS)
         .frame(width: 500)
         .frame(minHeight: 340, idealHeight: 560)

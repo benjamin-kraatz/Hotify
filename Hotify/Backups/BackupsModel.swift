@@ -6,7 +6,6 @@ import Foundation
 final class BackupsModel {
     var backups: [DatabaseBackup] = []
     var error: String?
-    var notice: String?
     var hasLoaded = false
     var isLoading = false
     var sending: String?
@@ -27,9 +26,16 @@ final class BackupsModel {
         }
     }
 
+    /// When a backup was asked for, until its execution shows up in the history or a minute passes.
+    func pendingSince(_ backup: DatabaseBackup) -> Date? {
+        guard let asked = requested[backup.id], Date.now.timeIntervalSince(asked) < 60 else { return nil }
+        // A few seconds of slack, because the server's clock stamps the execution.
+        let arrived = backup.executions.contains { ($0.createdAtDate ?? .distantPast) >= asked.addingTimeInterval(-5) }
+        return arrived ? nil : asked
+    }
+
     func isBusy(_ backup: DatabaseBackup) -> Bool {
-        sending == backup.id || requested[backup.id].map { Date.now.timeIntervalSince($0) < 60 } == true
-            || backup.executions.contains { ["running", "in_progress", "queued"].contains($0.status) }
+        sending == backup.id || pendingSince(backup) != nil || backup.executions.contains(where: \.isUnderway)
     }
 
     func run(_ backup: DatabaseBackup, client: CoolifyClient, database: String) async {
@@ -39,7 +45,7 @@ final class BackupsModel {
         do {
             _ = try await client.backUpNow(database: database, backup: backup.id)
             requested[backup.id] = .now
-            notice = "Backup requested. Its result will appear in the history when Coolify reports it."
+            error = nil
             await refresh(client: client, database: database)
         } catch {
             // A lost response can follow an accepted write. Do not automatically send it again.

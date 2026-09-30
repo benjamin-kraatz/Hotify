@@ -17,7 +17,6 @@ struct VariableList: View {
     @State private var deleting: VariableLine?
     @State private var copiedAll = 0
     @State private var syncing = false
-    @State private var promptToApply = false
 
     private var shown: [VariableLine] {
         let trimmed = filter.trimmingCharacters(in: .whitespaces)
@@ -72,16 +71,6 @@ struct VariableList: View {
             ) {
                 Task { await model.load() }
             }
-        }
-        .onChange(of: model.changeRevision) { _, _ in if editing == nil { promptToApply = true } }
-        .onChange(of: editing == nil) { _, closed in if closed && model.hasUnappliedChanges { promptToApply = true } }
-        .alert("Apply saved variables?", isPresented: $promptToApply) {
-            if let action = applyAction {
-                Button(action.title) { onAction(action) }.disabled(pendingAction != nil || resource.isDeploying)
-            }
-            Button("Later", role: .cancel) {}
-        } message: {
-            Text(applyMessage)
         }
         .confirmationDialog(
             deleting.map { "Delete \($0.key)?" } ?? "",
@@ -145,13 +134,18 @@ struct VariableList: View {
                 .transition(.opacity)
             }
 
-            Menu {
-                Button("Compare and sync…", systemImage: "arrow.left.arrow.right") {
-                    Task {
-                        guard await unlock() else { return }
-                        syncing = true
-                    }
+            Button {
+                Task {
+                    guard await unlock() else { return }
+                    syncing = true
                 }
+            } label: {
+                Label("Compare and Sync", systemImage: "arrow.left.arrow.right")
+            }
+            .labelStyle(.iconOnly)
+            .help("Compare these variables with another resource and copy the differences")
+
+            Menu {
                 Button("Copy All as .env", systemImage: "doc.on.clipboard") {
                     copyAll()
                 }
@@ -388,84 +382,6 @@ private enum EditorTarget: Identifiable {
         case .new: "new"
         case .existing(let line): line.id
         }
-    }
-}
-
-/// The call to unlock, above a locked list.
-private struct LockCard: View {
-    var method: UnlockMethod
-    var failure: String?
-    var isAuthenticating: Bool
-    var onUnlock: () -> Void
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "lock.fill")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.ember)
-                .frame(width: 40, height: 40)
-                .background(.ember.opacity(0.12), in: .circle)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Values are locked")
-                    .font(.headline)
-                Text(failure ?? "Confirm it’s you to see and change them.")
-                    .font(.callout)
-                    .foregroundStyle(failure == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.glow))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button(action: onUnlock) {
-                Label("Unlock", systemImage: method.systemImage)
-            }
-            .glassButton(prominent: true)
-            .disabled(isAuthenticating || method == .unavailable)
-            .accessibilityLabel("Unlock with \(method.title)")
-            .help("Unlock with \(method.titleWithFallback)")
-        }
-        .padding(14)
-        .background(Color.primary.opacity(0.045), in: .rect(cornerRadius: 14))
-    }
-}
-
-/// Says a change waits for a restart or redeploy, with the button that does it.
-private struct ApplyBar: View {
-    var kind: ResourceKind
-    var message: String
-    var action: ResourceAction?
-    var isBusy: Bool
-    var onApply: (ResourceAction) -> Void
-    var onDismiss: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .foregroundStyle(.ember)
-                .accessibilityHidden(true)
-            Text(message)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if let action {
-                Button(action.title) {
-                    onApply(action)
-                }
-                .glassButton()
-                .disabled(isBusy)
-                .help(action.explanation(for: kind))
-            }
-            Button("Dismiss", systemImage: "xmark") {
-                onDismiss()
-            }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.ember.opacity(0.08), in: .rect(cornerRadius: 12))
     }
 }
 

@@ -36,6 +36,24 @@ final class MenuBarModel {
         restartPolling()
     }
 
+    func state(for resource: WatchedResource) -> MenuBarResourceState {
+        snapshots[resource.id] ?? MenuBarResourceState()
+    }
+
+    /// One heat per watched resource, for the strip and the menu bar icon.
+    var heats: [Heat] {
+        watched.map { state(for: $0).heat }
+    }
+
+    /// The newest successful check across every watched resource.
+    var lastChecked: Date? {
+        watched.compactMap { state(for: $0).updatedAt }.max()
+    }
+
+    func isWatching(_ resource: WatchedResource) -> Bool {
+        watched.contains { $0.id == resource.id }
+    }
+
     func add(_ resource: WatchedResource) {
         guard !watched.contains(where: { $0.id == resource.id }) else { return }
         watched.append(resource)
@@ -128,6 +146,13 @@ struct MenuBarResourceState {
     var message: String?
     var isStale: Bool { message != nil || updatedAt.map { Date.now.timeIntervalSince($0) > 45 } != false }
     var heat: Heat { isStale ? .unknown : (resource?.heat(pendingAction: nil) ?? .unknown) }
+
+    /// What went wrong, else that the status is old, else the status itself.
+    var statusText: String {
+        if let message { return message }
+        guard let resource, !isStale else { return "Waiting for a fresh status" }
+        return StatusLabel.text(for: resource, pendingAction: nil)
+    }
 }
 
 /// A fresh navigation request, including repeat selections of the same resource.

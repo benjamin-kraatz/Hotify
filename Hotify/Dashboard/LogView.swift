@@ -14,16 +14,27 @@ struct LogView: View {
     var pausedMessage: String?
 
     @State private var filter = ""
+    @State private var showsOnlyProblems = false
     @State private var isAtBottom = true
     @State private var position = ScrollPosition(edge: .bottom)
     @State private var copies = 0
 
     private static let lineCounts = [100, 500, 1_000]
 
+    private var problemCount: Int {
+        lines.count(where: \.isAlarming)
+    }
+
+    /// Off again once the problems scroll out of the loaded lines, so the chip never hides with its filter on.
+    private var isOnlyProblems: Bool {
+        showsOnlyProblems && problemCount > 0
+    }
+
     private var shown: [LogLine] {
         let trimmed = filter.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return lines }
-        return lines.filter { $0.text.localizedStandardContains(trimmed) }
+        let candidates = isOnlyProblems ? lines.filter(\.isAlarming) : lines
+        guard !trimmed.isEmpty else { return candidates }
+        return candidates.filter { $0.text.localizedStandardContains(trimmed) }
     }
 
     var body: some View {
@@ -77,6 +88,26 @@ struct LogView: View {
             .padding(.vertical, 7)
             .background(.quaternary.opacity(0.6), in: .capsule)
             .animation(.snappy, value: filter.isEmpty)
+
+            if problemCount > 0 {
+                Button {
+                    showsOnlyProblems.toggle()
+                } label: {
+                    Label("\(problemCount)", systemImage: "exclamationmark.triangle.fill")
+                        .labelStyle(.titleAndIcon)
+                        .monospacedDigit()
+                        .foregroundStyle(.glow)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(.glow.opacity(isOnlyProblems ? 0.2 : 0), in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .help(isOnlyProblems ? "Show every line" : "Show only lines that mention an error or a warning")
+                .accessibilityLabel("Only problems")
+                .accessibilityValue(problemCount == 1 ? "1 line" : "\(problemCount) lines")
+                .accessibilityAddTraits(isOnlyProblems ? .isSelected : [])
+                .transition(.opacity)
+            }
 
             if showsLineCount {
                 Menu {
@@ -164,6 +195,7 @@ struct LogView: View {
                 ContentUnavailableView.search(text: filter)
             }
         }
+        .animation(.snappy, value: isOnlyProblems)
         .overlay(alignment: .bottom) {
             if !isAtBottom, !shown.isEmpty {
                 Button {
