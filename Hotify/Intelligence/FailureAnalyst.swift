@@ -14,6 +14,10 @@ final class FailureAnalyst {
         case failed(String)
     }
 
+    /// The most snapshots the card waits through before it updates. It updates sooner when a sentence ends,
+    /// so this only paces a long sentence. One shows every snapshot as it arrives.
+    static let snapshotsPerUpdate = 20
+
     private(set) var phase = Phase.idle
     private var task: Task<Void, Never>?
 
@@ -70,12 +74,19 @@ final class FailureAnalyst {
             options: GenerationOptions(samplingMode: .greedy)
         )
         var insight = FailureInsight()
+        var shown = FailureInsight()
+        var held = 0
         for try await snapshot in stream {
             try Task.checkCancellation()
             insight = FailureInsight(draft: snapshot.content, digest: digest)
-            if !insight.isEmpty {
-                show(.writing(insight))
+            held += 1
+            // The model sends a snapshot every word or so. The card takes them a sentence at a time.
+            guard !insight.isEmpty, held >= Self.snapshotsPerUpdate || insight.isWorthShowing(after: shown) else {
+                continue
             }
+            show(.writing(insight.withoutUnfinishedStep))
+            shown = insight
+            held = 0
         }
         try Task.checkCancellation()
         show(insight.isEmpty ? .failed("Apple Intelligence found nothing to say about this output.") : .done(insight))
@@ -147,6 +158,23 @@ nonisolated struct FailureDraft {
 }
 
 extension FailureInsight {
+    /// Without the last step while the model is still in the middle of it, so no step shows half written.
+    fileprivate var withoutUnfinishedStep: FailureInsight {
+        guard let last = steps.last?.last, !".!?".contains(last) else { return self }
+        var settled = self
+        settled.steps.removeLast()
+        return settled
+    }
+
+    /// A sentence ended, or a quoted line or a step joined since `shown`.
+    fileprivate func isWorthShowing(after shown: FailureInsight) -> Bool {
+        if evidence.count != shown.evidence.count || steps.count != shown.steps.count { return true }
+        // The headline is done once the explanation begins.
+        if explanation.isEmpty != shown.explanation.isEmpty { return true }
+        guard self != shown, let last = (steps.last ?? explanation).last else { return false }
+        return ".!?".contains(last)
+    }
+
     @available(iOS 26, *)
     fileprivate init(draft: FailureDraft.PartiallyGenerated, digest: FailureDigest) {
         headline = draft.headline ?? ""
