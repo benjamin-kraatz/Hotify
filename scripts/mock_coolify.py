@@ -8,6 +8,54 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 
+# A Next.js build that fails on a type error, in the shape Coolify reports it.
+FAILED_BUILD = [
+    "Starting deployment of benn/storefront:main to localhost.",
+    "Preparing container with helper image: ghcr.io/coollabsio/coolify-helper:1.0.12",
+    "Importing benn/storefront:main (commit sha 77aa01e) to /artifacts/kc8s4w0.",
+    "Cloning into '/artifacts/kc8s4w0'...",
+    "Generating nixpacks configuration with: nixpacks plan -f json /artifacts/kc8s4w0",
+    "Found application type: node.",
+    "Building docker image started.",
+    "#5 [stage-0  1/10] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067",
+    "#5 DONE 0.0s",
+    "#8 [stage-0  4/10] RUN nix-env -if .nixpacks/nixpkgs-ffeebf0.nix && nix-collect-garbage -d",
+    "#8 CACHED",
+    "#10 [stage-0  6/10] RUN npm ci",
+    "#10 4.812 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory.",
+    "#10 5.120 npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported",
+    "#10 11.42 added 412 packages, and audited 413 packages in 11s",
+    "#10 DONE 12.1s",
+    "#11 [stage-0  7/10] COPY . /app/.",
+    "#11 DONE 0.4s",
+    "#12 [stage-0  8/10] RUN npm run build",
+    "#12 0.412 > storefront@2.4.0 build",
+    "#12 0.412 > next build",
+    "#12 1.902    ▲ Next.js 15.3.1",
+    "#12 1.934    Creating an optimized production build ...",
+    "#12 19.33  ✓ Compiled successfully in 17.0s",
+    "#12 19.34    Linting and checking validity of types ...",
+    "#12 27.81 Failed to compile.",
+    "#12 27.81 ./src/app/checkout/page.tsx:42:27",
+    "#12 27.81 Type error: Property 'currency' does not exist on type 'Cart'.",
+    "#12 27.81   40 |   const cart = await getCart();",
+    "#12 27.81   41 |   return (",
+    "#12 27.81 > 42 |     <Total amount={cart.total} currency={cart.currency} />",
+    "#12 27.81      |                           ^",
+    "#12 27.85 Next.js build worker exited with code: 1 and signal: null",
+    "#12 ERROR: process \"/bin/bash -ol pipefail -c npm run build\" did not complete successfully: exit code: 1",
+    "------",
+    " > [stage-0  8/10] RUN npm run build:",
+    "27.81 Type error: Property 'currency' does not exist on type 'Cart'.",
+    "------",
+    "Dockerfile:24",
+    "ERROR: failed to solve: process \"/bin/bash -ol pipefail -c npm run build\" did not complete successfully: exit code: 1",
+    "Deployment failed. Removing the new version of your application.",
+    "Oops something is not okay, are you okay? 😢",
+]
+FINISHED_BUILD = ["Starting deployment of benn/storefront:main to localhost.", "Building docker image completed.", "New container started."]
+
+
 def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
@@ -71,8 +119,10 @@ class Handler(BaseHTTPRequestHandler):
             skip = int(query.get("skip", [0])[0])
             return self.respond({"count": 25, "deployments": [self.deployment(i) for i in range(skip, min(skip + take, 25))]})
         if path.startswith("/deployments/build-"):
-            result = self.deployment(int(path.rsplit("-", 1)[1]))
-            result["logs"] = json.dumps([{"timestamp": "2026-09-29T12:00:00Z", "output": "Installing dependencies"}, {"timestamp": "2026-09-29T12:00:10Z", "output": "ERROR: fixture build failed"}])
+            index = int(path.rsplit("-", 1)[1])
+            result = self.deployment(index)
+            output = FAILED_BUILD if index == 0 else FINISHED_BUILD
+            result["logs"] = json.dumps([{"timestamp": "2026-09-29T12:00:00Z", "output": line} for line in output])
             return self.respond(result)
         if path.endswith("/envs"):
             return self.respond(copy.deepcopy(self.server.variables))

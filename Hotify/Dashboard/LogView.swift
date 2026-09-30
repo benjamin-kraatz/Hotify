@@ -12,12 +12,15 @@ struct LogView: View {
     var sourceID: Binding<Int?> = .constant(nil)
     /// Shown in place of the log when there is nothing Coolify will serve, such as a stopped container.
     var pausedMessage: String?
+    /// A line to scroll to and light up, such as one an explanation cites.
+    var spotlight: LogSpotlight?
 
     @State private var filter = ""
     @State private var showsOnlyProblems = false
     @State private var isAtBottom = true
     @State private var position = ScrollPosition(edge: .bottom)
     @State private var copies = 0
+    @State private var litLine: Int?
 
     private static let lineCounts = [100, 500, 1_000]
 
@@ -146,22 +149,49 @@ struct LogView: View {
     }
 
     private var logWell: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 3) {
-                ForEach(shown) { line in
-                    LogLineRow(line: line)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 3) {
+                    ForEach(shown) { line in
+                        LogLineRow(line: line, isLit: line.id == litLine)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+            }
+            .task(id: spotlight) {
+                guard let spotlight else { return }
+                // A filter may hide the line, so both come off before the scroll.
+                filter = ""
+                showsOnlyProblems = false
+                await Task.yield()
+                withAnimation(.smooth) {
+                    proxy.scrollTo(spotlight.line, anchor: .center)
+                    litLine = spotlight.line
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                guard !Task.isCancelled else { return }
+                withAnimation(.smooth) {
+                    litLine = nil
                 }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .textSelection(.enabled)
         }
         .scrollPosition($position)
         .defaultScrollAnchor(.bottom)
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 32
-        } action: { _, atBottom in
-            isAtBottom = atBottom
+        .onScrollGeometryChange(for: LogViewport.self) { geometry in
+            LogViewport(
+                isAtBottom: geometry.contentOffset.y + geometry.containerSize.height
+                    >= geometry.contentSize.height - 32,
+                height: geometry.containerSize.height
+            )
+        } action: { old, new in
+            // A panel growing above the log squeezes it. The newest lines stay in view when they were before.
+            if old.height != new.height, isAtBottom {
+                position.scrollTo(edge: .bottom)
+            } else {
+                isAtBottom = new.isAtBottom
+            }
         }
         .onChange(of: lines) { _, _ in
             guard isAtBottom else { return }
@@ -169,6 +199,8 @@ struct LogView: View {
                 position.scrollTo(edge: .bottom)
             }
         }
+        // Room for a few lines, however much a panel above the log asks for.
+        .frame(minHeight: 110)
         .background(Color.primary.opacity(0.045), in: .rect(cornerRadius: 14))
         .overlay {
             if let pausedMessage {
@@ -224,9 +256,22 @@ struct LogView: View {
     }
 }
 
+/// Where the log is scrolled to, and how much room it has.
+private struct LogViewport: Equatable {
+    var isAtBottom: Bool
+    var height: CGFloat
+}
+
+/// A request to show one log line. A new `id` repeats the request for a line already shown.
+struct LogSpotlight: Hashable {
+    var line: Int
+    var id = UUID()
+}
+
 /// One log line: a dim timestamp, then the message. Lines that mention errors or warnings glow amber.
 private struct LogLineRow: View {
     var line: LogLine
+    var isLit = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -240,6 +285,13 @@ private struct LogLineRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.system(.caption, design: .monospaced))
+        .background {
+            // Drawn past the row's edges, so lighting a line does not shift its text.
+            RoundedRectangle(cornerRadius: 5)
+                .fill(.glow.opacity(isLit ? 0.2 : 0))
+                .padding(.horizontal, -6)
+                .padding(.vertical, -1)
+        }
     }
 }
 

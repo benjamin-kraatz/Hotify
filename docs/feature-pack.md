@@ -9,6 +9,7 @@ Each feature PR targets the integration branch. No marketing-version change is i
 - Database backups: history, failure details, and back up now. No schedule editing or restore.
 - Variable comparison and sync: manual source-to-destination operations across instances, selected or all variables, explicit review, optional destination matching with reviewed deletions. Prompt for redeploy or restart after writes, including ordinary edits. Never automatically sync or redeploy.
 - Mac menu bar: opt-in monitoring with selected resources, status, deployment progress, and navigation to resources. Keep running after the last window closes when enabled.
+- Failure explanation: on a failed deployment, a button asks the on-device Apple Intelligence model what went wrong and shows the cause, the log lines behind it, and what to try. On-device model only. The button is hidden on iOS 18, on unsupported devices, and while Apple Intelligence is off or its model still downloads.
 
 ## Delivery and verification
 
@@ -22,6 +23,7 @@ Use mock HTTP fixtures for decoding, write request shapes, two-instance sync, an
 - [x] Database backups
 - [x] Variable comparison and sync
 - [x] Mac menu bar implementation
+- [x] Failure explanation
 - [ ] Combined native acceptance
 
 ## Native fixture workflow

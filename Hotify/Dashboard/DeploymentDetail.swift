@@ -9,6 +9,8 @@ struct DeploymentDetail: View {
     @State private var deployment: Deployment?
     @State private var error: String?
     @State private var isLoading = false
+    @State private var analyst = FailureAnalyst()
+    @State private var spotlight: LogSpotlight?
 
     private var line: DeploymentLine {
         guard let deployment, let client else { return initial }
@@ -21,6 +23,11 @@ struct DeploymentDetail: View {
         return full.flatMap { $0.isEmpty ? nil : $0 } ?? line.message
     }
 
+    /// A failed build with output to read, on a device whose Apple Intelligence model is ready.
+    private var canExplain: Bool {
+        line.status == "failed" && deployment?.logs?.isEmpty == false && FailureAnalyst.isReady
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 12) {
@@ -29,8 +36,18 @@ struct DeploymentDetail: View {
                 if let error {
                     NoticeBanner(message: error)
                 }
+                if canExplain {
+                    FailureExplainer(analyst: analyst) {
+                        analyst.explain(LogLine.parse(deployment?.logs ?? ""))
+                    } onShowLine: { line in
+                        spotlight = LogSpotlight(line: line.id)
+                    }
+                    .transition(.opacity)
+                }
             }
             .padding(.horizontal, 20)
+            // The head takes what it needs first. The log gets the rest.
+            .layoutPriority(1)
 
             if deployment != nil, deployment?.logs == nil {
                 ContentUnavailableView(
@@ -50,13 +67,16 @@ struct DeploymentDetail: View {
                     rawLogs: deployment?.logs ?? "",
                     isLoading: isLoading,
                     lineCount: .constant(100),
-                    showsLineCount: false
+                    showsLineCount: false,
+                    spotlight: spotlight
                 )
             }
         }
         .animation(.snappy, value: line)
         .animation(.snappy, value: error)
+        .animation(.snappy, value: canExplain)
         .task(id: initial.id) { await followDeployment() }
+        .onDisappear { analyst.reset() }
     }
 
     private var navigation: some View {
@@ -81,6 +101,8 @@ struct DeploymentDetail: View {
     private func followDeployment() async {
         guard let client else { return }
         deployment = nil
+        analyst.reset()
+        spotlight = nil
         while !Task.isCancelled {
             isLoading = deployment == nil
             do {
