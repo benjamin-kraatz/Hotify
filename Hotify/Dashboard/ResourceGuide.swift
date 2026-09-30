@@ -58,6 +58,30 @@ struct ResourceGuide: View {
                     }
                 }
 
+                if kind == .database {
+                    section("Backups") {
+                        GuideRow(
+                            title: "Backed up",
+                            detail: "The run wrote its file. Open it for the file name and size."
+                        ) {
+                            FlameGlyph(heat: .lit, height: 26)
+                        }
+                        GuideRow(
+                            title: "Failed",
+                            detail: "Coolify could not finish the run. Open it to read why."
+                        ) {
+                            FlameGlyph(heat: .troubled, height: 26)
+                        }
+                        GuideRow(
+                            title: "Back Up Now",
+                            detail:
+                                "Runs a backup once, with the storage it already uses. Its schedule stays as it is, and Hotify asks before it does this."
+                        ) {
+                            variableIcon("externaldrive.badge.plus")
+                        }
+                    }
+                }
+
                 section("Variables") {
                     GuideRow(
                         title: "Locked",
@@ -72,6 +96,13 @@ struct ResourceGuide: View {
                             "Coolify never sends back a value saved as hidden, and a token without read:sensitive gets no values. You can still replace them."
                     ) {
                         variableIcon("eye.slash")
+                    }
+                    GuideRow(
+                        title: "Compare and sync",
+                        detail:
+                            "Copies variables to another resource, on this instance or another. Nothing is written until you review the list and apply it."
+                    ) {
+                        variableIcon("arrow.left.arrow.right")
                     }
                     GuideRow(
                         title: "Applying a change",

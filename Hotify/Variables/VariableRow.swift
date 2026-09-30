@@ -18,7 +18,7 @@ struct VariableRow: View {
                         .truncationMode(.middle)
                         .layoutPriority(1)
                     ForEach(line.tags, id: \.self) { tag in
-                        VariableTag(text: tag)
+                        Tag(text: tag)
                     }
                 }
                 valueText
@@ -90,21 +90,6 @@ struct VariableRow: View {
             }
         }
         .font(.callout.monospaced())
-    }
-}
-
-/// A small capsule for facts like `Literal`.
-struct VariableTag: View {
-    var text: String
-
-    var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(.quaternary.opacity(0.7), in: .capsule)
-            .fixedSize()
     }
 }
 

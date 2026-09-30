@@ -4,6 +4,9 @@ import SwiftUI
 struct DeploymentTimeline: View {
     var deployments: [DeploymentLine]
     var isLoading: Bool
+    var onSelect: (DeploymentLine) -> Void = { _ in }
+    var canLoadMore = false
+    var onLoadMore: () -> Void = {}
 
     private var production: [DeploymentLine] { deployments.filter { !$0.isPreview } }
     private var previews: [DeploymentLine] { deployments.filter(\.isPreview) }
@@ -16,6 +19,13 @@ struct DeploymentTimeline: View {
                 }
                 if !previews.isEmpty {
                     run("Previews", previews)
+                }
+                if canLoadMore {
+                    Button("Show Older Deployments", systemImage: "clock.arrow.circlepath", action: onLoadMore)
+                        .glassButton()
+                        .disabled(isLoading)
+                        // Lines up with the rows' text, past the timeline's flames.
+                        .padding(.leading, 32)
                 }
             }
             .padding(.horizontal, 24)
@@ -48,24 +58,29 @@ struct DeploymentTimeline: View {
             }
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                    DeploymentRow(line: row, isLast: index == rows.count - 1)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                    DeploymentRow(line: row, isLast: index == rows.count - 1) {
+                        onSelect(row)
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
         }
     }
 }
 
-/// One deployment: its flame on the timeline, what shipped, when, and how long it took.
+/// One deployment: its flame on the timeline, what shipped, when, and how long it took. Opens its build output.
 private struct DeploymentRow: View {
     var line: DeploymentLine
     var isLast: Bool
+    var onOpen: () -> Void
+
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: 4) {
             VStack(spacing: 6) {
                 FlameGlyph(heat: line.heat, height: 18)
-                    .padding(.top, 1)
+                    .padding(.top, 9)
                 if !isLast {
                     Capsule()
                         .fill(.quaternary)
@@ -93,6 +108,10 @@ private struct DeploymentRow: View {
                             .foregroundStyle(.secondary)
                             .help(startedAt.formatted(date: .abbreviated, time: .standard))
                     }
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
 
                 if let message = line.message {
@@ -106,7 +125,6 @@ private struct DeploymentRow: View {
                         if let commit = line.commit {
                             Text(commit)
                                 .font(.caption.monospaced())
-                                .textSelection(.enabled)
                         }
                         if let duration = line.duration {
                             Label(
@@ -126,23 +144,20 @@ private struct DeploymentRow: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            .padding(.bottom, isLast ? 0 : 20)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Color.primary.opacity(isHovered ? 0.045 : 0), in: .rect(cornerRadius: 10))
+            .padding(.bottom, isLast ? 0 : 6)
         }
+        .contentShape(.rect)
+        // A tap rather than a button, so the link inside the row still opens.
+        .onTapGesture(perform: onOpen)
+        .onHover { isHovered = $0 }
+        .animation(.snappy(duration: 0.15), value: isHovered)
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// A small capsule for facts like a pull request number.
-private struct Tag: View {
-    var text: String
-
-    var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(.quaternary.opacity(0.7), in: .capsule)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Shows the build output")
+        .accessibilityAction(.default, onOpen)
     }
 }
 

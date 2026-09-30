@@ -13,6 +13,7 @@ final class VariablesModel {
     var hasLoaded = false
     /// Set after a change until the resource restarts or redeploys. Coolify hands variables to containers as they start.
     var hasUnappliedChanges = false
+    var lastChangeWasPreview = false
 
     /// Which resource this model reads. The list reloads when it changes.
     private(set) var owner: EnvironmentVariableOwner?
@@ -70,6 +71,7 @@ final class VariablesModel {
         }
         writeError = nil
         hasUnappliedChanges = true
+        lastChangeWasPreview = draft.isPreview == true
         await load()
     }
 
@@ -80,6 +82,7 @@ final class VariablesModel {
             variables.removeAll { $0.id == line.id }
             writeError = nil
             hasUnappliedChanges = true
+            lastChangeWasPreview = line.isPreview
         } catch {
             writeError = Self.message(for: error)
         }

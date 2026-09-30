@@ -66,6 +66,12 @@ struct ResourceDetailScreen: View {
             loadError: model.loadError,
             actionError: actionError,
             isLoading: model.isLoading,
+            deploymentClient: client,
+            canLoadMoreDeployments: model.canLoadMoreDeployments,
+            onLoadMoreDeployments: {
+                model.deploymentLimit += 20
+                Task { await model.refresh() }
+            },
             onAction: onAction
         )
         .task(id: resource.route) {
@@ -106,16 +112,25 @@ struct ResourceDetail: View {
     var loadError: String?
     var actionError: String?
     var isLoading: Bool
+    var deploymentClient: CoolifyClient?
+    var canLoadMoreDeployments = false
+    var onLoadMoreDeployments: () -> Void = {}
     var onAction: (ResourceAction) -> Void
 
+    #if os(macOS)
+    /// Missing in previews, which leaves the menu bar button out.
+    @SwiftUI.Environment(MenuBarModel.self) private var menuBar: MenuBarModel?
+    #endif
+    @State private var selectedDeployment: DeploymentLine?
     @State private var tab: DetailTab?
     @State private var stopCandidate: ResourceSummary?
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var tabs: [DetailTab] {
         switch resource.kind {
         case .application: [.logs, .deployments, .variables]
         case .service: [.logs, .containers, .variables]
-        case .database: [.logs, .variables]
+        case .database: [.logs, .backups, .variables]
         }
     }
 
@@ -193,7 +208,29 @@ struct ResourceDetail: View {
             Group {
                 switch currentTab {
                 case .deployments:
-                    DeploymentTimeline(deployments: deployments, isLoading: isLoading)
+                    // Its own container, so the slide only runs between the timeline and a deployment.
+                    // Switching tabs inserts the container, which fades like every other tab.
+                    ZStack {
+                        if let selectedDeployment {
+                            DeploymentDetail(client: deploymentClient, initial: selectedDeployment) {
+                                self.selectedDeployment = nil
+                            }
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                        } else {
+                            DeploymentTimeline(
+                                deployments: deployments,
+                                isLoading: isLoading,
+                                onSelect: { selectedDeployment = $0 },
+                                canLoadMore: canLoadMoreDeployments,
+                                onLoadMore: onLoadMoreDeployments
+                            )
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                        }
+                    }
+                case .backups:
+                    if case .database(let uuid) = resource.route {
+                        BackupsView(client: deploymentClient, database: uuid, resourceName: resource.name)
+                    }
                 case .containers:
                     ContainerList(containers: resource.containers)
                 case .variables:
@@ -219,6 +256,7 @@ struct ResourceDetail: View {
             .transition(.opacity)
         }
         .animation(.snappy, value: currentTab)
+        .animation(reduceMotion ? nil : .snappy, value: selectedDeployment)
         .animation(.snappy, value: loadError)
         .animation(.snappy, value: actionError)
         // A restart or deploy started anywhere puts saved variable changes to use.
@@ -234,6 +272,13 @@ struct ResourceDetail: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            #if os(macOS)
+            if let menuBar, menuBar.enabled {
+                ToolbarItem(placement: .primaryAction) {
+                    MenuBarWatchButton(model: menuBar, resource: resource)
+                }
+            }
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 ResourceGuideButton(kind: resource.kind)
             }
@@ -246,6 +291,7 @@ struct ResourceDetail: View {
 
 /// The views under the detail header.
 enum DetailTab: Identifiable, Hashable {
+    case backups
     case deployments
     case containers
     case logs
@@ -255,6 +301,7 @@ enum DetailTab: Identifiable, Hashable {
 
     var title: String {
         switch self {
+        case .backups: "Backups"
         case .deployments: "Deployments"
         case .containers: "Containers"
         case .logs: "Logs"

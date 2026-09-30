@@ -3,6 +3,7 @@ import SwiftUI
 
 /// The window: instances, then the selected instance's resources, then the open resource.
 struct ContentView: View {
+    @SwiftUI.Environment(MenuBarModel.self) private var menuBar
     @SwiftUI.Environment(InstanceStore.self) private var store
     @SwiftUI.Environment(\.scenePhase) private var scenePhase
     @State private var boundToken: String?
@@ -33,10 +34,13 @@ struct ContentView: View {
         .onAppear {
             store.seedFromEnvironment()
             rebind()
+            followMenuBarSelection()
         }
+        .onChange(of: menuBar.navigation) { _, _ in followMenuBarSelection() }
         .onChange(of: store.selectedID) { _, _ in
             selectedResource = nil
             rebind()
+            if menuBar.navigation?.instanceID == store.selectedID { selectedResource = menuBar.navigation?.route }
         }
         .onChange(of: store.selected?.baseURL) { _, _ in
             resetConnection()
@@ -138,7 +142,7 @@ struct ContentView: View {
                 actionError: snapshot.actionError,
                 onAction: { action in run(action, route) }
             )
-            .id(route)
+            .id(DetailIdentity(instanceID: store.selectedID, route: route))
         } else {
             ContentUnavailableView {
                 Label {
@@ -175,10 +179,19 @@ struct ContentView: View {
         Task { await dashboard.perform(action, route: route) }
     }
 
+    private func followMenuBarSelection() {
+        guard let request = menuBar.navigation, store.instances.contains(where: { $0.id == request.instanceID }) else {
+            return
+        }
+        store.selectedID = request.instanceID
+        selectedResource = request.route
+    }
+
     private func resetConnection() {
         selectedResource = nil
         if let id = store.selectedID { dashboards.removeValue(forKey: id) }
         rebind()
+        if menuBar.navigation?.instanceID == store.selectedID { selectedResource = menuBar.navigation?.route }
     }
 
     private func rebind() {
@@ -202,7 +215,7 @@ struct ContentView: View {
         }
         // Read the Keychain once per switch rather than on every render.
         boundToken = TokenStore.load(for: selected.id)
-        client = boundToken.flatMap { try? selected.client(token: $0) }
+        client = store.client(for: selected)
         boundID = selected.id
         dashboard.bind(client)
     }
@@ -211,5 +224,12 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(InstanceStore(instances: []))
+        .environment(MenuBarModel(preview: true))
         .environment(VariableLock(isRequired: true))
+}
+
+/// Keeps detail tasks isolated even when two instances contain the same resource UUID.
+private struct DetailIdentity: Hashable {
+    var instanceID: UUID?
+    var route: ResourceRoute
 }

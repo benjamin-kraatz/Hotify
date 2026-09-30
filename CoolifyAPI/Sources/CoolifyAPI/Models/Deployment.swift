@@ -2,6 +2,7 @@ import Foundation
 
 /// One deployment record. `pull_request_id` of `0` is a normal deploy; any greater value is a preview.
 public struct Deployment: Decodable, Sendable, Identifiable, Hashable {
+    public var logs: String?
     public var deploymentUUID: String
     public var applicationID: Int?
     public var pullRequestID: Int
@@ -28,6 +29,7 @@ public struct Deployment: Decodable, Sendable, Identifiable, Hashable {
         case applicationID = "applicationId"
         case pullRequestID = "pullRequestId"
         case status
+        case logs
         case applicationName
         case restartOnly
         case commit
@@ -45,6 +47,7 @@ public struct Deployment: Decodable, Sendable, Identifiable, Hashable {
         applicationID = container.flexInt(.applicationID)
         // Coolify has sent this as both an int and a numeric string.
         pullRequestID = container.flexInt(.pullRequestID) ?? 0
+        logs = try container.decodeIfPresent(DeploymentOutput.self, forKey: .logs)?.text
         status = container.flexString(.status)
         applicationName = container.flexString(.applicationName)
         restartOnly = container.flexBool(.restartOnly)

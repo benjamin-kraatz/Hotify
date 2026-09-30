@@ -4,6 +4,160 @@ import XCTest
 @testable import CoolifyAPI
 
 final class CoolifyAPITests: XCTestCase {
+    func testVariableSyncPreservesScopesReferencesAndUnavailableValues() throws {
+        let source = try CoolifyJSON.decoder().decode(
+            [EnvironmentVariable].self,
+            from: Data(
+                #"[{"uuid":"1","key":"URL","value":"{{team.URL}}","is_preview":1,"is_runtime":0,"is_buildtime":1},{"uuid":"2","key":"HIDDEN","is_preview":1},{"uuid":"3","key":"PRODUCTION","value":"untouched"}]"#
+                    .utf8))
+        let destination = try CoolifyJSON.decoder().decode(
+            [EnvironmentVariable].self,
+            from: Data(
+                #"[{"uuid":"4","key":"EXTRA","value":"keep"},{"uuid":"5","key":"PREVIEW","value":"keep","is_preview":1}]"#
+                    .utf8))
+        let plan = try VariableSyncPlan(
+            source: source, destination: destination, sourcePreview: true, destinationPreview: false,
+            destinationIsApplication: true)
+        XCTAssertEqual(plan.changes.map(\.key), ["EXTRA", "HIDDEN", "URL"])
+        XCTAssertEqual(plan.changes[0].kind, .destinationOnly)
+        XCTAssertEqual(plan.changes[1].kind, .unavailable)
+        XCTAssertNil(plan.changes[1].draft)
+        XCTAssertEqual(plan.changes[2].draft?.value, "{{team.URL}}")
+        XCTAssertEqual(plan.changes[2].draft?.isPreview, false)
+        XCTAssertEqual(plan.changes[2].draft?.isRuntime, false)
+        let database = try VariableSyncPlan(
+            source: source, destination: [], sourcePreview: true, destinationPreview: false,
+            destinationIsApplication: false)
+        XCTAssertNil(database.changes.last?.draft?.isPreview)
+        XCTAssertNil(database.changes.last?.draft?.isRuntime)
+        XCTAssertThrowsError(
+            try VariableSyncPlan(
+                source: source + source, destination: [], sourcePreview: true, destinationPreview: false,
+                destinationIsApplication: true))
+    }
+
+    func testVariableSyncAcrossTwoHostsSendsReviewedWritesOnly() async throws {
+        let sourceJSON =
+            #"[{"uuid":"a","key":"CREATE","value":"new","is_runtime":0,"is_buildtime":1},{"uuid":"b","key":"UPDATE","value":"changed"}]"#
+        let destinationJSON =
+            #"[{"uuid":"c","key":"UPDATE","value":"old"},{"uuid":"delete-id","key":"EXTRA","value":"old"}]"#
+        let responder: @Sendable (URLRequest) throws -> (Int, Data, [String: String]) = { request in
+            if request.httpMethod == "GET" {
+                return (200, Data((request.url?.host == "source.example" ? sourceJSON : destinationJSON).utf8), [:])
+            }
+            XCTAssertEqual(request.url?.host, "destination.example")
+            XCTAssertTrue(queryItems(request).isEmpty)
+            if request.httpMethod == "DELETE" {
+                XCTAssertEqual(request.url?.path, "/api/v1/applications/destination/envs/delete-id")
+                return (200, Data(#"{"message":"deleted"}"#.utf8), [:])
+            }
+            XCTAssertEqual(request.url?.path, "/api/v1/applications/destination/envs")
+            let body = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: Data((bodyText(request) ?? "").utf8)) as? [String: Any])
+            if request.httpMethod == "POST" {
+                XCTAssertEqual(body["key"] as? String, "CREATE")
+                XCTAssertEqual(body["is_runtime"] as? Bool, false)
+                XCTAssertEqual(body["is_buildtime"] as? Bool, true)
+            } else {
+                XCTAssertEqual(request.httpMethod, "PATCH")
+                XCTAssertEqual(body["key"] as? String, "UPDATE")
+                XCTAssertEqual(body["value"] as? String, "changed")
+            }
+            XCTAssertEqual(body["is_preview"] as? Bool, false)
+            XCTAssertEqual(body["is_literal"] as? Bool, false)
+            XCTAssertEqual(body["is_multiline"] as? Bool, false)
+            XCTAssertEqual(body["is_shown_once"] as? Bool, false)
+            return (201, Data(#"{"uuid":"saved"}"#.utf8), [:])
+        }
+        let sourceClient = try makeClient(instanceURL: "http://source.example", responder: responder)
+        let destinationClient = try makeClient(instanceURL: "http://destination.example", responder: responder)
+        let source = try await sourceClient.environmentVariables(of: .application("source"))
+        let destination = try await destinationClient.environmentVariables(of: .application("destination"))
+        let plan = try VariableSyncPlan(
+            source: source, destination: destination, sourcePreview: false, destinationPreview: false,
+            destinationIsApplication: true)
+        let result = try await destinationClient.applyVariableSync(
+            plan.changes, plan: plan, to: .application("destination"))
+        XCTAssertEqual(result.appliedKeys, ["CREATE", "UPDATE", "EXTRA"])
+        XCTAssertNil(result.failedKey)
+    }
+
+    func testVariableSyncStopsAfterPartialFailureAndRejectsStaleComparison() async throws {
+        let source = try CoolifyJSON.decoder().decode(
+            [EnvironmentVariable].self,
+            from: Data(
+                #"[{"uuid":"1","key":"A","value":"a"},{"uuid":"2","key":"B","value":"b"},{"uuid":"3","key":"C","value":"c"}]"#
+                    .utf8))
+        let plan = try VariableSyncPlan(
+            source: source, destination: [], sourcePreview: false, destinationPreview: false,
+            destinationIsApplication: false)
+        let client = try makeClient { request in
+            if request.httpMethod == "GET" { return (200, Data("[]".utf8), [:]) }
+            let body = bodyText(request) ?? ""
+            XCTAssertFalse(body.contains("\"key\":\"C\""))
+            if body.contains("\"key\":\"B\"") { return (500, Data(#"{"message":"failed"}"#.utf8), [:]) }
+            return (201, Data(#"{"uuid":"saved"}"#.utf8), [:])
+        }
+        let result = try await client.applyVariableSync(plan.changes, plan: plan, to: .database("db"))
+        XCTAssertEqual(result.appliedKeys, ["A"])
+        XCTAssertEqual(result.failedKey, "B")
+        let staleClient = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            return (200, Data(#"[{"uuid":"new","key":"EXTRA","value":"external change"}]"#.utf8), [:])
+        }
+        do {
+            _ = try await staleClient.applyVariableSync(plan.changes, plan: plan, to: .database("db"))
+            XCTFail("A stale comparison must not write")
+        } catch { XCTAssertTrue(error.localizedDescription.contains("changed")) }
+    }
+
+    func testBackupFixturesAndManualRequest() async throws {
+        let fixture =
+            #"[{"uuid":"schedule","enabled":"1","frequency":"daily","executions":[{"uuid":"execution","status":"failed","size":"42","message":"Storage unavailable"}]}]"#
+        let client = try makeClient { request in
+            if request.httpMethod == "GET" { return (200, Data(fixture.utf8), [:]) }
+            XCTAssertEqual(request.httpMethod, "PATCH")
+            XCTAssertEqual(request.url?.path, "/api/v1/databases/database/backups/schedule")
+            XCTAssertTrue(queryItems(request).isEmpty)
+            let body = try JSONSerialization.jsonObject(with: Data((bodyText(request) ?? "").utf8)) as? NSDictionary
+            XCTAssertEqual(body, ["backup_now": true] as NSDictionary)
+            return (200, Data(#"{"message":"Database backup configuration updated"}"#.utf8), [:])
+        }
+        let backups = try await client.databaseBackups("database")
+        XCTAssertTrue(backups[0].enabled)
+        XCTAssertEqual(backups[0].executions[0].size, 42)
+        XCTAssertEqual(backups[0].executions[0].message, "Storage unavailable")
+        _ = try await client.backUpNow(database: "database", backup: "schedule")
+    }
+
+    func testDeploymentDetailAndHistoryRequests() async throws {
+        let client = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            if request.url?.path == "/api/v1/deployments/deploy-1" {
+                return (200, Data(#"{"deployment_uuid":"deploy-1","logs":"building"}"#.utf8), [:])
+            }
+            XCTAssertEqual(request.url?.path, "/api/v1/deployments/applications/app-1")
+            XCTAssertEqual(
+                queryItems(request), [URLQueryItem(name: "skip", value: "0"), URLQueryItem(name: "take", value: "40")])
+            return (200, Data(#"{"count":0,"deployments":[]}"#.utf8), [:])
+        }
+        let deployment = try await client.deployment("deploy-1")
+        XCTAssertEqual(deployment.logs, "building")
+        _ = try await client.applicationDeployments("app-1", take: 40)
+    }
+
+    func testDeploymentOutputAcceptsEncodedAndExpandedEntries() throws {
+        let entries = #"[{"output":"building","timestamp":"2026-09-29T10:00:00Z"},{"output":42}]"#
+        let expanded = try CoolifyJSON.decoder().decode(DeploymentOutput.self, from: Data(entries.utf8))
+        let encoded = try CoolifyJSON.decoder().decode(DeploymentOutput.self, from: JSONEncoder().encode(entries))
+        XCTAssertEqual(expanded.text, "2026-09-29T10:00:00Z building\n42")
+        XCTAssertEqual(encoded.text, expanded.text)
+        let plain = try CoolifyJSON.decoder().decode(DeploymentOutput.self, from: JSONEncoder().encode("plain output"))
+        XCTAssertEqual(plain.text, "plain output")
+        let hidden = try CoolifyJSON.decoder().decode(Deployment.self, from: Data(#"{"deployment_uuid":"d"}"#.utf8))
+        XCTAssertNil(hidden.logs)
+    }
+
     func testAPIBaseAcceptsInstanceRootAPIRootAndMCPURL() throws {
         let root = try CoolifyClient(instanceURL: "http://coolify.example:8000", token: "token")
         XCTAssertEqual(root.apiBaseURL.absoluteString, "http://coolify.example:8000/api/v1")
@@ -297,13 +451,14 @@ private func queryItems(_ request: URLRequest) -> [URLQueryItem] {
 }
 
 private func makeClient(
+    instanceURL: String = "http://coolify.example:8000",
     responder: @escaping @Sendable (URLRequest) throws -> (Int, Data, [String: String])
 ) throws -> CoolifyClient {
     MockURLProtocol.responder = responder
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [MockURLProtocol.self]
     let session = URLSession(configuration: configuration)
-    return try CoolifyClient(instanceURL: "http://coolify.example:8000", token: "test-token", session: session)
+    return try CoolifyClient(instanceURL: instanceURL, token: "test-token", session: session)
 }
 
 private final class MockURLProtocol: URLProtocol, @unchecked Sendable {

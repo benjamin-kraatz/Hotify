@@ -8,6 +8,10 @@ final class InstanceStore {
     private(set) var instances: [CoolifyInstance] = []
     var selectedID: CoolifyInstance.ID?
 
+    #if DEBUG
+    var fixtureClients: [UUID: CoolifyClient] = [:]
+    #endif
+
     private var sync: InstanceSync?
 
     private let defaultsKey = "hotify.instances"
@@ -37,11 +41,17 @@ final class InstanceStore {
     }
 
     func client(for instance: CoolifyInstance) -> CoolifyClient? {
+        #if DEBUG
+        if let fixture = fixtureClients[instance.id] { return fixture }
+        #endif
         guard let token = TokenStore.load(for: instance.id) else { return nil }
         return try? CoolifyClient(instanceURL: instance.baseURL, token: token)
     }
 
     func add(name: String, baseURL: String, token: String) throws -> CoolifyInstance {
+        #if DEBUG
+        guard fixtureClients.isEmpty else { throw CoolifyError(message: "Fixture instances cannot be edited.") }
+        #endif
         let (saved, trimmedToken) = try validated(name: name, baseURL: baseURL, token: token)
         try TokenStore.save(trimmedToken, for: saved.id)
         instances.append(saved)
@@ -56,6 +66,9 @@ final class InstanceStore {
     /// Returns whether the URL or token changed. A name-only edit leaves the open dashboard alone.
     @discardableResult
     func update(id: CoolifyInstance.ID, name: String, baseURL: String, token: String) throws -> Bool {
+        #if DEBUG
+        guard fixtureClients.isEmpty else { throw CoolifyError(message: "Fixture instances cannot be edited.") }
+        #endif
         guard let index = instances.firstIndex(where: { $0.id == id }) else {
             throw CoolifyError(message: "That instance is no longer saved.")
         }
@@ -72,6 +85,9 @@ final class InstanceStore {
     }
 
     func remove(_ instance: CoolifyInstance) {
+        #if DEBUG
+        guard fixtureClients.isEmpty else { return }
+        #endif
         sync?.save(record(for: instance, isDeleted: true))
         TokenStore.delete(for: instance.id)
         instances.removeAll { $0.id == instance.id }

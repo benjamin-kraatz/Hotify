@@ -3,6 +3,7 @@ import SwiftUI
 
 /// A resource's environment variables. Keys always show. Values wait until `VariableLock` opens.
 struct VariableList: View {
+    @SwiftUI.Environment(InstanceStore.self) private var store
     @SwiftUI.Environment(VariableLock.self) private var lock
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -15,6 +16,7 @@ struct VariableList: View {
     @State private var editing: EditorTarget?
     @State private var deleting: VariableLine?
     @State private var copiedAll = 0
+    @State private var syncing = false
 
     private var shown: [VariableLine] {
         let trimmed = filter.trimmingCharacters(in: .whitespaces)
@@ -29,7 +31,7 @@ struct VariableList: View {
 
     /// What puts a change to use. A stopped resource picks it up when it starts, so it needs nothing.
     private var applyAction: ResourceAction? {
-        guard resource.heat != .cold else { return nil }
+        guard resource.heat != .cold, !model.lastChangeWasPreview else { return nil }
         return resource.kind == .application ? .deploy : .restart
     }
 
@@ -60,6 +62,15 @@ struct VariableList: View {
         }
         .sheet(item: $editing) { target in
             editor(for: target)
+        }
+        .sheet(isPresented: $syncing) {
+            VariableSyncView(
+                source: store.selected.map {
+                    ResourceEndpoint(instanceID: $0.id, instanceName: $0.name, resource: resource)
+                }
+            ) {
+                Task { await model.load() }
+            }
         }
         .confirmationDialog(
             deleting.map { "Delete \($0.key)?" } ?? "",
@@ -122,6 +133,17 @@ struct VariableList: View {
                 .accessibilityLabel("Lock values")
                 .transition(.opacity)
             }
+
+            Button {
+                Task {
+                    guard await unlock() else { return }
+                    syncing = true
+                }
+            } label: {
+                Label("Compare and Sync", systemImage: "arrow.left.arrow.right")
+            }
+            .labelStyle(.iconOnly)
+            .help("Compare these variables with another resource and copy the differences")
 
             Menu {
                 Button("Copy All as .env", systemImage: "doc.on.clipboard") {
@@ -195,7 +217,10 @@ struct VariableList: View {
     }
 
     private var applyMessage: String {
-        switch applyAction {
+        if model.lastChangeWasPreview {
+            return "Saved. Redeploy the affected previews in Coolify to apply these variables."
+        }
+        return switch applyAction {
         case .deploy: "Saved. It takes effect after a redeploy."
         case .restart: "Saved. It takes effect after a restart."
         default: "Saved. It takes effect on the next start."
@@ -360,84 +385,6 @@ private enum EditorTarget: Identifiable {
     }
 }
 
-/// The call to unlock, above a locked list.
-private struct LockCard: View {
-    var method: UnlockMethod
-    var failure: String?
-    var isAuthenticating: Bool
-    var onUnlock: () -> Void
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "lock.fill")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.ember)
-                .frame(width: 40, height: 40)
-                .background(.ember.opacity(0.12), in: .circle)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Values are locked")
-                    .font(.headline)
-                Text(failure ?? "Confirm it’s you to see and change them.")
-                    .font(.callout)
-                    .foregroundStyle(failure == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.glow))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button(action: onUnlock) {
-                Label("Unlock", systemImage: method.systemImage)
-            }
-            .glassButton(prominent: true)
-            .disabled(isAuthenticating || method == .unavailable)
-            .accessibilityLabel("Unlock with \(method.title)")
-            .help("Unlock with \(method.titleWithFallback)")
-        }
-        .padding(14)
-        .background(Color.primary.opacity(0.045), in: .rect(cornerRadius: 14))
-    }
-}
-
-/// Says a change waits for a restart or redeploy, with the button that does it.
-private struct ApplyBar: View {
-    var kind: ResourceKind
-    var message: String
-    var action: ResourceAction?
-    var isBusy: Bool
-    var onApply: (ResourceAction) -> Void
-    var onDismiss: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .foregroundStyle(.ember)
-                .accessibilityHidden(true)
-            Text(message)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if let action {
-                Button(action.title) {
-                    onApply(action)
-                }
-                .glassButton()
-                .disabled(isBusy)
-                .help(action.explanation(for: kind))
-            }
-            Button("Dismiss", systemImage: "xmark") {
-                onDismiss()
-            }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.ember.opacity(0.08), in: .rect(cornerRadius: 12))
-    }
-}
-
 #Preview("Locked") {
     variableListPreview(isRequired: true)
 }
@@ -454,6 +401,7 @@ private struct ApplyBar: View {
         resource: ResourceSummary(route: .database("db"), name: "postgres", status: "running:healthy"),
         onAction: { _ in }
     )
+    .environment(InstanceStore(instances: []))
     .environment(VariableLock(isRequired: true))
     .frame(width: 560, height: 420)
 }
@@ -479,6 +427,7 @@ private func variableListPreview(isRequired: Bool, unapplied: Bool = false) -> s
         resource: ResourceSummary(route: .application("app"), name: "marketing-site", status: "running:healthy"),
         onAction: { _ in }
     )
+    .environment(InstanceStore(instances: []))
     .environment(VariableLock(isRequired: isRequired))
     .frame(width: 560, height: 560)
 }
