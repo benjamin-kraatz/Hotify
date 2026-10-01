@@ -46,8 +46,9 @@ struct ProvisioningSheet: View {
             case .starting: path.append(.start)
             }
         }
-        // Once the service exists, closing has to keep or delete it, which the setup step asks about.
-        .interactiveDismissDisabled(model.stage != .choosing || model.isCreating)
+        // Only the gallery closes with a swipe. On a template the user may have named and placed the service, which
+        // a stray swipe would lose. Once the service exists, closing has to keep or delete it, which setup asks about.
+        .interactiveDismissDisabled(!path.isEmpty || model.isCreating)
         #if os(macOS)
         .frame(minWidth: 680, idealWidth: 860, minHeight: 600, idealHeight: 780)
         #endif
