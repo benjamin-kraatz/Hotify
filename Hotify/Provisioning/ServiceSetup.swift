@@ -166,7 +166,29 @@ struct ServiceSetup: View {
         }
     }
 
+    /// The status beside the buttons where they fit, as on a Mac or iPad, and above them on an iPhone.
     private var startBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                startStatus
+                Spacer(minLength: 0)
+                startButtons
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                startStatus
+                HStack(spacing: 10) {
+                    startButtons
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(.bar)
+        .animation(.snappy, value: model.setup.missingKeys)
+    }
+
+    private var startStatus: some View {
         let missing = model.setup.missingKeys
         return HStack(spacing: 14) {
             FlameGlyph(heat: model.isSaving ? .warming : .cold, height: 24)
@@ -182,30 +204,30 @@ struct ServiceSetup: View {
                 .font(.caption)
                 .foregroundStyle(missing.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.glow))
                 .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
-            Button("Start Later") {
-                Task {
-                    if await model.save() { onClose(model.route) }
-                }
-            }
-            .glassButton()
-            .controlSize(.large)
-            .disabled(isBusy)
-            Button {
-                Task { await model.start() }
-            } label: {
-                Label("Start", systemImage: "play.fill")
-            }
-            .glassButton(prominent: true)
-            .controlSize(.large)
-            .keyboardShortcut(.defaultAction)
-            .disabled(isBusy || model.isLoadingSetup || !missing.isEmpty)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .background(.bar)
-        .animation(.snappy, value: missing)
+    }
+
+    @ViewBuilder
+    private var startButtons: some View {
+        Button("Start Later") {
+            Task {
+                if await model.save() { onClose(model.route) }
+            }
+        }
+        .glassButton()
+        .controlSize(.large)
+        .disabled(isBusy)
+        Button {
+            Task { await model.start() }
+        } label: {
+            Label("Start", systemImage: "play.fill")
+        }
+        .glassButton(prominent: true)
+        .controlSize(.large)
+        .keyboardShortcut(.defaultAction)
+        .disabled(isBusy || model.isLoadingSetup || !model.setup.missingKeys.isEmpty)
     }
 }
 
