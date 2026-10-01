@@ -12,6 +12,8 @@ struct ResourceLink: Hashable {
         case deployments
         /// One pull request's preview.
         case preview(Int)
+        /// A database's backups.
+        case backups
     }
 
     static let scheme = "hotify"
@@ -28,6 +30,8 @@ struct ResourceLink: Hashable {
             components.queryItems = [
                 URLQueryItem(name: "open", value: "preview"), URLQueryItem(name: "pr", value: String(pullRequest)),
             ]
+        case .backups:
+            components.queryItems = [URLQueryItem(name: "open", value: "backups")]
         case nil:
             break
         }
@@ -52,6 +56,7 @@ struct ResourceLink: Hashable {
             switch value("open") {
             case "deployments": .deployments
             case "preview": value("pr").flatMap(Int.init).map(Place.preview)
+            case "backups": .backups
             default: nil
             }
         self.init(instanceID: instanceID, route: route, place: place)

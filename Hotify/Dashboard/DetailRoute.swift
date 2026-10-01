@@ -14,6 +14,8 @@ struct ResourceEntry: Hashable {
         case deployments
         /// Its previews space: the board, or one pull request.
         case previews(PreviewPlace)
+        /// A database's backups.
+        case backups
     }
 
     var place: Place
@@ -27,6 +29,7 @@ extension ResourceEntry {
         switch place {
         case .deployments: self.init(place: .deployments)
         case .preview(let pullRequest): self.init(place: .previews(.preview(pullRequest)))
+        case .backups: self.init(place: .backups)
         }
     }
 }

@@ -50,6 +50,8 @@ struct ResourceDetailScreen: View {
             _tab = State(initialValue: .deployments)
         case .previews(let place):
             _previewPlace = State(initialValue: place)
+        case .backups:
+            _tab = State(initialValue: .backups)
         case nil:
             break
         }

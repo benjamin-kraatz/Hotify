@@ -12,6 +12,10 @@ struct WidgetLedger: Codable {
     var pulses: [String: InstancePulse] = [:]
     /// The newest deployments of each followed application, by pin id.
     var histories: [String: [DeploymentItem]] = [:]
+    /// The last backups reading of each followed database, by pin id.
+    var backups: [String: BackupReading] = [:]
+    /// Back Up Now requests a widget sent, by pin id.
+    var backupRequests: [String: BackupRequest] = [:]
 
     init() {}
 
@@ -24,6 +28,8 @@ struct WidgetLedger: Codable {
         failures = try container.decodeIfPresent([String: ActionFailure].self, forKey: .failures) ?? [:]
         pulses = try container.decodeIfPresent([String: InstancePulse].self, forKey: .pulses) ?? [:]
         histories = try container.decodeIfPresent([String: [DeploymentItem]].self, forKey: .histories) ?? [:]
+        backups = try container.decodeIfPresent([String: BackupReading].self, forKey: .backups) ?? [:]
+        backupRequests = try container.decodeIfPresent([String: BackupRequest].self, forKey: .backupRequests) ?? [:]
     }
 
     /// How long a stop waits for the second tap.
@@ -97,6 +103,10 @@ struct WidgetLedger: Codable {
         // A history nobody followed for a month is no use to anyone.
         histories = histories.filter { history in
             history.value.contains { $0.startedAt.map { now.timeIntervalSince($0) < 30 * 86_400 } ?? false }
+        }
+        backupRequests = backupRequests.filter { now.timeIntervalSince($0.value.at) < 600 }
+        backups = backups.filter { backup in
+            backup.value.checkedAt.map { now.timeIntervalSince($0) < 7 * 86_400 } ?? true
         }
         readings = readings.filter { reading in
             reading.value.checkedAt.map { now.timeIntervalSince($0) < 7 * 86_400 } ?? true

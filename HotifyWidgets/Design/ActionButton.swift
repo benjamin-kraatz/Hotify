@@ -6,16 +6,9 @@ import WidgetKit
 struct ActionButton: View {
     var tile: PinTile
     var action: ResourceAction
-    var style: Style = .icon
+    var style: ButtonFace.Style = .icon
     /// A fixed width for labeled buttons stacked in a column, so their edges line up.
     var width: CGFloat?
-
-    enum Style {
-        /// A round icon, for tiles with little room.
-        case icon
-        /// An icon and a word, for rows.
-        case labeled
-    }
 
     @Environment(\.widgetRenderingMode) private var renderingMode
 
@@ -31,35 +24,14 @@ struct ActionButton: View {
                     .frame(width: width, height: 30)
                     .background(armedFill, in: .capsule)
             } else {
-                switch style {
-                case .icon:
-                    icon
-                        .frame(width: 30, height: 30)
-                        .background(.fill.tertiary, in: .circle)
-                case .labeled:
-                    Label {
-                        Text(title)
-                    } icon: {
-                        icon
-                    }
-                    .font(.caption.weight(.semibold))
-                    .labelStyle(.titleAndIcon)
-                    .padding(.horizontal, 10)
-                    .frame(width: width, height: 30)
-                    .background(.fill.tertiary, in: .capsule)
-                }
+                ButtonFace(
+                    title: title, systemImage: action.systemImage, style: style, isKindling: action == .start,
+                    width: width)
             }
         }
         .buttonStyle(.plain)
         .widgetAccentable(isArmed)
         .accessibilityLabel(isArmed ? "Confirm stopping \(tile.name)" : "\(action.title) \(tile.name)")
-    }
-
-    private var icon: some View {
-        Image(systemName: action.systemImage)
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(action == .start ? AnyShapeStyle(.ember) : AnyShapeStyle(.primary))
-            .widgetAccentable(action == .start)
     }
 
     private var armedFill: AnyShapeStyle {
