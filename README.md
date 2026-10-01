@@ -34,7 +34,6 @@ Hotify supports Coolify 4.3.x. Older versions aren't tested. It uses Coolify's H
 
 ## What's next
 
-- [ ] Face ID to lock connected servers
 - [ ] Downloading files from the server to the device
 
 ## Building
