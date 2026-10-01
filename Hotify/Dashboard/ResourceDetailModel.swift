@@ -17,6 +17,8 @@ struct DeploymentLine: Identifiable, Hashable {
 
     var isPreview: Bool { pullRequest != nil }
 
+    var tone: FlameTone { isPreview ? .preview : .production }
+
     var heat: Heat {
         switch status {
         case "finished": .lit

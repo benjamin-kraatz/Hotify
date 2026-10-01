@@ -314,6 +314,31 @@ final class CoolifyAPITests: XCTestCase {
         XCTAssertNotNil(application.createdAtDate)
     }
 
+    func testPreviewURLFollowsCoolifyTemplate() throws {
+        func application(fqdn: String?, template: String?) throws -> Application {
+            var object: [String: Any] = ["uuid": "app-1", "name": "Web"]
+            object["fqdn"] = fqdn
+            object["preview_url_template"] = template
+            return try CoolifyJSON.decoder().decode(
+                Application.self, from: JSONSerialization.data(withJSONObject: object))
+        }
+
+        let standard = try application(
+            fqdn: "https://web.example.com,https://www.example.com", template: "{{pr_id}}.{{domain}}")
+        XCTAssertEqual(standard.previewURL(pullRequest: 42)?.absoluteString, "https://42.web.example.com")
+
+        let ported = try application(fqdn: "http://web.example.com:8080", template: "pr-{{pr_id}}.{{domain}}")
+        XCTAssertEqual(ported.previewURL(pullRequest: 7)?.absoluteString, "http://pr-7.web.example.com:8080")
+
+        // Coolify fills `{{random}}` once on the server, so the address cannot be rebuilt here.
+        XCTAssertNil(
+            try application(fqdn: "https://web.example.com", template: "{{random}}.{{domain}}").previewURL(
+                pullRequest: 1))
+        XCTAssertNil(try application(fqdn: nil, template: "{{pr_id}}.{{domain}}").previewURL(pullRequest: 1))
+        XCTAssertNil(try application(fqdn: "https://web.example.com", template: nil).previewURL(pullRequest: 1))
+        XCTAssertNil(standard.previewURL(pullRequest: 0))
+    }
+
     func testDeploymentPageReadsStringPullRequestID() throws {
         let json = """
             {

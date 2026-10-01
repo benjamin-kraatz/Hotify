@@ -14,9 +14,9 @@ final class PreviewDeploymentModel {
     var setupURL: URL?
     private var generation = 0
 
-    func load(client: CoolifyClient, application: String, token: String?, previousPRs: [Int] = [], more: Bool = false)
-        async
-    {
+    func load(
+        client: CoolifyClient, application: String, token: String?, previews: [PreviewLine] = [], more: Bool = false
+    ) async {
         generation += 1
         let generation = generation
         isLoading = true
@@ -27,8 +27,11 @@ final class PreviewDeploymentModel {
             let page = more ? (nextPage ?? 1) : 1
             if !more {
                 // Reuse the detail screen's history; fetching it again can include large build logs.
-                choices = Array(Set(previousPRs.filter { $0 > 0 }))
-                    .sorted(by: >).map { PreviewChoice(number: $0, wasDeployed: true) }
+                choices = previews.filter { $0.number > 0 }.sorted { $0.number > $1.number }.map { preview in
+                    PreviewChoice(
+                        number: preview.number, title: preview.title, branch: preview.branch, isDraft: preview.isDraft,
+                        state: preview.state, commitMessage: preview.latest.message)
+                }
                 repository = nil
                 nextPage = nil
                 let info = try await client.application(application)
@@ -82,6 +85,13 @@ struct PreviewChoice: Identifiable {
     var title: String?
     var branch: String?
     var isDraft = false
-    var wasDeployed = false
+    /// Where its preview stands. `nil` for a PR with no preview in the recent history.
+    var state: PreviewState?
+    /// The subject of the commit its preview last built, until GitHub names the PR.
+    var commitMessage: String?
     var id: Int { number }
+
+    var headline: String {
+        title ?? commitMessage ?? "Pull request #\(number)"
+    }
 }

@@ -13,6 +13,8 @@ final class DashboardModel {
     var services: [Service] = []
     /// Production deployments that are queued or building, across every application.
     var activeDeployments: [Deployment] = []
+    /// Preview deployments that are queued or building. Kept apart so a preview never marks production busy.
+    var activePreviewDeployments: [Deployment] = []
     var places: [Int: ResourcePlace] = [:]
     var loadError: String?
     var actionError: String?
@@ -91,6 +93,7 @@ final class DashboardModel {
             self.services = loadedServices
             if let loadedDeployments {
                 activeDeployments = loadedDeployments.filter { !$0.isPreview }
+                activePreviewDeployments = loadedDeployments.filter(\.isPreview)
             }
             loadError = nil
             lastUpdated = .now
@@ -150,7 +153,8 @@ final class DashboardModel {
                 ResourceSummary(
                     application: application,
                     place: application.environmentID.flatMap { places[$0] },
-                    activeDeployment: activeDeployment(for: application)
+                    activeDeployment: activeDeployment(for: application),
+                    activePreviews: deployments(for: application, in: activePreviewDeployments)
                 )
             }
                 + databases.map { ResourceSummary(database: $0, place: $0.environmentID.flatMap { places[$0] }) }
@@ -164,10 +168,14 @@ final class DashboardModel {
     }
 
     private func activeDeployment(for application: Application) -> Deployment? {
+        deployments(for: application, in: activeDeployments).first
+    }
+
+    private func deployments(for application: Application, in list: [Deployment]) -> [Deployment] {
         guard let id = application.id else {
-            return activeDeployments.first { $0.applicationName == application.name }
+            return list.filter { $0.applicationName == application.name }
         }
-        return activeDeployments.first { $0.applicationID == id }
+        return list.filter { $0.applicationID == id }
     }
 
     /// Runs an action on whichever resource the route points at, if it is still listed.

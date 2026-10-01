@@ -14,6 +14,8 @@ struct ResourceSummary: Identifiable, Hashable {
     var isDeploying = false
     /// The deployment to cancel while `isDeploying` is true.
     var activeDeploymentID: String?
+    /// Pull requests whose previews are queued or building, lowest first. They leave production's flame alone.
+    var buildingPreviews: [Int] = []
 
     var id: ResourceRoute { route }
     var kind: ResourceKind { route.kind }
@@ -39,7 +41,10 @@ struct ContainerSummary: Identifiable, Hashable {
 }
 
 extension ResourceSummary {
-    init(application: Application, place: ResourcePlace? = nil, activeDeployment: Deployment? = nil) {
+    init(
+        application: Application, place: ResourcePlace? = nil, activeDeployment: Deployment? = nil,
+        activePreviews: [Deployment] = []
+    ) {
         let link = Self.firstURL(in: application.fqdn)
         self.init(
             route: .application(application.uuid),
@@ -49,7 +54,8 @@ extension ResourceSummary {
             link: link,
             place: place,
             isDeploying: activeDeployment != nil,
-            activeDeploymentID: activeDeployment.flatMap { $0.deploymentUUID.isEmpty ? nil : $0.deploymentUUID }
+            activeDeploymentID: activeDeployment.flatMap { $0.deploymentUUID.isEmpty ? nil : $0.deploymentUUID },
+            buildingPreviews: Set(activePreviews.map(\.pullRequestID)).sorted()
         )
     }
 

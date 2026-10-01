@@ -2,14 +2,15 @@ import SwiftUI
 
 extension View {
     /// A rim of fire that circles a panel while something works inside it, and fades once the work is done.
-    func heatEdge(isActive: Bool, cornerRadius: CGFloat = 14) -> some View {
-        modifier(HeatEdge(isActive: isActive, cornerRadius: cornerRadius))
+    func heatEdge(isActive: Bool, cornerRadius: CGFloat = 14, tone: FlameTone = .production) -> some View {
+        modifier(HeatEdge(isActive: isActive, cornerRadius: cornerRadius, tone: tone))
     }
 }
 
 private struct HeatEdge: ViewModifier {
     var isActive: Bool
     var cornerRadius: CGFloat
+    var tone: FlameTone
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let lap: TimeInterval = 2.4
@@ -28,9 +29,8 @@ private struct HeatEdge: ViewModifier {
                     Canvas { context, size in
                         let panel = CGRect(origin: .zero, size: size).insetBy(dx: Self.bleed, dy: Self.bleed)
                         let path = Path(roundedRect: panel.insetBy(dx: 0.75, dy: 0.75), cornerRadius: cornerRadius)
-                        let ember = Color.ember
                         let fire = GraphicsContext.Shading.conicGradient(
-                            Gradient(colors: [ember.opacity(0), ember, .glow, .core, .glow, ember.opacity(0)]),
+                            Gradient(colors: gradient),
                             center: CGPoint(x: panel.midX, y: panel.midY),
                             angle: .degrees(turn * 360)
                         )
@@ -46,6 +46,16 @@ private struct HeatEdge: ViewModifier {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
+    }
+
+    private var gradient: [Color] {
+        switch tone {
+        case .production:
+            return [Color.ember.opacity(0), .ember, .glow, .core, .glow, Color.ember.opacity(0)]
+        case .preview:
+            let hot = Color.pilotCore.mix(with: .white, by: 0.5)
+            return [Color.pilot.opacity(0), .pilot, .pilotCore, hot, .pilotCore, Color.pilot.opacity(0)]
+        }
     }
 }
 

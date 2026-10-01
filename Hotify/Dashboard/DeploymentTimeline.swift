@@ -1,24 +1,44 @@
 import SwiftUI
 
-/// An application's deployments, newest first, on a timeline. Previews get their own run below production.
+/// An application's deployments, newest first, on a timeline. Previews get their own run below production, in blue,
+/// and a filter picks one run when both are there.
 struct DeploymentTimeline: View {
     var deployments: [DeploymentLine]
     var isLoading: Bool
     var onSelect: (DeploymentLine) -> Void = { _ in }
     var canLoadMore = false
     var onLoadMore: () -> Void = {}
+    /// Opens the previews space. `nil` leaves the link out, as inside a preview.
+    var onShowPreviews: (() -> Void)?
+
+    @State private var filter = TimelineFilter.all
 
     private var production: [DeploymentLine] { deployments.filter { !$0.isPreview } }
     private var previews: [DeploymentLine] { deployments.filter(\.isPreview) }
 
+    private var hasBoth: Bool { !production.isEmpty && !previews.isEmpty }
+
+    /// Back to everything once one run empties, so the filter never hides the only deployments there are.
+    private var shownFilter: TimelineFilter { hasBoth ? filter : .all }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                if !production.isEmpty {
-                    run("Production", production)
+                if hasBoth {
+                    Picker("Show", selection: $filter) {
+                        ForEach(TimelineFilter.allCases) { filter in
+                            Text(filter.title).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
                 }
-                if !previews.isEmpty {
-                    run("Previews", previews)
+                if !production.isEmpty, shownFilter != .previews {
+                    run("Production", production, tone: .production)
+                }
+                if !previews.isEmpty, shownFilter != .production {
+                    run("Previews", previews, tone: .preview)
                 }
                 if canLoadMore {
                     Button("Show Older Deployments", systemImage: "clock.arrow.circlepath", action: onLoadMore)
@@ -47,14 +67,25 @@ struct DeploymentTimeline: View {
             }
         }
         .animation(.snappy, value: deployments)
+        .animation(.snappy, value: shownFilter)
     }
 
-    private func run(_ title: String, _ rows: [DeploymentLine]) -> some View {
+    private func run(_ title: String, _ rows: [DeploymentLine], tone: FlameTone) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !previews.isEmpty {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
+            // A heading only tells the runs apart, so a lone run goes without.
+            if hasBoth, shownFilter == .all {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(tone == .preview ? AnyShapeStyle(.pilot) : AnyShapeStyle(.secondary))
+                    Spacer()
+                    if tone == .preview, let onShowPreviews {
+                        Button("Open Previews", action: onShowPreviews)
+                            .buttonStyle(.borderless)
+                            .font(.subheadline)
+                            .foregroundStyle(.pilot)
+                    }
+                }
             }
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
@@ -64,6 +95,23 @@ struct DeploymentTimeline: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
+        }
+    }
+}
+
+/// Which run of the timeline shows.
+private enum TimelineFilter: Hashable, CaseIterable, Identifiable {
+    case all
+    case production
+    case previews
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .production: "Production"
+        case .previews: "Previews"
         }
     }
 }
@@ -79,11 +127,11 @@ private struct DeploymentRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 4) {
             VStack(spacing: 6) {
-                FlameGlyph(heat: line.heat, height: 18)
+                FlameGlyph(heat: line.heat, height: 18, tone: line.tone)
                     .padding(.top, 9)
                 if !isLast {
                     Capsule()
-                        .fill(.quaternary)
+                        .fill(line.isPreview ? AnyShapeStyle(.pilot.opacity(0.25)) : AnyShapeStyle(.quaternary))
                         .frame(width: 2)
                         .frame(maxHeight: .infinity)
                 }
@@ -96,7 +144,7 @@ private struct DeploymentRow: View {
                         .font(.headline)
                         .foregroundStyle(line.heat.needsAttention ? AnyShapeStyle(.glow) : AnyShapeStyle(.primary))
                     if let pullRequest = line.pullRequest {
-                        Tag(text: "PR \(pullRequest)")
+                        PullRequestBadge(number: pullRequest)
                     }
                     if line.isRestart {
                         Tag(text: "Restart")

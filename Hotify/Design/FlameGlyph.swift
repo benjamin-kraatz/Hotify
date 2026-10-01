@@ -3,12 +3,16 @@ import SwiftUI
 /// The status mark. A lit flame is the logo, a cold one is its outline, and amber means look here.
 ///
 /// Lighting up plays a short flare. Warming flickers until it settles. Both stay still with Reduce Motion on.
+/// A preview burns blue, and while it builds its core flickers amber inside the blue.
 struct FlameGlyph: View {
     var heat: Heat
     /// The glyph's height. Its width follows the logo's proportions.
     var height: CGFloat = 18
     /// Starts cold and lights up once the glyph is on screen, if it is lit.
     var ignitesOnAppear = false
+    var tone: FlameTone = .production
+    /// A lit core that swells and settles slowly, like a pilot light. For the one large flame that heads a screen.
+    var breathes = false
 
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
     @SwiftUI.Environment(\.backgroundProminence) private var prominence
@@ -36,14 +40,26 @@ struct FlameGlyph: View {
         if isOnAccent {
             return .white
         }
-        return shown == .lit ? .ember : .glow
+        switch (shown, tone) {
+        case (.lit, _): return tone.fill
+        // A building preview keeps its blue, so it still reads as a preview while the core says it is busy.
+        case (.warming, .preview): return .pilot
+        default: return .glow
+        }
     }
 
     private var coreColor: Color {
         if isOnAccent {
-            return shown == .warming ? .glow : .ember
+            return shown == .warming ? .glow : tone.fill
         }
-        return shown == .warming ? .white.opacity(0.9) : .core
+        if shown == .warming {
+            return tone == .preview ? .glow : .white.opacity(0.9)
+        }
+        return tone.core
+    }
+
+    private var isBreathing: Bool {
+        breathes && shown == .lit && !reduceMotion
     }
 
     private var width: CGFloat { height / 1.5 }
@@ -121,6 +137,15 @@ struct FlameGlyph: View {
                     CubicKeyframe(1.0, duration: 0.32)
                 }
             }
+            .keyframeAnimator(initialValue: 1.0, repeating: isBreathing) { content, scale in
+                content.scaleEffect(scale, anchor: .bottom)
+            } keyframes: { _ in
+                // Slow and even, so it reads as idling rather than working.
+                KeyframeTrack(\.self) {
+                    CubicKeyframe(0.82, duration: 1.6)
+                    CubicKeyframe(1.0, duration: 1.8)
+                }
+            }
             .padding(.bottom, height * 0.07)
             .scaleEffect(hasCore ? 1 : 0.01, anchor: .bottom)
             .opacity(hasCore ? 1 : 0)
@@ -132,6 +157,16 @@ struct FlameGlyph: View {
         ForEach([Heat.lit, .warming, .troubled, .cold, .unknown], id: \.self) { heat in
             FlameGlyph(heat: heat, height: 48)
         }
+    }
+    .padding(40)
+}
+
+#Preview("Preview tone") {
+    HStack(spacing: 28) {
+        ForEach([Heat.lit, .warming, .troubled, .cold], id: \.self) { heat in
+            FlameGlyph(heat: heat, height: 48, tone: .preview)
+        }
+        FlameGlyph(heat: .lit, height: 48, tone: .preview, breathes: true)
     }
     .padding(40)
 }
