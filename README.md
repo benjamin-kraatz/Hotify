@@ -18,12 +18,17 @@ A Mac and iPhone app for your self-hosted [Coolify](https://coolify.io).
 
 ## What it does
 
-- Connect as many Coolify instances as you like. Tokens live in the Keychain.
-- See your team, Coolify version, server status, applications, databases, and services at a glance.
-- Start, stop, and restart applications, databases, and services.
-- Open one to read its logs. An application also shows its deployments and previews, and you can deploy it from there.
-- Pin up to six resources to a Home Screen or desktop widget, and start or stop them from there. A Lock Screen widget counts what runs on an instance, a Needs Attention widget lists whatever is unhealthy or busy, Recent Deployments shows the newest deploys and previews, Backups says when a database's backup failed or fell behind, and Control Center gets a toggle and a restart button.
-- Works over plain `http` on your LAN too.
+- **Instances.** Connect as many Coolify instances as you like, over `https` or plain `http` on your LAN. Tokens live in the Keychain. Instances sync between your devices through iCloud.
+- **Dashboard.** Your team, Coolify version, and servers, then every application, database, and service by project and environment. Filter by name, state, or kind.
+- **Actions.** Start, stop, restart, and deploy, or cancel a deployment that is running.
+- **Resources.** Logs per container, deployment history, and a database's backups, with Back Up Now. Edit the name, domains, health check, and a database's public port.
+- **Projects.** A page per project with its resources, recent deployments, previews, and shared variables. Add environments, rename things, and give projects and environments a color.
+- **New services.** Pick one of Coolify's one-click templates, place it, set its domains, and watch its first start.
+- **Pull request previews.** Deploy a preview for a pull request, browse the live ones, and read their logs. A GitHub token is optional, for private repositories.
+- **Variables.** Edit them, with values hidden until Face ID, Touch ID, or your passcode unlocks them. Copy them from one resource to another, across instances too.
+- **Failed deployments.** Apple Intelligence explains what went wrong. It runs on the device, so the log never leaves it.
+- **Widgets.** Up to six pinned resources you can start and stop, an instance's status, what needs attention, recent deployments, and backups. Control Center gets a toggle and a restart button.
+- **Menu bar.** On the Mac, keep an eye on chosen resources from the menu bar.
 
 Hotify supports Coolify 4.3.x. Older versions aren't tested. It uses Coolify's HTTP API, so it can do what the API can do. The [OpenAPI spec](https://github.com/coollabsio/coolify/blob/main/openapi.yaml) lists what that is.
 
