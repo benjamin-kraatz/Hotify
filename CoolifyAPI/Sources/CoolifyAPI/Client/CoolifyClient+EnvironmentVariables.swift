@@ -43,4 +43,17 @@ extension CoolifyClient {
     public func deleteEnvironmentVariable(_ uuid: String, from owner: EnvironmentVariableOwner) async throws {
         let _: QueuedAction = try await delete("\(owner.path)/\(CoolifyURL.encodePathComponent(uuid))")
     }
+
+    /// Sets several values in one request, `PATCH {owner}/envs/bulk`. Keys that do not exist yet are created.
+    public func setEnvironmentVariables(
+        _ values: [EnvironmentVariableValue],
+        on owner: EnvironmentVariableOwner
+    ) async throws -> [EnvironmentVariable] {
+        guard !values.isEmpty else { return [] }
+        return try await patchList("\(owner.path)/bulk", body: BulkValues(data: values))
+    }
+}
+
+private struct BulkValues: Encodable {
+    var data: [EnvironmentVariableValue]
 }

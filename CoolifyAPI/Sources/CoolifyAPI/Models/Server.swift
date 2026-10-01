@@ -5,11 +5,14 @@ public struct ServerSettings: Decodable, Sendable, Hashable {
     public var isReachable: Bool?
     public var isUsable: Bool?
     public var isSentinelEnabled: Bool?
+    /// A build server only builds images. Coolify refuses to put resources on it.
+    public var isBuildServer: Bool?
 
     enum CodingKeys: String, CodingKey {
         case isReachable
         case isUsable
         case isSentinelEnabled
+        case isBuildServer
     }
 
     public init(from decoder: Decoder) throws {
@@ -17,6 +20,7 @@ public struct ServerSettings: Decodable, Sendable, Hashable {
         isReachable = container.flexBool(.isReachable)
         isUsable = container.flexBool(.isUsable)
         isSentinelEnabled = container.flexBool(.isSentinelEnabled)
+        isBuildServer = container.flexBool(.isBuildServer)
     }
 }
 

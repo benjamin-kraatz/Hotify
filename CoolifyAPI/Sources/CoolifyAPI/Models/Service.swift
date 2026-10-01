@@ -39,6 +39,8 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
     public var status: String?
     public var serviceType: String?
     public var applications: [ServiceApplication]?
+    /// The service's database containers. Only `GET /services/{uuid}` includes them. They share the container shape.
+    public var databases: [ServiceApplication]?
     public var environmentID: Int?
 
     public var id: String { uuid }
@@ -49,6 +51,7 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
         case status
         case serviceType
         case applications
+        case databases
         case environmentID = "environmentId"
     }
 
@@ -59,6 +62,7 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
         status = container.flexString(.status)
         serviceType = container.flexString(.serviceType)
         applications = try container.decodeIfPresent([ServiceApplication].self, forKey: .applications)
+        databases = try? container.decodeIfPresent([ServiceApplication].self, forKey: .databases)
         environmentID = container.flexInt(.environmentID)
     }
 }

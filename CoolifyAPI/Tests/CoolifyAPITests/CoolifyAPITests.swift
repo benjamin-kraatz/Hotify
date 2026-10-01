@@ -577,6 +577,126 @@ final class CoolifyAPITests: XCTestCase {
         XCTAssertTrue(updated.isShownOnce)
         try await client.deleteEnvironmentVariable("env-3", from: .database("db-1"))
     }
+
+    func testServiceCreationSendsOnlyKnownFieldsAndReadsConflicts() async throws {
+        let client = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/api/v1/services")
+            // Coolify 4.3 rejects unknown keys with 422, so a missing destination must leave the key out.
+            XCTAssertEqual(
+                bodyText(request),
+                #"{"environment_uuid":"env-1","instant_deploy":false,"name":"blog","project_uuid":"proj-1","server_uuid":"srv-1","type":"ghost"}"#
+            )
+            let body = #"""
+                {"message":"Domain conflicts detected. Use force_domain_override=true to proceed.",
+                 "conflicts":[{"domain":"blog.example.com","resource_name":"marketing-site","resource_type":"application"}]}
+                """#
+            return (409, Data(body.utf8), [:])
+        }
+        do {
+            _ = try await client.createService(
+                ServiceDraft(
+                    type: "ghost", name: "blog", serverUUID: "srv-1", projectUUID: "proj-1", environmentUUID: "env-1")
+            )
+            XCTFail("A conflict should throw")
+        } catch let error as CoolifyError {
+            XCTAssertEqual(error.statusCode, 409)
+            XCTAssertEqual(
+                error.conflicts,
+                [
+                    DomainConflict(
+                        domain: "blog.example.com", resourceName: "marketing-site", resourceType: "application")
+                ])
+        }
+    }
+
+    func testProvisioningWritesShape() async throws {
+        let client = try makeClient { request in
+            let method = request.httpMethod ?? ""
+            let path = request.url?.path ?? ""
+            switch (method, path) {
+            case ("PATCH", "/api/v1/services/svc-1"):
+                XCTAssertEqual(
+                    bodyText(request),
+                    #"{"force_domain_override":true,"urls":[{"name":"ghost","url":"https:\/\/blog.example.com"}]}"#)
+                return (200, Data(#"{"uuid":"svc-1","domains":["https://blog.example.com"]}"#.utf8), [:])
+            case ("PATCH", "/api/v1/services/svc-1/envs/bulk"):
+                XCTAssertEqual(bodyText(request), #"{"data":[{"key":"MAIL_HOST","value":"smtp.example.com"}]}"#)
+                return (201, Data(#"[{"uuid":"env-1","key":"MAIL_HOST","value":"smtp.example.com"}]"#.utf8), [:])
+            case ("DELETE", "/api/v1/services/svc-1"):
+                XCTAssertEqual(
+                    queryItems(request),
+                    [
+                        URLQueryItem(name: "delete_configurations", value: "true"),
+                        URLQueryItem(name: "delete_volumes", value: "true"),
+                        URLQueryItem(name: "docker_cleanup", value: "true"),
+                        URLQueryItem(name: "delete_connected_networks", value: "true"),
+                    ])
+                return (200, Data(#"{"message":"Service deletion request queued."}"#.utf8), [:])
+            case ("POST", "/api/v1/projects"):
+                XCTAssertEqual(bodyText(request), #"{"name":"Website"}"#)
+                return (201, Data(#"{"uuid":"proj-2"}"#.utf8), [:])
+            case ("POST", "/api/v1/projects/proj-2/environments"):
+                XCTAssertEqual(bodyText(request), #"{"name":"staging"}"#)
+                return (201, Data(#"{"uuid":"env-2"}"#.utf8), [:])
+            default:
+                XCTFail("Unexpected \(method) \(path)")
+                return (500, Data(), [:])
+            }
+        }
+
+        let updated = try await client.updateService(
+            "svc-1",
+            ServiceUpdate(
+                urls: [ServiceDomain(name: "ghost", url: "https://blog.example.com")], forceDomainOverride: true)
+        )
+        XCTAssertEqual(updated.domains, ["https://blog.example.com"])
+        let saved = try await client.setEnvironmentVariables(
+            [EnvironmentVariableValue(key: "MAIL_HOST", value: "smtp.example.com")], on: .service("svc-1"))
+        XCTAssertEqual(saved.first?.key, "MAIL_HOST")
+        try await client.deleteService("svc-1")
+        let project = try await client.createProject(name: "Website")
+        let environment = try await client.createEnvironment(name: "staging", inProject: project.uuid)
+        XCTAssertEqual(environment.uuid, "env-2")
+    }
+
+    func testTemplateFeedKeepsSlugsAndOutlinesCompose() throws {
+        let compose = """
+            services:
+              ghost:
+                image: 'ghost:5'
+                environment:
+                  - SERVICE_URL_GHOST_2368
+                  - 'database__connection__password=$SERVICE_PASSWORD_MYSQL'
+                  - 'database__connection__database=${MYSQL_DATABASE-ghost}'
+                  - 'mail__options__host=${MAIL_OPTIONS_HOST}'
+                  - 'ADMIN_EMAIL=${ADMIN_EMAIL:?}'
+              mysql:
+                image: "mysql:8.0"
+            volumes:
+              ghost-content-data: {}
+            """
+        let feed = """
+            {
+              "denoKV": {"slogan": "Deno KV", "compose": "\(Data(compose.utf8).base64EncodedString())", "port": 4512,
+                         "tags": ["database"], "logo": "svgs/deno.svg", "template_last_updated_at": "2026-02-03T22:32:03+01:00"},
+              "sparse": {"tags": "not a list"},
+              "odd": 7
+            }
+            """
+        let templates = try ServiceTemplateFeed.templates(from: Data(feed.utf8))
+        XCTAssertEqual(templates.map(\.slug), ["denoKV", "sparse"])
+        let template = try XCTUnwrap(templates.first)
+        XCTAssertEqual(template.port, "4512")
+        XCTAssertNotNil(template.updatedAtDate)
+
+        let outline = template.outline
+        XCTAssertEqual(outline.containers.map(\.name), ["ghost", "mysql"])
+        XCTAssertEqual(outline.containers.map(\.image), ["ghost:5", "mysql:8.0"])
+        XCTAssertEqual(outline.variables.map(\.key), ["MYSQL_DATABASE", "MAIL_OPTIONS_HOST", "ADMIN_EMAIL"])
+        XCTAssertEqual(outline.variables.first?.defaultValue, "ghost")
+        XCTAssertEqual(outline.requiredKeys, ["ADMIN_EMAIL"])
+    }
 }
 
 /// URLSession hands a protocol the body as a stream, not as `httpBody`.

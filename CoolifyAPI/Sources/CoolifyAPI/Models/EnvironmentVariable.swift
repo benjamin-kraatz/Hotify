@@ -95,3 +95,14 @@ public struct EnvironmentVariableDraft: Encodable, Sendable, Hashable {
         self.comment = comment
     }
 }
+
+/// One key and value for a bulk write. Coolify creates the key if it is missing and leaves the other flags alone.
+public struct EnvironmentVariableValue: Encodable, Sendable, Hashable {
+    public var key: String
+    public var value: String
+
+    public init(key: String, value: String) {
+        self.key = key
+        self.value = value
+    }
+}
