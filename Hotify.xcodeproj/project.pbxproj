@@ -7,12 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		000000000000000161000000 /* HotifyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000000220 /* HotifyWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		000000000000000251000000 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000250000000 /* CoolifyAPI */; };
 		3302C87E306AD482001B6155 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3302C87D306AD482001B6155 /* CoolifyAPI */; };
 		3302C881306AD494001B6155 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3302C880306AD494001B6155 /* CoolifyAPI */; };
 		3302C887306AD532001B6155 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3302C886306AD532001B6155 /* CoolifyAPI */; };
 		33F663E8306AD1DD00682500 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = 33F663E7306AD1DD00682500 /* PostHog */; };
-		000000000000000161000000 /* HotifyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000000220 /* HotifyWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		000000000000000251000000 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000250000000 /* CoolifyAPI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -29,7 +29,7 @@
 		000000000000000160000000 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolder = PlugIns;
 			files = (
 				000000000000000161000000 /* HotifyWidgets.appex in Embed Foundation Extensions */,
 			);
@@ -418,6 +418,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Hotify-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Hotify;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "Download files from your server onto your device.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Hotify asks for Face ID before it shows environment variable values.";
@@ -491,6 +492,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Hotify-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Hotify;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "Download files from your server onto your device.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Hotify asks for Face ID before it shows environment variable values.";
@@ -550,8 +552,16 @@
 				INFOPLIST_FILE = "HotifyWidgets-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Hotify;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
 				MARKETING_VERSION = 0.2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sebastiankraatz.Hotify.Widgets;
@@ -588,8 +598,16 @@
 				INFOPLIST_FILE = "HotifyWidgets-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Hotify;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
 				MARKETING_VERSION = 0.2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sebastiankraatz.Hotify.Widgets;
@@ -657,6 +675,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		000000000000000250000000 /* CoolifyAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3302C885306AD532001B6155 /* XCLocalSwiftPackageReference "CoolifyAPI" */;
+			productName = CoolifyAPI;
+		};
 		3302C87D306AD482001B6155 /* CoolifyAPI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 33F663E6306AD1DD00682500 /* XCRemoteSwiftPackageReference "posthog-ios" */;
@@ -668,11 +691,6 @@
 		};
 		3302C886306AD532001B6155 /* CoolifyAPI */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = CoolifyAPI;
-		};
-		000000000000000250000000 /* CoolifyAPI */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 3302C885306AD532001B6155 /* XCLocalSwiftPackageReference "CoolifyAPI" */;
 			productName = CoolifyAPI;
 		};
 		33F663E7306AD1DD00682500 /* PostHog */ = {
