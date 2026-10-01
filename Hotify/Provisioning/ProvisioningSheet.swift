@@ -3,8 +3,9 @@ import SwiftUI
 
 /// From template to running service in one sheet: choose, place, set up, start.
 ///
-/// The service only exists in Coolify once the user creates it on the second step. From there the sheet cannot go
-/// back, and closing it keeps or deletes the service on purpose.
+/// Each step is a screen pushed onto the sheet's navigation stack, so going back from a template is the system's
+/// own back button and swipe. The service only exists in Coolify once the user creates it on the second step.
+/// From there the screens hide their way back, and closing the sheet keeps or deletes the service on purpose.
 struct ProvisioningSheet: View {
     var client: CoolifyClient?
     var instanceID: UUID?
@@ -13,8 +14,7 @@ struct ProvisioningSheet: View {
     var onClose: (ResourceRoute?) -> Void
 
     @State private var model: ProvisioningModel
-    @State private var chosen: ServiceTemplate?
-    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var path: [ProvisioningRoute] = []
 
     init(
         client: CoolifyClient?,
@@ -30,60 +30,22 @@ struct ProvisioningSheet: View {
         _model = State(initialValue: model)
     }
 
-    private var step: ProvisioningStep {
-        switch model.stage {
-        case .choosing: chosen == nil ? .choose : .place
-        case .settingUp: .setUp
-        case .starting: .start
-        }
-    }
-
     var body: some View {
-        NavigationStack {
-            ZStack {
-                switch model.stage {
-                case .choosing:
-                    chooser
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                case .settingUp:
-                    ServiceSetup(model: model, onClose: onClose)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                case .starting:
-                    IgnitionView(
-                        name: model.serviceName,
-                        ignition: model.ignition,
-                        addresses: addresses,
-                        onOpen: { onClose(model.route) },
-                        onClose: { onClose(nil) }
-                    )
-                    .task { await model.watch() }
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+        NavigationStack(path: $path) {
+            gallery
+                .navigationDestination(for: ProvisioningRoute.self) { route in
+                    destination(route)
                 }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                ProvisioningSteps(current: step, isFinished: model.ignition.phase == .running && step == .start)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(.bar)
-                    .overlay(alignment: .bottom) { Divider() }
-            }
-            .toolbar {
-                if model.stage == .choosing {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { onClose(nil) }
-                            .disabled(model.isCreating)
-                    }
-                }
-            }
-            #if os(iOS)
-            .navigationTitle(step == .choose ? "New Service" : "")
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
         }
         .tint(.ember)
-        .animation(reduceMotion ? nil : .snappy, value: model.stage)
-        .animation(reduceMotion ? nil : .snappy, value: chosen?.slug)
+        // Creating and starting move the sheet on by themselves. The stages only ever go forward.
+        .onChange(of: model.stage) { _, stage in
+            switch stage {
+            case .choosing: break
+            case .settingUp: path.append(.setUp)
+            case .starting: path.append(.start)
+            }
+        }
         // Once the service exists, closing has to keep or delete it, which the setup step asks about.
         .interactiveDismissDisabled(model.stage != .choosing || model.isCreating)
         #if os(macOS)
@@ -97,32 +59,60 @@ struct ProvisioningSheet: View {
         }
     }
 
-    @ViewBuilder
-    private var chooser: some View {
-        ZStack {
-            if let chosen {
-                TemplateLaunchPad(template: chosen, model: model, instanceRoot: model.instanceRoot) {
-                    self.chosen = nil
+    private var gallery: some View {
+        TemplateGallery(
+            shelves: catalog.shelves,
+            instanceRoot: model.instanceRoot,
+            isLoading: catalog.isLoading,
+            loadError: catalog.loadError,
+            onRetry: { Task { await catalog.refresh() } },
+            onSelect: { template in
+                model.createProblem = nil
+                // Keep a name the user typed. One that is a template's slug was filled in here.
+                if model.name.isEmpty || catalog.template(model.name) != nil {
+                    model.name = template.slug
                 }
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            } else {
-                TemplateGallery(
-                    shelves: catalog.shelves,
-                    instanceRoot: model.instanceRoot,
-                    isLoading: catalog.isLoading,
-                    loadError: catalog.loadError,
-                    onRetry: { Task { await catalog.refresh() } },
-                    onSelect: { template in
-                        model.createProblem = nil
-                        // Keep a name the user typed. One that is a template's slug was filled in here.
-                        if model.name.isEmpty || catalog.template(model.name) != nil {
-                            model.name = template.slug
-                        }
-                        chosen = template
-                    }
-                )
-                .transition(.move(edge: .leading).combined(with: .opacity))
+                path.append(.template(template))
             }
+        )
+        .provisioningStep(.choose)
+        .navigationTitle("New Service")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { onClose(nil) }
+                    .disabled(model.isCreating)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func destination(_ route: ProvisioningRoute) -> some View {
+        switch route {
+        case .template(let template):
+            TemplateLaunchPad(template: template, model: model, instanceRoot: model.instanceRoot)
+                .provisioningStep(.place)
+                .navigationTitle(template.displayName)
+                #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+                #endif
+                // Creating is under way, and its result decides where the sheet goes next.
+                .navigationBarBackButtonHidden(model.isCreating)
+        case .setUp:
+            ServiceSetup(model: model, onClose: onClose)
+                .provisioningStep(.setUp)
+        case .start:
+            IgnitionView(
+                name: model.serviceName,
+                ignition: model.ignition,
+                addresses: addresses,
+                onOpen: { onClose(model.route) },
+                onClose: { onClose(nil) }
+            )
+            .task { await model.watch() }
+            .provisioningStep(.start, isFinished: model.ignition.phase == .running)
         }
     }
 
@@ -130,6 +120,29 @@ struct ProvisioningSheet: View {
     private var addresses: [URL] {
         model.setup.domains.compactMap { domain in
             domain.trimmed.split(separator: ",").first.flatMap { URL(string: String($0)) }
+        }
+    }
+}
+
+/// A screen on the provisioning sheet's navigation stack.
+enum ProvisioningRoute: Hashable {
+    /// One template up close, where the service is placed, named, and created.
+    case template(ServiceTemplate)
+    /// The created service's domains and settings, before its first start.
+    case setUp
+    /// The first start, watched until the service runs.
+    case start
+}
+
+extension View {
+    /// Puts the row of step flames under the navigation bar, saying how far along the sheet is.
+    fileprivate func provisioningStep(_ step: ProvisioningStep, isFinished: Bool = false) -> some View {
+        safeAreaInset(edge: .top, spacing: 0) {
+            ProvisioningSteps(current: step, isFinished: isFinished)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(.bar)
+                .overlay(alignment: .bottom) { Divider() }
         }
     }
 }
