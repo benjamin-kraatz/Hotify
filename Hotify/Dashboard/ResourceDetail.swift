@@ -1,7 +1,8 @@
 import CoolifyAPI
 import SwiftUI
 
-/// Deployments, containers, logs, and variables for one application, database, or service. Polls while it is on screen.
+/// Deployments, containers, logs, variables, and settings for one application, database, or service. Polls while it
+/// is on screen.
 struct ResourceDetailScreen: View {
     var client: CoolifyClient?
     var resource: ResourceSummary
@@ -15,6 +16,7 @@ struct ResourceDetailScreen: View {
 
     @State private var model: ResourceDetailModel
     @State private var variables: VariablesModel
+    @State private var configuration: ConfigurationModel
     @State private var previews = PreviewsModel()
     @State private var chosenContainerID: Int?
     @State private var tab: DetailTab?
@@ -29,6 +31,7 @@ struct ResourceDetailScreen: View {
         entry: ResourceEntry? = nil,
         model: ResourceDetailModel = ResourceDetailModel(),
         variables: VariablesModel = VariablesModel(),
+        configuration: ConfigurationModel = ConfigurationModel(),
         back: DetailBack? = nil,
         onOpenProject: (() -> Void)? = nil,
         onAction: @escaping (ResourceAction) -> Void
@@ -45,6 +48,7 @@ struct ResourceDetailScreen: View {
         }
         _model = State(initialValue: model)
         _variables = State(initialValue: variables)
+        _configuration = State(initialValue: configuration)
         switch entry?.place {
         case .deployments:
             _tab = State(initialValue: .deployments)
@@ -90,6 +94,7 @@ struct ResourceDetailScreen: View {
             logLineCount: $model.logLineCount,
             deployments: model.deployments,
             variables: variables,
+            configuration: configuration,
             previewsModel: previews,
             loadError: model.loadError,
             actionError: actionError,
@@ -108,6 +113,7 @@ struct ResourceDetailScreen: View {
             guard let client else { return }
             model.prepare(client, route: resource.route)
             variables.prepare(client, route: resource.route)
+            configuration.prepare(client, route: resource.route)
             previews.prepare(client, route: resource.route)
             Task { await previews.load() }
             await model.setLogSource(logSource)
@@ -148,6 +154,7 @@ struct ResourceDetail: View {
     @Binding var logLineCount: Int
     var deployments: [DeploymentLine]
     var variables: VariablesModel
+    var configuration = ConfigurationModel()
     var previewsModel = PreviewsModel()
     var loadError: String?
     var actionError: String?
@@ -174,9 +181,9 @@ struct ResourceDetail: View {
 
     private var tabs: [DetailTab] {
         switch resource.kind {
-        case .application: [.logs, .deployments, .variables]
-        case .service: [.logs, .containers, .variables]
-        case .database: [.logs, .backups, .variables]
+        case .application: [.logs, .deployments, .variables, .settings]
+        case .service: [.logs, .containers, .variables, .settings]
+        case .database: [.logs, .backups, .variables, .settings]
         }
     }
 
@@ -270,10 +277,11 @@ struct ResourceDetail: View {
             }
         }
         .animation(reduceMotion ? nil : .snappy, value: previewPlace == nil)
-        // A restart or deploy started anywhere puts saved variable changes to use.
+        // A restart or deploy started anywhere puts saved variables and settings to use.
         .onChange(of: pendingAction) { _, action in
             if action == .start || action == .deploy || action == .restart {
                 variables.hasUnappliedChanges = false
+                configuration.hasUnappliedChanges = false
             }
         }
         .navigationTitle(title)
@@ -418,6 +426,13 @@ struct ResourceDetail: View {
                         pendingAction: pendingAction,
                         onAction: onAction
                     )
+                case .settings:
+                    ConfigurationView(
+                        model: configuration,
+                        resource: resource,
+                        pendingAction: pendingAction,
+                        onAction: onAction
+                    )
                 case .logs:
                     LogView(
                         lines: logLines,
@@ -447,6 +462,7 @@ enum DetailTab: Identifiable, Hashable {
     case containers
     case logs
     case variables
+    case settings
 
     var id: Self { self }
 
@@ -457,6 +473,7 @@ enum DetailTab: Identifiable, Hashable {
         case .containers: "Containers"
         case .logs: "Logs"
         case .variables: "Variables"
+        case .settings: "Settings"
         }
     }
 }

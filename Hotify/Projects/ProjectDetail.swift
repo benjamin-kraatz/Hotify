@@ -19,6 +19,8 @@ struct ProjectDetailScreen: View {
     /// Reloads the dashboard's projects, after a rename or a new environment.
     var onChanged: () async -> Void
 
+    @SwiftUI.Environment(\.placePalette) private var palette
+
     private var activity: ProjectActivityModel { page.activity }
 
     private var applicationUUIDs: [String] {
@@ -80,9 +82,12 @@ struct ProjectDetailScreen: View {
         }
     }
 
-    private func addEnvironment(name: String) async throws {
+    private func addEnvironment(name: String, tint: PlaceTint?) async throws {
         try await write { client in
-            _ = try await client.createEnvironment(name: name, inProject: project.id)
+            let created = try await client.createEnvironment(name: name, inProject: project.id)
+            if let tint {
+                palette.setEnvironment(tint, for: created.uuid)
+            }
         }
     }
 
@@ -132,7 +137,7 @@ struct ProjectDetail: View {
     var onOpen: (ResourceRoute, ResourceEntry?) -> Void = { _, _ in }
     var onAction: (ResourceAction, ResourceRoute) -> Void = { _, _ in }
     var onSaveProject: (_ name: String, _ description: String) async throws -> Void = { _, _ in }
-    var onAddEnvironment: (_ name: String) async throws -> Void = { _ in }
+    var onAddEnvironment: (_ name: String, _ tint: PlaceTint?) async throws -> Void = { _, _ in }
     var onSaveEnvironment: (EnvironmentSummary, _ name: String, _ description: String) async throws -> Void = {
         _, _, _ in
     }
@@ -142,6 +147,7 @@ struct ProjectDetail: View {
     /// The popover at the toolbar menu. The overview has one of its own at its button.
     @State private var isAddingEnvironment = false
     @State private var reloads = 0
+    @SwiftUI.Environment(\.placePalette) private var palette
 
     private var activity: ProjectActivityModel { page.activity }
 
@@ -169,7 +175,7 @@ struct ProjectDetail: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ProjectHeader(project: project, heats: heats)
+            ProjectHeader(project: project, heats: heats, tint: palette.project(project.id))
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
                 .padding(.bottom, 18)
@@ -260,8 +266,9 @@ struct ProjectDetail: View {
                 .disabled(!canEdit)
                 .help("Edit \(project.name), add an environment, or reload")
                 .popover(isPresented: $isAddingEnvironment, arrowEdge: .bottom) {
-                    NewEnvironmentPopover(
-                        projectName: project.name,
+                    NewPlacePopover(
+                        kind: .environment,
+                        note: "It starts empty in \(project.name). Resources are created in it from Coolify.",
                         takenNames: Set(project.environments.map(\.name)),
                         onAdd: onAddEnvironment
                     )
@@ -288,7 +295,10 @@ struct ProjectDetail: View {
                 namePrompt: "Project name",
                 name: project.name,
                 description: project.description ?? "",
-                onSave: onSaveProject
+                tint: palette.project(project.id),
+                canTint: palette.canEdit,
+                onSave: onSaveProject,
+                onTint: { palette.setProject($0, for: project.id) }
             )
         case .editEnvironment(let environment):
             PlaceEditor(
@@ -297,8 +307,15 @@ struct ProjectDetail: View {
                 name: environment.name,
                 description: environment.description ?? "",
                 takenNames: names.subtracting([environment.name]),
+                tint: palette.environment(environment.uuid),
+                canTint: palette.canEdit && environment.uuid != nil,
                 onSave: { name, description in
                     try await onSaveEnvironment(environment, name, description)
+                },
+                onTint: { tint in
+                    if let uuid = environment.uuid {
+                        palette.setEnvironment(tint, for: uuid)
+                    }
                 }
             )
         }

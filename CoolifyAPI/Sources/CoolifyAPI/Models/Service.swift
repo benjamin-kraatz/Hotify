@@ -36,6 +36,7 @@ public struct ServiceApplication: Decodable, Sendable, Identifiable, Hashable, H
 public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceStatus {
     public var uuid: String
     public var name: String
+    public var description: String?
     public var status: String?
     public var serviceType: String?
     public var applications: [ServiceApplication]?
@@ -48,6 +49,7 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
     enum CodingKeys: String, CodingKey {
         case uuid
         case name
+        case description
         case status
         case serviceType
         case applications
@@ -59,6 +61,7 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
         let container = try decoder.container(keyedBy: CodingKeys.self)
         uuid = try container.decode(String.self, forKey: .uuid)
         name = container.flexString(.name) ?? ""
+        description = container.flexString(.description)
         status = container.flexString(.status)
         serviceType = container.flexString(.serviceType)
         applications = try container.decodeIfPresent([ServiceApplication].self, forKey: .applications)

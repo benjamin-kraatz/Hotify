@@ -9,6 +9,8 @@ struct ResourcePlace: Hashable {
     var environmentName: String
     /// Orders environments the way Coolify creates them, so production usually leads.
     var environmentID: Int
+    /// Keys the environment's color. `nil` when Coolify sent the environment without one.
+    var environmentUUID: String?
 
     /// Maps Coolify environment ids to places. Needs projects fetched one by one; the list omits environments.
     static func index(_ projects: [Project]) -> [Int: ResourcePlace] {
@@ -21,7 +23,8 @@ struct ResourcePlace: Hashable {
                     projectID: project.uuid,
                     projectName: projectName,
                     environmentName: environment.name ?? "",
-                    environmentID: id
+                    environmentID: id,
+                    environmentUUID: environment.uuid.flatMap { $0.isEmpty ? nil : $0 }
                 )
             }
         }

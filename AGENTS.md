@@ -7,11 +7,12 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
 - `Hotify/` is the app target.
   - `App/` has the entry point.
   - `Design/` has the app's look: the stokable flame and its fire, heat edges, wells, and the filter field.
+  - `Configuration/` is a resource's Settings tab: its name and description, its domains, a database's public port, and its health check, in one form with one Save.
   - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource.
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
-  - `Projects/` shows one project: its resources by environment, the previews of all its applications, and the variables the project and its environments share. It opens from the project's head in the dashboard and takes the detail column. A resource opened from it offers the way back.
+  - `Projects/` shows one project: its resources by environment, the previews of all its applications, and the variables the project and its environments share. It opens from the project's head in the dashboard and takes the detail column. A resource opened from it offers the way back. It also holds the colors you give projects and environments: `PlaceColors` keeps them per instance, on the device and in iCloud key-value storage, since Coolify has no such field.
   - `Provisioning/` creates services from Coolify's one-click templates: a gallery, then placement, setup, and the first start, in one sheet that opens from the dashboard's New Service button.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
@@ -94,6 +95,7 @@ The live tests in `LiveCoolifyTests.swift` skip unless `COOLIFY_LIVE_TESTS=1` is
 - A `FilterField` icon that opens a menu has to filter something. The dashboard's narrows the list by state and by kind, and lights up while a filter is on.
 - Show status through `Heat` and `FlameGlyph`. A lit red flame means running, and a grey outline means stopped. Anything starting, unhealthy, or failed glows amber. Never use red for an error.
 - Use the asset colors `ember`, `glow`, and `core`, not raw hex. The accent is `ember`.
+- A project's or environment's own color, a `PlaceTint`, says where something lives, never how it is doing. Show it as a `PlaceMark` dot beside the name, or wash an `EnvironmentBadge` in it, and read it from the `placePalette` environment value. Anywhere a project or environment is created or edited offers a `PlaceTintPicker`.
 - Pull request previews burn blue, like a pilot light. Pass `tone: .preview` to `FlameGlyph` and `heatEdge`, and use `pilot` and `pilotCore` for preview marks, never for production. A building preview keeps its blue body with an amber core. A failed one glows amber like anything else.
 - `Font.display` is the only custom type style. Use it for names that head a screen and nothing else.
 - Animate a state change the user can act on or should notice. Respect Reduce Motion.

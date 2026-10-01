@@ -14,6 +14,8 @@ struct ProjectGroup<Row: View>: View {
     /// A resource's row, without the highlight and the click. The group adds those.
     @ViewBuilder var row: (ResourceSummary) -> Row
 
+    @SwiftUI.Environment(\.placePalette) private var palette
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             head
@@ -27,8 +29,10 @@ struct ProjectGroup<Row: View>: View {
 
     @ViewBuilder
     private var head: some View {
-        let header = ProjectSectionHeader(section: section, heats: section.resources.map(heat))
-            .padding(.vertical, 8)
+        let header = ProjectSectionHeader(
+            section: section, heats: section.resources.map(heat), tint: palette.project(section.projectID)
+        )
+        .padding(.vertical, 8)
         if let projectID = section.projectID {
             let route = DetailRoute.project(projectID)
             DashboardRowButton(isSelected: selection == route) {
@@ -52,10 +56,14 @@ struct ProjectGroup<Row: View>: View {
         VStack(alignment: .leading, spacing: 2) {
             // Resources Hotify could not place have no environment to name.
             if section.projectID != nil {
-                EnvironmentHeading(name: environment.name, heats: environment.resources.map(heat))
-                    .padding(.horizontal, DashboardRowMetrics.inset)
-                    .padding(.top, 7)
-                    .padding(.bottom, 5)
+                EnvironmentHeading(
+                    name: environment.name,
+                    heats: environment.resources.map(heat),
+                    tint: palette.environment(environment.uuid)
+                )
+                .padding(.horizontal, DashboardRowMetrics.inset)
+                .padding(.top, 7)
+                .padding(.bottom, 5)
             }
             ForEach(environment.resources) { resource in
                 let route = DetailRoute.resource(resource.route)

@@ -8,6 +8,12 @@ public struct Database: Decodable, Sendable, Identifiable, Hashable, HasResource
     /// The engine, such as `standalone-postgresql`. Coolify appends this attribute; the OpenAPI schema omits it.
     public var databaseType: String?
     public var environmentID: Int?
+    public var description: String?
+    /// Whether the proxy lets the internet reach the database on `publicPort`.
+    public var isPublic: Bool?
+    public var publicPort: Int?
+    /// Only `isEnabled` and the timings apply to a database.
+    public var healthCheck: HealthCheck?
 
     public var id: String { uuid }
 
@@ -17,6 +23,9 @@ public struct Database: Decodable, Sendable, Identifiable, Hashable, HasResource
         case status
         case databaseType
         case environmentID = "environmentId"
+        case description
+        case isPublic
+        case publicPort
     }
 
     public init(from decoder: Decoder) throws {
@@ -26,5 +35,9 @@ public struct Database: Decodable, Sendable, Identifiable, Hashable, HasResource
         status = container.flexString(.status)
         databaseType = container.flexString(.databaseType)
         environmentID = container.flexInt(.environmentID)
+        description = container.flexString(.description)
+        isPublic = container.flexBool(.isPublic)
+        publicPort = container.flexInt(.publicPort)
+        healthCheck = try? HealthCheck(from: decoder)
     }
 }

@@ -14,11 +14,12 @@ struct ProjectOverview: View {
     var onAction: (ResourceAction, ResourceSummary) -> Void = { _, _ in }
     /// `nil` leaves the environment controls out, as without a connection.
     var onEditEnvironment: ((EnvironmentSummary) -> Void)?
-    /// Creates an environment by name. `nil` leaves the button out, as without a connection.
-    var onAddEnvironment: ((_ name: String) async throws -> Void)?
+    /// Creates an environment by name, with its color. `nil` leaves the button out, as without a connection.
+    var onAddEnvironment: ((_ name: String, _ tint: PlaceTint?) async throws -> Void)?
 
     @State private var stopCandidate: ResourceSummary?
     @State private var isAddingEnvironment = false
+    @SwiftUI.Environment(\.placePalette) private var palette
 
     private var groups: [EnvironmentGroup] {
         let members = Dictionary(grouping: resources) { $0.place?.environmentID ?? -1 }
@@ -35,7 +36,11 @@ struct ProjectOverview: View {
             let resources = members[id] ?? []
             groups.append(
                 EnvironmentGroup(
-                    environment: EnvironmentSummary(id: id, name: resources.first?.place?.environmentName ?? ""),
+                    environment: EnvironmentSummary(
+                        id: id,
+                        uuid: resources.first?.place?.environmentUUID,
+                        name: resources.first?.place?.environmentName ?? ""
+                    ),
                     resources: resources.sortedForDisplay(),
                     isListed: false
                 )
@@ -114,9 +119,13 @@ struct ProjectOverview: View {
         .animation(.snappy, value: isLoadingDeployments)
     }
 
-    private func newEnvironment(_ onAdd: @escaping (String) async throws -> Void) -> some View {
-        NewEnvironmentPopover(
-            projectName: project.name, takenNames: Set(project.environments.map(\.name)), onAdd: onAdd)
+    private func newEnvironment(_ onAdd: @escaping (String, PlaceTint?) async throws -> Void) -> some View {
+        NewPlacePopover(
+            kind: .environment,
+            note: "It starts empty in \(project.name). Resources are created in it from Coolify.",
+            takenNames: Set(project.environments.map(\.name)),
+            onAdd: onAdd
+        )
     }
 
     // MARK: Environments
@@ -126,10 +135,13 @@ struct ProjectOverview: View {
         let running = heats.count { $0 == .lit }
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(group.environment.name.isEmpty ? "Environment" : group.environment.name)
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    PlaceMark(tint: palette.environment(group.environment.uuid))
+                    Text(group.environment.name.isEmpty ? "Environment" : group.environment.name)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .font(.headline)
                 if let description = group.environment.description {
                     Text(description)
                         .font(.subheadline)
@@ -283,6 +295,8 @@ private struct ProjectRow<Content: View>: View {
 private struct ProjectDeploymentRow: View {
     var deployment: ProjectDeployment
 
+    @SwiftUI.Environment(\.placePalette) private var palette
+
     private var line: DeploymentLine { deployment.line }
 
     var body: some View {
@@ -301,7 +315,7 @@ private struct ProjectDeploymentRow: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                         if let environment = deployment.environmentName, !environment.isEmpty {
-                            EnvironmentBadge(name: environment)
+                            EnvironmentBadge(name: environment, tint: palette.environment(deployment.environmentUUID))
                         }
                         if line.isRestart {
                             Tag(text: "Restart")
@@ -344,14 +358,15 @@ private struct ProjectDeploymentRow: View {
 #Preview {
     let now = Date.now
     let production = ResourcePlace(
-        projectID: "website", projectName: "Website", environmentName: "production", environmentID: 1)
+        projectID: "website", projectName: "Website", environmentName: "production", environmentID: 1,
+        environmentUUID: "env-prod")
     ProjectOverview(
         project: ProjectSummary(
             id: "website",
             name: "Website",
             environments: [
-                EnvironmentSummary(id: 1, name: "production", description: "What customers see"),
-                EnvironmentSummary(id: 2, name: "staging"),
+                EnvironmentSummary(id: 1, uuid: "env-prod", name: "production", description: "What customers see"),
+                EnvironmentSummary(id: 2, uuid: "env-staging", name: "staging"),
             ]
         ),
         resources: [
@@ -405,9 +420,10 @@ private struct ProjectDeploymentRow: View {
         ],
         onOpen: { _ in },
         onEditEnvironment: { _ in },
-        onAddEnvironment: { _ in }
+        onAddEnvironment: { _, _ in }
     )
     .frame(width: 600, height: 640)
+    .environment(\.placePalette, .preview(environments: ["env-prod": .orange, "env-staging": .indigo]))
 }
 
 #Preview("Empty") {
@@ -415,7 +431,7 @@ private struct ProjectDeploymentRow: View {
         project: ProjectSummary(id: "new", name: "Side project"),
         resources: [],
         onOpen: { _ in },
-        onAddEnvironment: { _ in }
+        onAddEnvironment: { _, _ in }
     )
     .frame(width: 600, height: 420)
 }

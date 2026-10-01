@@ -16,6 +16,10 @@ struct DashboardView: View {
     @State private var filter = ResourceFilter()
     @State private var stopCandidate: ResourceSummary?
     @State private var refreshes = 0
+    @SwiftUI.Environment(\.placePalette) private var palette
+    #if os(iOS)
+    @Environment(\.openURL) private var openURL
+    #endif
     #if os(macOS)
     @FocusState private var isFiltering: Bool
     /// Whether the arrow keys go to the list.
@@ -220,15 +224,23 @@ struct DashboardView: View {
             ForEach(sections) { section in
                 Section {
                     if let projectID = section.projectID {
-                        ProjectSectionHeader(section: section, heats: section.resources.map(heat(of:)))
-                            .tag(DetailRoute.project(projectID))
+                        ProjectSectionHeader(
+                            section: section,
+                            heats: section.resources.map(heat(of:)),
+                            tint: palette.project(projectID)
+                        )
+                        .tag(DetailRoute.project(projectID))
                     }
                     ForEach(section.environments) { environment in
                         if section.projectID != nil {
-                            EnvironmentHeading(name: environment.name, heats: environment.resources.map(heat(of:)))
-                                .listRowSeparator(.hidden)
-                                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
-                                .selectionDisabled()
+                            EnvironmentHeading(
+                                name: environment.name,
+                                heats: environment.resources.map(heat(of:)),
+                                tint: palette.environment(environment.uuid)
+                            )
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+                            .selectionDisabled()
                         }
                         ForEach(environment.resources) { resource in
                             row(resource)
@@ -265,7 +277,15 @@ struct DashboardView: View {
             }
             #if os(iOS)
         .swipeActions(edge: .leading) {
-            ForEach(actions.filter { $0 == .deploy || $0 == .restart }) { action in
+            // The first button is the one a full swipe runs, so opening the site comes before the action.
+            if let link = resource.link {
+                Button("Open", systemImage: "safari") {
+                    openURL(link)
+                }
+                .tint(.gray)
+            }
+            // An application offers Redeploy ahead of Restart, and the rest offer only Restart.
+            if let action = actions.first(where: { $0 == .deploy || $0 == .restart }) {
                 swipeButton(action, on: resource, isBusy: action.isBlocked(by: pendingAction))
             }
         }

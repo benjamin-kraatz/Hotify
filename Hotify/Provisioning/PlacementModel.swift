@@ -102,40 +102,41 @@ final class PlacementModel {
     }
 
     /// Creates a project and puts the service in it. Coolify gives every new project a `production` environment.
-    func createProject(named name: String) async {
-        guard let client else { return }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+    /// Returns the project's uuid. Throws a message for the form that named it.
+    func createProject(named name: String) async throws -> String {
+        guard let client else { throw PlaceWriteError(message: "Hotify is not connected to this instance.") }
         isCreatingPlace = true
         defer { isCreatingPlace = false }
         do {
-            let created = try await client.createProject(name: trimmed)
+            let created = try await client.createProject(name: name)
             let project = try await client.project(created.uuid)
             projects.append(project)
             projects.sort(by: Self.byName)
             selectProject(project.uuid)
-            problem = nil
+            return created.uuid
         } catch {
-            problem = ProvisioningProblem(error)
+            throw PlaceWriteError(error)
         }
     }
 
-    func createEnvironment(named name: String) async {
-        guard let client, let projectUUID = placement.projectUUID else { return }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+    /// Creates an environment in the picked project and puts the service in it. Returns the environment's uuid.
+    /// Throws a message for the form that named it.
+    func createEnvironment(named name: String) async throws -> String {
+        guard let client, let projectUUID = placement.projectUUID else {
+            throw PlaceWriteError(message: "Pick a project for the environment first.")
+        }
         isCreatingPlace = true
         defer { isCreatingPlace = false }
         do {
-            let created = try await client.createEnvironment(name: trimmed, inProject: projectUUID)
+            let created = try await client.createEnvironment(name: name, inProject: projectUUID)
             let project = try await client.project(projectUUID)
             if let index = projects.firstIndex(where: { $0.uuid == projectUUID }) {
                 projects[index] = project
             }
             placement.environmentUUID = created.uuid
-            problem = nil
+            return created.uuid
         } catch {
-            problem = ProvisioningProblem(error)
+            throw PlaceWriteError(error)
         }
     }
 

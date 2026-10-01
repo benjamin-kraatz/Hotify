@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @State private var instanceStore: InstanceStore
     @State private var menuBar: MenuBarModel
     @State private var variableLock = VariableLock()
+    @State private var placeColors: PlaceColors
     @SwiftUI.Environment(\.scenePhase) private var scenePhase
 
     #if os(macOS)
@@ -30,8 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fixtureStore = FixtureEnvironment.makeStore()
         let store = fixtureStore ?? InstanceStore()
         if fixtureStore != nil { _variableLock = State(initialValue: VariableLock(isRequired: false)) }
+        // Fixture instances write nothing to iCloud, so their colors last until the app quits.
+        _placeColors = State(
+            initialValue: fixtureStore == nil ? PlaceColors() : PlaceColors(defaults: nil, cloud: nil))
         #else
         let store = InstanceStore()
+        _placeColors = State(initialValue: PlaceColors())
         #endif
         let companion = MenuBarModel()
         companion.connect(store)
@@ -108,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .environment(instanceStore)
             .environment(variableLock)
             .environment(menuBar)
+            .environment(placeColors)
             #if os(iOS)
         .tint(.ember)
             #endif
