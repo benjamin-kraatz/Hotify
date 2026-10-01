@@ -36,10 +36,6 @@ struct PreviewSpace: View {
                     client: client,
                     application: application,
                     selectedDeployment: $followedDeployment,
-                    onBack: {
-                        followedDeployment = nil
-                        place = .board
-                    },
                     onRemove: { removalCandidate = $0 }
                 )
                 .id(number)
@@ -52,7 +48,6 @@ struct PreviewSpace: View {
                     isLoading: isLoading,
                     canLoadMore: canLoadMore,
                     onLoadMore: onLoadMore,
-                    onBack: { place = nil },
                     onDeploy: onDeploy,
                     onOpen: { number in
                         followedDeployment = nil

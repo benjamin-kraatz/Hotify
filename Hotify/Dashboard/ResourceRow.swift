@@ -4,6 +4,9 @@ import SwiftUI
 struct ResourceRow: View {
     var resource: ResourceSummary
     var pendingAction: ResourceAction?
+    /// Puts the status beside both lines, at their middle, rather than on the name's line. For a row that ends in
+    /// a chevron, which sits at the middle too.
+    var centersStatus = false
 
     private var heat: Heat {
         resource.heat(pendingAction: pendingAction)
@@ -14,6 +17,29 @@ struct ResourceRow: View {
     }
 
     var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            lines
+            if centersStatus {
+                Spacer(minLength: 0)
+                status
+            }
+        }
+        .padding(.vertical, 5)
+        .animation(.snappy, value: statusText)
+        .animation(.snappy, value: resource.buildingPreviews)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(statusText)
+    }
+
+    private var status: some View {
+        Text(statusText)
+            .font(.subheadline)
+            .foregroundStyle(heat.needsAttention ? AnyShapeStyle(.glow) : AnyShapeStyle(.secondary))
+            .contentTransition(.interpolate)
+            .lineLimit(1)
+    }
+
+    private var lines: some View {
         HStack(alignment: .top, spacing: 12) {
             FlameGlyph(heat: heat, height: 17)
                 .frame(width: 16)
@@ -25,12 +51,10 @@ struct ResourceRow: View {
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Spacer(minLength: 8)
-                    Text(statusText)
-                        .font(.subheadline)
-                        .foregroundStyle(heat.needsAttention ? AnyShapeStyle(.glow) : AnyShapeStyle(.secondary))
-                        .contentTransition(.interpolate)
-                        .lineLimit(1)
+                    if !centersStatus {
+                        Spacer(minLength: 8)
+                        status
+                    }
                 }
                 // Sections group by project, so the kind rides along on every row.
                 HStack(spacing: 8) {
@@ -53,11 +77,6 @@ struct ResourceRow: View {
                 }
             }
         }
-        .padding(.vertical, 5)
-        .animation(.snappy, value: statusText)
-        .animation(.snappy, value: resource.buildingPreviews)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(statusText)
     }
 }
 

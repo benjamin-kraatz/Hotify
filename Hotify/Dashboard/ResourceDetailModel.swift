@@ -118,13 +118,21 @@ final class ResourceDetailModel {
     private var generation = 0
     private var refreshSerial = 0
 
-    /// Clears the previous resource and points later refreshes at this one.
+    /// Shows history another screen already loaded for this resource, until the first refresh replaces it.
+    func seed(_ history: [DeploymentLine], for route: ResourceRoute) {
+        self.route = route
+        deployments = history
+    }
+
+    /// Clears the previous resource and points later refreshes at this one. History seeded for this resource stays.
     func prepare(_ client: CoolifyClient, route: ResourceRoute) {
         generation += 1
         self.client = client
+        if route != self.route {
+            deployments = []
+        }
         self.route = route
         logs = ""
-        deployments = []
         deploymentLimit = 20
         canLoadMoreDeployments = false
         loadError = nil

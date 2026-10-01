@@ -1,11 +1,12 @@
 import CoolifyAPI
 import SwiftUI
 
-/// The window: instances, then the selected instance's resources, then the open resource.
+/// The window: instances, then the selected instance's resources, then the open resource or project.
 struct ContentView: View {
     @SwiftUI.Environment(MenuBarModel.self) private var menuBar
     @SwiftUI.Environment(InstanceStore.self) private var store
     @SwiftUI.Environment(\.scenePhase) private var scenePhase
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var boundToken: String?
     @State private var dashboard = DashboardModel()
     @State private var dashboards: [CoolifyInstance.ID: DashboardModel] = [:]
@@ -13,7 +14,11 @@ struct ContentView: View {
     @State private var boundID: CoolifyInstance.ID?
     @State private var isAdding = false
     @State private var editing: CoolifyInstance?
-    @State private var selectedResource: ResourceRoute?
+    @State private var selection: DetailRoute?
+    /// Set while the selected resource is one the project page opened: where it opens, and the project to go back to.
+    @State private var entry: EntryRequest?
+    /// The project page's tab and loaded data. Kept here so the page is as it was left after a visit to a resource.
+    @State private var projectPage = ProjectPageModel()
     @State private var catalog = TemplateCatalog()
     @State private var isProvisioning = false
 
@@ -41,9 +46,15 @@ struct ContentView: View {
         .onChange(of: menuBar.navigation) { _, _ in followMenuBarSelection() }
         .onChange(of: store.selectedID) { _, _ in
             isProvisioning = false
-            selectedResource = nil
+            selection = nil
             rebind()
-            if menuBar.navigation?.instanceID == store.selectedID { selectedResource = menuBar.navigation?.route }
+            followMenuBarRoute()
+        }
+        .onChange(of: selection) { _, selection in
+            // An entry is for one visit. Picking anything else, the resource's own row included, starts over.
+            if selection != entry.map({ .resource($0.route) }) {
+                entry = nil
+            }
         }
         .onChange(of: store.selected?.baseURL) { _, _ in
             resetConnection()
@@ -72,7 +83,7 @@ struct ContentView: View {
                 Task {
                     // The dashboard learns of the new service on its next poll. Ask now, so it opens at once.
                     await dashboard.refresh()
-                    selectedResource = route
+                    selection = .resource(route)
                 }
             }
             .id(store.selectedID)
@@ -132,7 +143,7 @@ struct ContentView: View {
                     instanceName: instance.name,
                     host: instance.displayHost,
                     snapshot: dashboard.snapshot,
-                    selection: $selectedResource,
+                    selection: $selection,
                     onRun: run,
                     onRefresh: { await dashboard.refresh() },
                     onNewService: client == nil ? nil : { isProvisioning = true }
@@ -150,29 +161,89 @@ struct ContentView: View {
     @ViewBuilder
     private var detailColumn: some View {
         let snapshot = dashboard.snapshot
-        if let route = selectedResource, let resource = snapshot.resource(route) {
+        // A stack only so that a resource the project page opens can slide in over it, and slide back out.
+        // Picking from the list changes the selection outside an animation, and swaps the screens at once.
+        ZStack {
+            switch selection {
+            case .resource(let route):
+                resourceScreen(route, from: entry?.route == route ? entry : nil)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            case .project(let id):
+                if let project = snapshot.project(id) {
+                    projectScreen(project)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                } else {
+                    nothingOpen(
+                        "This project is gone", detail: "Coolify no longer lists it. It may have been deleted.")
+                }
+            case nil:
+                nothingOpen(
+                    "Nothing open",
+                    detail:
+                        "Pick an application, database, or service to see its logs and deployments, or a project's name to see everything in it."
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func projectScreen(_ project: ProjectSummary) -> some View {
+        let snapshot = dashboard.snapshot
+        let identity = DetailIdentity(instanceID: store.selectedID, route: .project(project.id))
+        return ProjectDetailScreen(
+            client: client,
+            page: projectPage,
+            key: identity,
+            project: project,
+            resources: snapshot.resources(inProject: project.id),
+            pending: snapshot.pending,
+            actionError: snapshot.actionError,
+            onOpen: { route, entry in
+                open(route, entry: entry, from: project)
+            },
+            onAction: run,
+            onChanged: { await dashboard.reloadProjects() }
+        )
+        .id(identity)
+    }
+
+    /// `request` is set when the project page opened the resource. It says where the resource opens, and makes
+    /// the toolbar's back button lead to the project.
+    @ViewBuilder
+    private func resourceScreen(_ route: ResourceRoute, from request: EntryRequest?) -> some View {
+        let snapshot = dashboard.snapshot
+        if let resource = snapshot.resource(route) {
             ResourceDetailScreen(
                 client: client,
                 resource: resource,
                 pendingAction: snapshot.pendingAction(for: route),
                 actionError: snapshot.actionError,
+                entry: request?.entry,
+                back: request.map { request in
+                    DetailBack(title: snapshot.project(request.projectID)?.name ?? request.projectName) {
+                        show(.project(request.projectID))
+                    }
+                },
+                onOpenProject: resource.place.map { place in
+                    { show(.project(place.projectID)) }
+                },
                 onAction: { action in run(action, route) }
             )
-            .id(DetailIdentity(instanceID: store.selectedID, route: route))
+            .id(DetailIdentity(instanceID: store.selectedID, route: .resource(route)))
         } else {
-            ContentUnavailableView {
-                Label {
-                    Text(selectedResource == nil ? "Nothing open" : "This resource is gone")
-                } icon: {
-                    FlameGlyph(heat: .cold, height: 48)
-                }
-            } description: {
-                Text(
-                    selectedResource == nil
-                        ? "Pick an application, database, or service to see its logs and deployments."
-                        : "Coolify no longer lists it. It may have been deleted."
-                )
+            nothingOpen("This resource is gone", detail: "Coolify no longer lists it. It may have been deleted.")
+        }
+    }
+
+    private func nothingOpen(_ title: String, detail: String) -> some View {
+        ContentUnavailableView {
+            Label {
+                Text(title)
+            } icon: {
+                FlameGlyph(heat: .cold, height: 48)
             }
+        } description: {
+            Text(detail)
         }
     }
 
@@ -195,23 +266,45 @@ struct ContentView: View {
         Task { await dashboard.perform(action, route: route) }
     }
 
+    /// Opens a resource from the project page, at the place the page pointed to.
+    private func open(_ route: ResourceRoute, entry: ResourceEntry?, from project: ProjectSummary) {
+        self.entry = EntryRequest(route: route, entry: entry, projectID: project.id, projectName: project.name)
+        show(.resource(route))
+    }
+
+    /// Moves between a project and one of its resources, sliding one screen over the other.
+    private func show(_ route: DetailRoute) {
+        withAnimation(reduceMotion ? nil : .snappy) {
+            selection = route
+        }
+    }
+
     private func followMenuBarSelection() {
         guard let request = menuBar.navigation, store.instances.contains(where: { $0.id == request.instanceID }) else {
             return
         }
         store.selectedID = request.instanceID
-        selectedResource = request.route
+        selection = .resource(request.route)
+    }
+
+    /// Reopens the resource the menu bar asked for, after a switch of instance cleared the selection.
+    private func followMenuBarRoute() {
+        if let request = menuBar.navigation, request.instanceID == store.selectedID {
+            selection = .resource(request.route)
+        }
     }
 
     private func resetConnection() {
-        selectedResource = nil
+        selection = nil
         if let id = store.selectedID { dashboards.removeValue(forKey: id) }
         rebind()
-        if menuBar.navigation?.instanceID == store.selectedID { selectedResource = menuBar.navigation?.route }
+        followMenuBarRoute()
     }
 
     private func rebind() {
         dashboard.stop()
+        // What the page loaded came through the last connection.
+        projectPage = ProjectPageModel()
         let ids = Set(store.instances.map(\.id))
         dashboards = dashboards.filter { ids.contains($0.key) }
         guard let selected = store.selected else {
@@ -247,5 +340,13 @@ struct ContentView: View {
 /// Keeps detail tasks isolated even when two instances contain the same resource UUID.
 private struct DetailIdentity: Hashable {
     var instanceID: UUID?
+    var route: DetailRoute
+}
+
+/// A resource the project page opened: where in it, and the project to go back to. No entry opens it at its front.
+private struct EntryRequest: Hashable {
     var route: ResourceRoute
+    var entry: ResourceEntry?
+    var projectID: String
+    var projectName: String
 }

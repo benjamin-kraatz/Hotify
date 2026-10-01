@@ -11,6 +11,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
+  - `Projects/` shows one project: its resources by environment, the previews of all its applications, and the variables the project and its environments share. It opens from a group's header in the dashboard and takes the detail column. A resource opened from it offers the way back.
   - `Provisioning/` creates services from Coolify's one-click templates: a gallery, then placement, setup, and the first start, in one sheet that opens from the dashboard's New Service button.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
@@ -74,7 +75,9 @@ The live tests in `LiveCoolifyTests.swift` skip unless `COOLIFY_LIVE_TESTS=1` is
 
 ### Look and feel
 
-- The window has three columns: instances, the selected instance's resources, then the open resource. iPhone pushes them as a stack.
+- The window has three columns: instances, the selected instance's resources, then the open resource or project. iPhone pushes them as a stack.
+- Move inside the detail column by swapping the screen in place. The view that owns the column's toolbar lists a `DetailNavigation` first, with the screen's title and where back leads. A navigation stack nested in the detail column loses its `.task` on iPhone.
+- On the Mac, everything in the detail column's toolbar packs at its leading edge, and the search field takes the trailing edge. A flexible spacer centers the actions rather than moving them right.
 - Show status through `Heat` and `FlameGlyph`. A lit red flame means running, and a grey outline means stopped. Anything starting, unhealthy, or failed glows amber. Never use red for an error.
 - Use the asset colors `ember`, `glow`, and `core`, not raw hex. The accent is `ember`.
 - Pull request previews burn blue, like a pilot light. Pass `tone: .preview` to `FlameGlyph` and `heatEdge`, and use `pilot` and `pilotCore` for preview marks, never for production. A building preview keeps its blue body with an amber core. A failed one glows amber like anything else.

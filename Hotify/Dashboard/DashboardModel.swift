@@ -16,6 +16,8 @@ final class DashboardModel {
     /// Preview deployments that are queued or building. Kept apart so a preview never marks production busy.
     var activePreviewDeployments: [Deployment] = []
     var places: [Int: ResourcePlace] = [:]
+    /// Each project as `GET /projects/{uuid}` returns it, by uuid. The list has the names, this has the environments.
+    var projectDetails: [String: Project] = [:]
     var loadError: String?
     var actionError: String?
     var isLoading = false
@@ -98,6 +100,8 @@ final class DashboardModel {
             loadError = nil
             lastUpdated = .now
             await loadPlacesIfNeeded(client, generation: generation)
+            guard generation == self.generation else { return }
+            freshenPlaceNames()
             settleTransitions()
         } catch is CancellationError {
             // A new poll replaced this one. Leave the screen as the next refresh finds it.
@@ -133,9 +137,32 @@ final class DashboardModel {
             return loaded
         }
         guard generation == self.generation, !detailed.isEmpty || projects.isEmpty else { return }
-        places = ResourcePlace.index(detailed)
+        // A project whose request failed this round keeps what the last one found, so its page does not empty out.
+        var details = projectDetails.filter { projectIDs.contains($0.key) }
+        for project in detailed {
+            details[project.uuid] = project
+        }
+        projectDetails = details
+        places = ResourcePlace.index(Array(details.values))
         placedProjectIDs = projectIDs
         placesLoadedAt = .now
+    }
+
+    /// The project list arrives with every poll and the environments only now and then, so a project renamed
+    /// elsewhere would keep its old name on the group headers for minutes. This carries the new name over.
+    private func freshenPlaceNames() {
+        let names = Dictionary(projects.map { ($0.uuid, $0.name ?? "") }) { first, _ in first }
+        for (id, place) in places {
+            if let name = names[place.projectID], !name.isEmpty, name != place.projectName {
+                places[id]?.projectName = name
+            }
+        }
+    }
+
+    /// Reloads now, environments included. For after a project or environment was renamed or added.
+    func reloadProjects() async {
+        placesLoadedAt = nil
+        await refresh()
     }
 
     var snapshot: DashboardSnapshot {
@@ -149,6 +176,7 @@ final class DashboardModel {
                     isReachable: server.isReachable ?? server.settings?.isReachable
                 )
             },
+            projects: projects.map { ProjectSummary(project: $0, detail: projectDetails[$0.uuid]) },
             resources: applications.map { application in
                 ResourceSummary(
                     application: application,

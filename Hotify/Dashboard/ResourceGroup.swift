@@ -3,6 +3,8 @@ import Foundation
 
 /// The project and environment a resource lives in.
 struct ResourcePlace: Hashable {
+    /// The project's uuid, which opens its page.
+    var projectID: String
     var projectName: String
     var environmentName: String
     /// Orders environments the way Coolify creates them, so production usually leads.
@@ -16,6 +18,7 @@ struct ResourcePlace: Hashable {
             for environment in project.environments ?? [] {
                 guard let id = environment.id else { continue }
                 places[id] = ResourcePlace(
+                    projectID: project.uuid,
                     projectName: projectName,
                     environmentName: environment.name ?? "",
                     environmentID: id
@@ -37,20 +40,9 @@ struct ResourceGroup: Identifiable, Hashable {
     /// Sorts projects by name and environments by age. Within a group, applications come first, then services,
     /// then databases, each by name.
     static func grouping(_ resources: [ResourceSummary]) -> [ResourceGroup] {
-        let kindOrder: [ResourceKind] = [.application, .service, .database]
-        return Dictionary(grouping: resources, by: \.place)
+        Dictionary(grouping: resources, by: \.place)
             .map { place, members in
-                ResourceGroup(
-                    place: place,
-                    resources: members.sorted { lhs, rhs in
-                        let lhsKind = kindOrder.firstIndex(of: lhs.kind) ?? 0
-                        let rhsKind = kindOrder.firstIndex(of: rhs.kind) ?? 0
-                        if lhsKind != rhsKind {
-                            return lhsKind < rhsKind
-                        }
-                        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-                    }
-                )
+                ResourceGroup(place: place, resources: sorted(members))
             }
             .sorted { lhs, rhs in
                 switch (lhs.place, rhs.place) {
@@ -63,5 +55,18 @@ struct ResourceGroup: Identifiable, Hashable {
                     return false
                 }
             }
+    }
+
+    /// Applications first, then services, then databases, each by name.
+    static func sorted(_ resources: [ResourceSummary]) -> [ResourceSummary] {
+        let kindOrder: [ResourceKind] = [.application, .service, .database]
+        return resources.sorted { lhs, rhs in
+            let lhsKind = kindOrder.firstIndex(of: lhs.kind) ?? 0
+            let rhsKind = kindOrder.firstIndex(of: rhs.kind) ?? 0
+            if lhsKind != rhsKind {
+                return lhsKind < rhsKind
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
     }
 }

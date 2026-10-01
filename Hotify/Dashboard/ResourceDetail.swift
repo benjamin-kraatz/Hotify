@@ -8,29 +8,51 @@ struct ResourceDetailScreen: View {
     var pendingAction: ResourceAction?
     /// The last action that failed, from the dashboard. The middle column is off screen on iPhone.
     var actionError: String?
+    /// Set when the project page led here, so the screen offers the way back to it.
+    var back: DetailBack?
+    var onOpenProject: (() -> Void)?
     var onAction: (ResourceAction) -> Void
 
     @State private var model: ResourceDetailModel
     @State private var variables: VariablesModel
     @State private var previews = PreviewsModel()
     @State private var chosenContainerID: Int?
+    @State private var tab: DetailTab?
+    @State private var previewPlace: PreviewPlace?
 
+    /// `entry` picks where the screen opens, such as on the preview the project page led here from.
     init(
         client: CoolifyClient?,
         resource: ResourceSummary,
         pendingAction: ResourceAction?,
         actionError: String? = nil,
+        entry: ResourceEntry? = nil,
         model: ResourceDetailModel = ResourceDetailModel(),
         variables: VariablesModel = VariablesModel(),
+        back: DetailBack? = nil,
+        onOpenProject: (() -> Void)? = nil,
         onAction: @escaping (ResourceAction) -> Void
     ) {
         self.client = client
         self.resource = resource
         self.pendingAction = pendingAction
         self.actionError = actionError
+        self.back = back
+        self.onOpenProject = onOpenProject
         self.onAction = onAction
+        if let entry, !entry.history.isEmpty {
+            model.seed(entry.history, for: resource.route)
+        }
         _model = State(initialValue: model)
         _variables = State(initialValue: variables)
+        switch entry?.place {
+        case .deployments:
+            _tab = State(initialValue: .deployments)
+        case .previews(let place):
+            _previewPlace = State(initialValue: place)
+        case nil:
+            break
+        }
     }
 
     /// The container whose logs show: the one picked, else the first running one, else the first.
@@ -59,6 +81,8 @@ struct ResourceDetailScreen: View {
             pendingAction: pendingAction,
             logContainer: logContainer,
             chosenContainerID: $chosenContainerID,
+            tab: $tab,
+            previewPlace: $previewPlace,
             logLines: model.logLines,
             rawLogs: model.logs,
             logLineCount: $model.logLineCount,
@@ -74,6 +98,8 @@ struct ResourceDetailScreen: View {
                 model.deploymentLimit += 20
                 Task { await model.refresh() }
             },
+            back: back,
+            onOpenProject: onOpenProject,
             onAction: onAction
         )
         .task(id: resource.route) {
@@ -111,6 +137,10 @@ struct ResourceDetail: View {
     var pendingAction: ResourceAction?
     var logContainer: ContainerSummary?
     @Binding var chosenContainerID: Int?
+    /// The tab the user picked. `nil` lets the resource's state choose.
+    @Binding var tab: DetailTab?
+    /// Open while the previews take over the column. `nil` shows production.
+    @Binding var previewPlace: PreviewPlace?
     var logLines: [LogLine]
     var rawLogs: String
     @Binding var logLineCount: Int
@@ -123,6 +153,9 @@ struct ResourceDetail: View {
     var deploymentClient: CoolifyClient?
     var canLoadMoreDeployments = false
     var onLoadMoreDeployments: () -> Void = {}
+    /// Where back leads from the resource's own screen. `nil` when the resource is the top of the column.
+    var back: DetailBack?
+    var onOpenProject: (() -> Void)?
     var onAction: (ResourceAction) -> Void
 
     #if os(macOS)
@@ -130,13 +163,10 @@ struct ResourceDetail: View {
     @SwiftUI.Environment(MenuBarModel.self) private var menuBar: MenuBarModel?
     #endif
     @State private var selectedDeployment: DeploymentLine?
-    @State private var tab: DetailTab?
     @State private var stopCandidate: ResourceSummary?
     @State private var showsPreviewDeployment = false
     @State private var showsGitHubAccess = false
     @State private var previewGeneration = 0
-    /// Open while the previews take over the column. `nil` shows production.
-    @State private var previewPlace: PreviewPlace?
     @State private var followedPreviewDeployment: DeploymentLine?
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -182,16 +212,48 @@ struct ResourceDetail: View {
         return tabs[0]
     }
 
+    /// The deployment whose build output is on screen, which takes the back button until it closes.
+    private var openDeployment: DeploymentLine? {
+        currentTab == .deployments ? selectedDeployment : nil
+    }
+
+    /// Names the screen in the toolbar. The resource's own name heads the screen below it.
+    private var title: String {
+        switch previewPlace {
+        case .board: "Previews"
+        case .preview(let number): "PR #\(number)"
+        case nil: openDeployment == nil ? resource.kind.title : "Deployment"
+        }
+    }
+
+    /// Where the toolbar's back button leads from the screen on show: one step out, innermost first.
+    private var currentBack: DetailBack? {
+        switch previewPlace {
+        case .preview(let number):
+            if followedPreviewDeployment != nil {
+                return DetailBack(title: "PR #\(number)") { followedPreviewDeployment = nil }
+            }
+            return DetailBack(title: "Previews") { previewPlace = .board }
+        case .board:
+            return DetailBack(title: resource.name) { previewPlace = nil }
+        case nil:
+            if openDeployment != nil {
+                return DetailBack(title: "Deployments") { selectedDeployment = nil }
+            }
+            return back
+        }
+    }
+
     var body: some View {
         ZStack {
-            if let previewPlace, case .application(let uuid) = resource.route {
+            if previewPlace != nil, case .application(let uuid) = resource.route {
                 PreviewSpace(
                     resourceName: resource.name,
                     application: uuid,
                     previews: previews,
                     model: previewsModel,
                     client: deploymentClient,
-                    place: Binding(get: { previewPlace }, set: { self.previewPlace = $0 }),
+                    place: $previewPlace,
                     followedDeployment: $followedPreviewDeployment,
                     // Every poll sets `isLoading`. Only the first load, before any history, should show a spinner.
                     isLoading: isLoading && deployments.isEmpty,
@@ -212,13 +274,13 @@ struct ResourceDetail: View {
                 variables.hasUnappliedChanges = false
             }
         }
-        #if os(macOS)
-        .navigationTitle(resource.name)
-        #else
-        .navigationTitle(previewPlace == nil ? resource.kind.title : "Previews")
+        .navigationTitle(title)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .replacesSystemBack(currentBack != nil)
         .toolbar {
+            DetailNavigation(title: title, back: currentBack)
             #if os(macOS)
             if let menuBar, menuBar.enabled {
                 ToolbarItem(placement: .primaryAction) {
@@ -284,6 +346,7 @@ struct ResourceDetail: View {
                 resource: resource,
                 pendingAction: pendingAction,
                 lastDeploymentFailed: lastDeploymentFailed,
+                onOpenProject: onOpenProject,
                 onAction: { action in
                     if action == .stop {
                         stopCandidate = resource
@@ -326,10 +389,8 @@ struct ResourceDetail: View {
                     // Switching tabs inserts the container, which fades like every other tab.
                     ZStack {
                         if let selectedDeployment {
-                            DeploymentDetail(client: deploymentClient, initial: selectedDeployment) {
-                                self.selectedDeployment = nil
-                            }
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                            DeploymentDetail(client: deploymentClient, initial: selectedDeployment)
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
                         } else {
                             DeploymentTimeline(
                                 deployments: deployments,

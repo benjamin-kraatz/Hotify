@@ -19,14 +19,6 @@ extension CoolifyClient {
         try await getList("teams")
     }
 
-    public func projects() async throws -> [Project] {
-        try await getList("projects")
-    }
-
-    public func project(_ uuid: String) async throws -> Project {
-        try await get("projects/\(CoolifyURL.encodePathComponent(uuid))")
-    }
-
     public func servers() async throws -> [Server] {
         try await getList("servers")
     }

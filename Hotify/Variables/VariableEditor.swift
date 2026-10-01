@@ -7,7 +7,8 @@ struct VariableEditor: View {
 
     /// `nil` to add a new variable.
     var original: VariableLine?
-    var kind: ResourceKind
+    /// Applications keep a second set of variables for previews. Nothing else does.
+    var hasPreviewVariables: Bool
     /// Keys already in use, to catch a duplicate before Coolify answers 409. Split by preview for applications.
     var takenKeys: (_ isPreview: Bool) -> Set<String>
     var onSave: (EnvironmentVariableDraft) async throws -> Void
@@ -31,13 +32,13 @@ struct VariableEditor: View {
 
     init(
         original: VariableLine?,
-        kind: ResourceKind,
+        hasPreviewVariables: Bool,
         takenKeys: @escaping (_ isPreview: Bool) -> Set<String> = { _ in [] },
         onSave: @escaping (EnvironmentVariableDraft) async throws -> Void,
         onDelete: (() -> Void)? = nil
     ) {
         self.original = original
-        self.kind = kind
+        self.hasPreviewVariables = hasPreviewVariables
         self.takenKeys = takenKeys
         self.onSave = onSave
         self.onDelete = onDelete
@@ -135,7 +136,7 @@ struct VariableEditor: View {
                 }
 
                 Section("Options") {
-                    if kind == .application, isNew {
+                    if hasPreviewVariables, isNew {
                         Toggle(isOn: $isPreview) {
                             Text("For preview deployments")
                             Text("Pull request previews read their own set of variables.")
@@ -229,7 +230,7 @@ struct VariableEditor: View {
         let draft = EnvironmentVariableDraft(
             key: normalizedKey,
             value: value,
-            isPreview: kind == .application ? isPreview : nil,
+            isPreview: hasPreviewVariables ? isPreview : nil,
             isLiteral: isLiteral,
             isMultiline: isMultiline,
             isShownOnce: isShownOnce
@@ -244,13 +245,13 @@ struct VariableEditor: View {
 }
 
 #Preview("New") {
-    VariableEditor(original: nil, kind: .application, takenKeys: { _ in ["API_URL"] }, onSave: { _ in })
+    VariableEditor(original: nil, hasPreviewVariables: true, takenKeys: { _ in ["API_URL"] }, onSave: { _ in })
 }
 
 #Preview("Edit") {
     VariableEditor(
         original: VariableLine(id: "1", key: "DATABASE_URL", value: "postgres://app:secret@db:5432/app"),
-        kind: .service,
+        hasPreviewVariables: false,
         onSave: { _ in },
         onDelete: {}
     )
@@ -259,7 +260,7 @@ struct VariableEditor: View {
 #Preview("Hidden value") {
     VariableEditor(
         original: VariableLine(id: "3", key: "STRIPE_SECRET_KEY", isShownOnce: true),
-        kind: .database,
+        hasPreviewVariables: false,
         onSave: { _ in },
         onDelete: {}
     )

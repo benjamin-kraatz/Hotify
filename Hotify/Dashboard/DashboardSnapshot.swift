@@ -5,6 +5,7 @@ struct DashboardSnapshot: Hashable {
     var teamName = ""
     var version = ""
     var servers: [ServerLine] = []
+    var projects: [ProjectSummary] = []
     var resources: [ResourceSummary] = []
     var pending: [BusyTarget: ResourceAction] = [:]
     var loadError: String?
@@ -14,6 +15,14 @@ struct DashboardSnapshot: Hashable {
 
     func resource(_ route: ResourceRoute) -> ResourceSummary? {
         resources.first { $0.route == route }
+    }
+
+    func project(_ id: String) -> ProjectSummary? {
+        projects.first { $0.id == id }
+    }
+
+    func resources(inProject id: String) -> [ResourceSummary] {
+        resources.filter { $0.place?.projectID == id }
     }
 
     func pendingAction(for route: ResourceRoute) -> ResourceAction? {

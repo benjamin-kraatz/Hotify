@@ -1,11 +1,12 @@
 import SwiftUI
 
 /// The middle column: one instance's resources, grouped by project and environment, with actions on each row.
+/// A group's header opens its project.
 struct DashboardView: View {
     var instanceName: String
     var host: String
     var snapshot: DashboardSnapshot
-    @Binding var selection: ResourceRoute?
+    @Binding var selection: DetailRoute?
     var onRun: (ResourceAction, ResourceRoute) -> Void
     var onRefresh: () async -> Void
     /// Opens provisioning. `nil` hides the button, such as before the instance connects.
@@ -57,7 +58,11 @@ struct DashboardView: View {
                         row(resource)
                     }
                 } header: {
-                    GroupHeader(place: group.place)
+                    GroupHeader(
+                        place: group.place,
+                        isOpen: group.place.map { selection == .project($0.projectID) } ?? false,
+                        onOpen: group.place.map { place in { selection = .project(place.projectID) } }
+                    )
                 }
             }
         }
@@ -118,7 +123,7 @@ struct DashboardView: View {
         let pendingAction = snapshot.pendingAction(for: resource.route)
         let actions = ResourceAction.available(for: resource)
         return ResourceRow(resource: resource, pendingAction: pendingAction)
-            .tag(resource.route)
+            .tag(DetailRoute.resource(resource.route))
             .contextMenu {
                 ResourceActionButtons(resource: resource, pendingAction: pendingAction) { action in
                     run(action, on: resource)
@@ -194,8 +199,9 @@ struct DashboardView: View {
 }
 
 #Preview {
-    @Previewable @State var selection: ResourceRoute?
-    let website = ResourcePlace(projectName: "Website", environmentName: "production", environmentID: 1)
+    @Previewable @State var selection: DetailRoute?
+    let website = ResourcePlace(
+        projectID: "website", projectName: "Website", environmentName: "production", environmentID: 1)
     NavigationStack {
         DashboardView(
             instanceName: "Home lab",
@@ -237,7 +243,9 @@ struct DashboardView: View {
                             ContainerSummary(id: 2, name: "elasticsearch", status: "exited"),
                             ContainerSummary(id: 3, name: "token-generator", status: "exited"),
                         ],
-                        place: ResourcePlace(projectName: "Observability", environmentName: "staging", environmentID: 3)
+                        place: ResourcePlace(
+                            projectID: "observability", projectName: "Observability", environmentName: "staging",
+                            environmentID: 3)
                     ),
                 ],
                 pending: [.database("pg"): .restart],
