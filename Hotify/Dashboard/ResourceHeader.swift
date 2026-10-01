@@ -10,6 +10,8 @@ struct ResourceHeader: View {
     var onOpenProject: (() -> Void)?
     var onAction: (ResourceAction) -> Void
 
+    @SwiftUI.Environment(\.placePalette) private var palette
+
     private var hasFailed: Bool {
         pendingAction == nil && !resource.isDeploying && resource.heat == .cold && lastDeploymentFailed
     }
@@ -73,16 +75,23 @@ struct ResourceHeader: View {
         .animation(.snappy, value: actions)
     }
 
-    /// The project and environment. With somewhere to go, it is the way up to the project's page.
+    /// The project and environment, each after its color. With somewhere to go, it is the way up to the project's
+    /// page.
     @ViewBuilder
     private func placeLine(_ place: ResourcePlace) -> some View {
         let text =
             place.environmentName.isEmpty ? place.projectName : "\(place.projectName) · \(place.environmentName)"
+        let names = placeNames(place)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(text)
         if let onOpenProject {
             Button(action: onOpenProject) {
-                Label(text, systemImage: "chevron.right")
-                    .labelStyle(TrailingIconLabelStyle())
-                    .contentShape(.rect)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    names
+                    Image(systemName: "chevron.right")
+                        .imageScale(.small)
+                }
+                .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .font(.subheadline)
@@ -91,10 +100,22 @@ struct ResourceHeader: View {
             .help("Show the \(place.projectName) project")
             .accessibilityHint("Shows the project")
         } else {
-            Text(text)
+            names
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+        }
+    }
+
+    private func placeNames(_ place: ResourcePlace) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            PlaceMark(tint: palette.project(place.projectID))
+            Text(place.projectName)
+            if !place.environmentName.isEmpty {
+                Text(verbatim: "·")
+                PlaceMark(tint: palette.environment(place.environmentUUID))
+                Text(place.environmentName)
+            }
         }
     }
 
@@ -206,7 +227,7 @@ private struct TrailingIconLabelStyle: LabelStyle {
                     link: URL(string: "https://hotify.example.com"),
                     place: ResourcePlace(
                         projectID: "website", projectName: "Website", environmentName: "production",
-                        environmentID: 1)
+                        environmentID: 1, environmentUUID: "env-prod")
                 ),
                 onOpenProject: {},
                 onAction: { _ in }
@@ -228,4 +249,5 @@ private struct TrailingIconLabelStyle: LabelStyle {
         }
         .padding(24)
     }
+    .environment(\.placePalette, .preview(projects: ["website": .teal], environments: ["env-prod": .orange]))
 }

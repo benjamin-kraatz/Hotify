@@ -11,6 +11,7 @@ struct ProjectPreviews: View {
     var onOpen: (ApplicationPreviews, PreviewPlace) -> Void
 
     @State private var filter = PreviewFilter.all
+    @SwiftUI.Environment(\.placePalette) private var palette
 
     private var all: [PreviewLine] { groups.flatMap(\.previews) }
 
@@ -59,7 +60,7 @@ struct ProjectPreviews: View {
                     .foregroundStyle(.pilot)
                     .lineLimit(1)
                 if let environment = group.environmentName, !environment.isEmpty {
-                    EnvironmentBadge(name: environment)
+                    EnvironmentBadge(name: environment, tint: palette.environment(group.environmentUUID))
                 }
                 if let repository = group.repository {
                     Label(repository, systemImage: "arrow.triangle.branch")

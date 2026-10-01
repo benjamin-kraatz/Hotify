@@ -7,6 +7,8 @@ struct ProjectDeployment: Identifiable, Hashable {
     var applicationName: String
     /// Set when the project has several environments, where two applications often share a name.
     var environmentName: String?
+    /// Keys the environment's color, beside its name.
+    var environmentUUID: String?
     var line: DeploymentLine
 
     /// A deployment without a uuid falls back to its index, which repeats across applications.
@@ -21,6 +23,8 @@ struct ApplicationPreviews: Identifiable, Hashable {
     var name: String
     /// Set when the project has several environments, where two applications often share a name.
     var environmentName: String?
+    /// Keys the environment's color, beside its name.
+    var environmentUUID: String?
     /// `owner/repo`, when the application builds from github.com.
     var repository: String?
     var previews: [PreviewLine]
@@ -138,6 +142,7 @@ final class ProjectActivityModel {
                         applicationUUID: uuid,
                         applicationName: application.name,
                         environmentName: namesEnvironments ? application.place?.environmentName : nil,
+                        environmentUUID: application.place?.environmentUUID,
                         line: line
                     )
                 }
@@ -158,6 +163,7 @@ final class ProjectActivityModel {
                 application: application.route,
                 name: application.name,
                 environmentName: namesEnvironments ? application.place?.environmentName : nil,
+                environmentUUID: application.place?.environmentUUID,
                 repository: model?.repository?.label,
                 previews: previews
             )

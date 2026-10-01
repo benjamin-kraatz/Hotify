@@ -23,6 +23,8 @@ struct ProjectSection: Identifiable, Hashable {
 struct EnvironmentSection: Identifiable, Hashable {
     var id: Int
     var name: String
+    /// Keys the environment's color.
+    var uuid: String?
     var resources: [ResourceSummary]
 }
 
@@ -45,6 +47,7 @@ extension ProjectSection {
                             EnvironmentSection(
                                 id: id,
                                 name: members.first?.place?.environmentName ?? "",
+                                uuid: members.first?.place?.environmentUUID,
                                 resources: members.sortedForDisplay()
                             )
                         }

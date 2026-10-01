@@ -16,6 +16,7 @@ struct DashboardView: View {
     @State private var filter = ResourceFilter()
     @State private var stopCandidate: ResourceSummary?
     @State private var refreshes = 0
+    @SwiftUI.Environment(\.placePalette) private var palette
     #if os(macOS)
     @FocusState private var isFiltering: Bool
     /// Whether the arrow keys go to the list.
@@ -220,15 +221,23 @@ struct DashboardView: View {
             ForEach(sections) { section in
                 Section {
                     if let projectID = section.projectID {
-                        ProjectSectionHeader(section: section, heats: section.resources.map(heat(of:)))
-                            .tag(DetailRoute.project(projectID))
+                        ProjectSectionHeader(
+                            section: section,
+                            heats: section.resources.map(heat(of:)),
+                            tint: palette.project(projectID)
+                        )
+                        .tag(DetailRoute.project(projectID))
                     }
                     ForEach(section.environments) { environment in
                         if section.projectID != nil {
-                            EnvironmentHeading(name: environment.name, heats: environment.resources.map(heat(of:)))
-                                .listRowSeparator(.hidden)
-                                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
-                                .selectionDisabled()
+                            EnvironmentHeading(
+                                name: environment.name,
+                                heats: environment.resources.map(heat(of:)),
+                                tint: palette.environment(environment.uuid)
+                            )
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+                            .selectionDisabled()
                         }
                         ForEach(environment.resources) { resource in
                             row(resource)

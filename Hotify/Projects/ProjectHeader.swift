@@ -5,6 +5,8 @@ struct ProjectHeader: View {
     var project: ProjectSummary
     /// The heat of every resource in the project, with actions and deployments in flight counted as warming.
     var heats: [Heat]
+    /// Fills the folder beside "Project" with the project's color.
+    var tint: PlaceTint?
 
     private var runningCount: Int { heats.count { $0 == .lit } }
 
@@ -92,8 +94,17 @@ struct ProjectHeader: View {
 
     private var status: some View {
         HStack(spacing: 12) {
-            Label("Project", systemImage: "folder")
-                .foregroundStyle(.secondary)
+            Label {
+                Text("Project")
+            } icon: {
+                if let tint {
+                    Image(systemName: "folder.fill")
+                        .foregroundStyle(tint.color)
+                } else {
+                    Image(systemName: "folder")
+                }
+            }
+            .foregroundStyle(.secondary)
             Text(statusText)
                 .fontWeight(.semibold)
                 .foregroundStyle(heat.tint)
@@ -129,7 +140,8 @@ struct ProjectHeader: View {
                         EnvironmentSummary(id: 2, name: "staging"),
                     ]
                 ),
-                heats: [.lit, .lit, .lit, .troubled, .cold, .cold]
+                heats: [.lit, .lit, .lit, .troubled, .cold, .cold],
+                tint: .teal
             )
             ProjectHeader(
                 project: ProjectSummary(

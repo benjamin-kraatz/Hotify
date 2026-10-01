@@ -2,21 +2,14 @@ import CoolifyAPI
 import SwiftUI
 
 /// The form section that picks where a new service runs: server, project, environment, and network if there is a
-/// choice. A project or environment can be made on the spot.
+/// choice. A project or environment can be made on the spot, with its color.
 struct PlacementSection: View {
     var model: PlacementModel
 
-    @State private var naming: NewPlace?
-    @State private var newName = ""
+    @State private var naming: PlaceKind?
+    @SwiftUI.Environment(\.placePalette) private var palette
 
-    private enum NewPlace: Identifiable {
-        case project
-        case environment
-
-        var id: Self { self }
-    }
-
-    /// A picker row value that opens the naming alert instead of selecting.
+    /// A picker row value that opens the naming popover instead of selecting.
     private static let newTag = "hotify.new"
 
     var body: some View {
@@ -60,19 +53,6 @@ struct PlacementSection: View {
                 Text("This team has no projects yet. Make one to hold the service.")
             }
         }
-        .alert(naming == .project ? "New Project" : "New Environment", isPresented: isNaming, presenting: naming) {
-            place in
-            TextField(place == .project ? "Project name" : "Environment name", text: $newName)
-            Button("Create") { create(place) }
-                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button("Cancel", role: .cancel) {}
-        } message: { place in
-            Text(
-                place == .project
-                    ? "Coolify gives a new project a production environment to start with."
-                    : "Environments keep copies apart, like staging and production, inside \(model.project?.name ?? "the project")."
-            )
-        }
     }
 
     private var serverPicker: some View {
@@ -97,7 +77,7 @@ struct PlacementSection: View {
             selection: Binding(
                 get: { model.placement.projectUUID ?? "" },
                 set: { uuid in
-                    if uuid == Self.newTag { name(.project) } else { model.selectProject(uuid) }
+                    if uuid == Self.newTag { naming = .project } else { model.selectProject(uuid) }
                 })
         ) {
             ForEach(model.projects, id: \.uuid) { project in
@@ -106,9 +86,19 @@ struct PlacementSection: View {
             Divider()
             Text("New Project…").tag(Self.newTag)
         } label: {
-            Label("Project", systemImage: "folder")
+            placeLabel(
+                "Project", systemImage: "folder", coloredImage: "folder.fill",
+                tint: palette.project(model.placement.projectUUID))
         }
         .disabled(model.isCreatingPlace)
+        .popover(isPresented: isNaming(.project), arrowEdge: .bottom) {
+            NewPlacePopover(kind: .project, takenNames: Set(model.projects.compactMap(\.name))) { name, tint in
+                let uuid = try await model.createProject(named: name)
+                if let tint {
+                    palette.setProject(tint, for: uuid)
+                }
+            }
+        }
     }
 
     private var environmentPicker: some View {
@@ -116,7 +106,7 @@ struct PlacementSection: View {
             selection: Binding(
                 get: { model.placement.environmentUUID ?? "" },
                 set: { uuid in
-                    if uuid == Self.newTag { name(.environment) } else { model.selectEnvironment(uuid) }
+                    if uuid == Self.newTag { naming = .environment } else { model.selectEnvironment(uuid) }
                 })
         ) {
             ForEach(model.environments, id: \.uuid) { environment in
@@ -125,9 +115,40 @@ struct PlacementSection: View {
             Divider()
             Text("New Environment…").tag(Self.newTag)
         } label: {
-            Label("Environment", systemImage: "square.3.layers.3d")
+            placeLabel(
+                "Environment", systemImage: "square.3.layers.3d", coloredImage: "square.3.layers.3d",
+                tint: palette.environment(model.placement.environmentUUID))
         }
         .disabled(model.project == nil || model.isCreatingPlace)
+        .popover(isPresented: isNaming(.environment), arrowEdge: .bottom) {
+            NewPlacePopover(
+                kind: .environment,
+                note:
+                    "Environments keep copies apart, like staging and production, inside \(model.project?.name ?? "the project").",
+                takenNames: Set(model.environments.compactMap(\.name))
+            ) { name, tint in
+                let uuid = try await model.createEnvironment(named: name)
+                if let tint {
+                    palette.setEnvironment(tint, for: uuid)
+                }
+            }
+        }
+    }
+
+    /// The picker's label. Its icon takes the color of the project or environment picked.
+    private func placeLabel(
+        _ title: String, systemImage: String, coloredImage: String, tint: PlaceTint?
+    ) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            if let tint {
+                Image(systemName: coloredImage)
+                    .foregroundStyle(tint.color)
+            } else {
+                Image(systemName: systemImage)
+            }
+        }
     }
 
     private var networkPicker: some View {
@@ -144,23 +165,8 @@ struct PlacementSection: View {
         }
     }
 
-    private var isNaming: Binding<Bool> {
-        Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })
-    }
-
-    private func name(_ place: NewPlace) {
-        newName = ""
-        naming = place
-    }
-
-    private func create(_ place: NewPlace) {
-        let name = newName
-        Task {
-            switch place {
-            case .project: await model.createProject(named: name)
-            case .environment: await model.createEnvironment(named: name)
-            }
-        }
+    private func isNaming(_ kind: PlaceKind) -> Binding<Bool> {
+        Binding(get: { naming == kind }, set: { if !$0 { naming = nil } })
     }
 }
 
