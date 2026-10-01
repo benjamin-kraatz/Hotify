@@ -13,17 +13,24 @@ struct DashboardView: View {
     var onNewService: (() -> Void)?
 
     @State private var query = ""
+    @State private var filter = ResourceFilter()
     @State private var stopCandidate: ResourceSummary?
     @State private var refreshes = 0
     #if os(macOS)
     @FocusState private var isFiltering: Bool
     #endif
 
+    /// What the typed text and the filter menu leave of the list. Each narrows what the other lets through.
     private var visible: [ResourceSummary] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return snapshot.resources }
+        guard !trimmed.isEmpty || filter.isActive else { return snapshot.resources }
         return snapshot.resources.filter { resource in
-            resource.name.localizedStandardContains(trimmed)
+            guard
+                filter.includes(
+                    resource, heat: resource.heat(pendingAction: snapshot.pendingAction(for: resource.route)))
+            else { return false }
+            return trimmed.isEmpty
+                || resource.name.localizedStandardContains(trimmed)
                 || resource.subtitle?.localizedStandardContains(trimmed) == true
                 || resource.place?.projectName.localizedStandardContains(trimmed) == true
                 || resource.place?.environmentName.localizedStandardContains(trimmed) == true
@@ -52,14 +59,6 @@ struct DashboardView: View {
                 if let actionError = snapshot.actionError {
                     NoticeBanner(message: actionError)
                 }
-                #if os(macOS)
-                // A search field in the toolbar would land over the detail column, far from the list it filters,
-                // and take the trailing edge that column's own actions belong at. So the Mac filters from here.
-                if snapshot.hasLoaded, !snapshot.resources.isEmpty {
-                    FilterField("Filter resources", text: $query)
-                        .focused($isFiltering)
-                }
-                #endif
             }
             .listRowSeparator(.hidden)
 
@@ -86,6 +85,19 @@ struct DashboardView: View {
             overlay
         }
         #if os(macOS)
+        // A search field in the toolbar would land over the detail column, far from the list it filters, and take
+        // the trailing edge that column's own actions belong at. So the Mac filters from a bar above the list.
+        // The field stays out of the list's rows, where a text field draws a box behind its text while it is edited.
+        .safeAreaBar(edge: .top) {
+            if snapshot.hasLoaded, !snapshot.resources.isEmpty {
+                FilterField("Filter resources", text: $query, isFiltered: filter.isActive) {
+                    ResourceFilterMenu(filter: $filter)
+                }
+                .focused($isFiltering)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
+        }
         .background {
             // Command-F puts the cursor in the filter, as it would in a search field.
             Button("Filter Resources") {
@@ -107,6 +119,22 @@ struct DashboardView: View {
         .toolbar(removing: .title)
         #endif
         .toolbar {
+            #if os(iOS)
+            // The search bar has no room for the filter menu the Mac's field carries, so it gets a button.
+            if snapshot.hasLoaded, !snapshot.resources.isEmpty {
+                ToolbarItem {
+                    Menu {
+                        ResourceFilterMenu(filter: $filter)
+                    } label: {
+                        Label(
+                            "Filters",
+                            systemImage: filter.isActive
+                                ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle"
+                        )
+                    }
+                }
+            }
+            #endif
             if let onNewService {
                 ToolbarItem {
                     Button("New Service", systemImage: "plus", action: onNewService)
@@ -209,6 +237,18 @@ struct DashboardView: View {
                     Button("Browse Templates", systemImage: "plus", action: onNewService)
                         .glassButton(prominent: true)
                 }
+            }
+        } else if visible.isEmpty, filter.isActive {
+            // The filters may be why nothing shows, whatever was typed, so the way out is to clear them.
+            ContentUnavailableView {
+                Label("Nothing matches", systemImage: "line.3.horizontal.decrease")
+            } description: {
+                Text("No resource fits the filters that are on.")
+            } actions: {
+                Button("Clear Filters") {
+                    filter = ResourceFilter()
+                }
+                .glassButton()
             }
         } else if !query.isEmpty, visible.isEmpty {
             ContentUnavailableView.search(text: query)
