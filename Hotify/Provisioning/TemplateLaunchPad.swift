@@ -6,7 +6,6 @@ struct TemplateLaunchPad: View {
     var template: ServiceTemplate
     var model: ProvisioningModel
     var instanceRoot: URL?
-    var onBack: () -> Void = {}
 
     private var outline: ComposeOutline { template.outline }
 
@@ -59,16 +58,9 @@ struct TemplateLaunchPad: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Button("Templates", systemImage: "chevron.left", action: onBack)
-                .buttonStyle(.borderless)
-                .fontWeight(.medium)
-                .foregroundStyle(.ember)
-                .help("Back to all templates")
-            heroTitle
-        }
-        .textCase(nil)
-        .padding(.bottom, 14)
+        heroTitle
+            .textCase(nil)
+            .padding(.bottom, 14)
     }
 
     private var heroTitle: some View {

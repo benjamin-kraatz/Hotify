@@ -221,9 +221,19 @@ struct ResourceDetail: View {
         return tabs[0]
     }
 
-    /// The deployment whose build output is on screen, which takes the back button until it closes.
+    /// The Mac opens a deployment in the column, in place of the timeline. An iPhone has room for only half of it
+    /// there, under the resource's header, so it opens the deployment in a sheet of its own.
+    private static var opensDeploymentInColumn: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// The deployment whose build output is in the column, which takes the back button until it closes.
     private var openDeployment: DeploymentLine? {
-        currentTab == .deployments ? selectedDeployment : nil
+        Self.opensDeploymentInColumn && currentTab == .deployments ? selectedDeployment : nil
     }
 
     /// Names the screen in the toolbar. The resource's own name heads the screen below it.
@@ -347,6 +357,24 @@ struct ResourceDetail: View {
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
         }
+        #if os(iOS)
+        .sheet(item: $selectedDeployment) { deployment in
+            NavigationStack {
+                DeploymentDetail(client: deploymentClient, initial: deployment)
+                .padding(.top, 8)
+                .navigationTitle("Deployment")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            selectedDeployment = nil
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.large])
+        }
+        #endif
     }
 
     /// The resource itself: its header, actions, and tabs.
@@ -398,8 +426,8 @@ struct ResourceDetail: View {
                     // Its own container, so the slide only runs between the timeline and a deployment.
                     // Switching tabs inserts the container, which fades like every other tab.
                     ZStack {
-                        if let selectedDeployment {
-                            DeploymentDetail(client: deploymentClient, initial: selectedDeployment)
+                        if let openDeployment {
+                            DeploymentDetail(client: deploymentClient, initial: openDeployment)
                                 .transition(.move(edge: .trailing).combined(with: .opacity))
                         } else {
                             DeploymentTimeline(
