@@ -18,6 +18,8 @@ struct ProjectDetailScreen: View {
     var onAction: (ResourceAction, ResourceRoute) -> Void
     /// Reloads the dashboard's projects, after a rename or a new environment.
     var onChanged: () async -> Void
+    /// Opens the New Service sheet in this project. `nil` hides the button, such as before the instance connects.
+    var onNewService: (() -> Void)?
 
     @SwiftUI.Environment(\.placePalette) private var palette
 
@@ -47,7 +49,8 @@ struct ProjectDetailScreen: View {
             onSaveProject: saveProject,
             onAddEnvironment: addEnvironment,
             onSaveEnvironment: saveEnvironment,
-            onReload: reload
+            onReload: reload,
+            onNewService: onNewService
         )
         // Before the first frame, so a page left on another project never shows that project's tab or history.
         .onAppear {
@@ -142,6 +145,8 @@ struct ProjectDetail: View {
         _, _, _ in
     }
     var onReload: () async -> Void = {}
+    /// `nil` hides the New Service button.
+    var onNewService: (() -> Void)?
 
     @State private var sheet: ProjectSheet?
     /// The popover at the toolbar menu. The overview has one of its own at its button.
@@ -246,7 +251,13 @@ struct ProjectDetail: View {
         #endif
         .toolbar {
             DetailNavigation(title: "Project")
-            ToolbarItem(placement: .primaryAction) {
+            // One group, so the two share a glass capsule. The button leaves with the page, since a resource
+            // opened from here brings a toolbar of its own.
+            ToolbarItemGroup(placement: .primaryAction) {
+                if let onNewService {
+                    Button("New Service", systemImage: "plus", action: onNewService)
+                        .help("Create a service in \(project.name) from one of Coolify's templates (⇧⌘N)")
+                }
                 Menu {
                     Button("Edit Project…", systemImage: "pencil") {
                         sheet = .editProject
@@ -412,7 +423,8 @@ private enum ProjectSheet: Identifiable, Hashable {
                     ],
                     hasLoaded: true
                 )),
-            canEdit: true
+            canEdit: true,
+            onNewService: {}
         )
     }
     .frame(width: 640, height: 720)

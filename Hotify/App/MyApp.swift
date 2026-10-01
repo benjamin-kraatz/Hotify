@@ -56,14 +56,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             #if os(macOS)
         .defaultSize(width: 1240, height: 780)
         .windowToolbarStyle(.unified)
-        .commands {
-            CommandGroup(replacing: .appInfo) {
-                Button("About Hotify") {
-                    openWindow(id: "about")
-                }
-            }
-        }
             #endif
+            .commands {
+                #if os(macOS)
+                CommandGroup(replacing: .appInfo) {
+                    Button("About Hotify") {
+                        openWindow(id: "about")
+                    }
+                }
+                #endif
+                // iPad lists it in its menu bar too.
+                ProjectCommands()
+            }
             // Not on `.inactive`: the Face ID prompt itself makes the scene inactive on iOS.
             .onChange(of: scenePhase) { _, phase in
                 if phase == .background {

@@ -9,6 +9,8 @@ import SwiftUI
 struct ProvisioningSheet: View {
     var client: CoolifyClient?
     var instanceID: UUID?
+    /// The project page the sheet opened from, which the placement pickers start at.
+    var hint: PlacementHint?
     var catalog: TemplateCatalog
     /// Closes the sheet and opens the new service, or opens nothing.
     var onClose: (ResourceRoute?) -> Void
@@ -19,12 +21,14 @@ struct ProvisioningSheet: View {
     init(
         client: CoolifyClient?,
         instanceID: UUID?,
+        hint: PlacementHint? = nil,
         catalog: TemplateCatalog,
         model: ProvisioningModel = ProvisioningModel(),
         onClose: @escaping (ResourceRoute?) -> Void
     ) {
         self.client = client
         self.instanceID = instanceID
+        self.hint = hint
         self.catalog = catalog
         self.onClose = onClose
         _model = State(initialValue: model)
@@ -53,7 +57,7 @@ struct ProvisioningSheet: View {
         .frame(minWidth: 680, idealWidth: 860, minHeight: 600, idealHeight: 780)
         #endif
         .task {
-            model.prepare(client, instanceID: instanceID)
+            model.prepare(client, instanceID: instanceID, hint: hint)
             async let templates: Void = catalog.load()
             async let placement: Void = model.placement.load()
             _ = await (templates, placement)

@@ -22,7 +22,7 @@ struct ContentView: View {
     /// The project page's tab and loaded data. Kept here so the page is as it was left after a visit to a resource.
     @State private var projectPage = ProjectPageModel()
     @State private var catalog = TemplateCatalog()
-    @State private var isProvisioning = false
+    @State private var provisioning: ProvisioningRequest?
 
     var body: some View {
         ZStack {
@@ -52,7 +52,7 @@ struct ContentView: View {
             menuBar.navigation = MenuBarNavigation(instanceID: link.instanceID, route: link.route, place: link.place)
         }
         .onChange(of: store.selectedID) { _, _ in
-            isProvisioning = false
+            provisioning = nil
             selection = nil
             rebind()
             followMenuBarRoute()
@@ -83,14 +83,23 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(isPresented: $isProvisioning) {
-            ProvisioningSheet(client: client, instanceID: store.selectedID, catalog: catalog) { route in
-                isProvisioning = false
+        .sheet(item: $provisioning) { request in
+            ProvisioningSheet(
+                client: client, instanceID: store.selectedID, hint: request.hint, catalog: catalog
+            ) { route in
+                provisioning = nil
                 guard let route else { return }
                 Task {
                     // The dashboard learns of the new service on its next poll. Ask now, so it opens at once.
                     await dashboard.refresh()
-                    selection = .resource(route)
+                    // The sheet lets the user move the service elsewhere, and then there is no way back to lead.
+                    if let project = request.project,
+                        dashboard.snapshot.resource(route)?.place?.projectID == project.id
+                    {
+                        open(route, entry: nil, from: project)
+                    } else {
+                        selection = .resource(route)
+                    }
                 }
             }
             .id(store.selectedID)
@@ -155,7 +164,7 @@ struct ContentView: View {
                     selection: $selection,
                     onRun: run,
                     onRefresh: { await dashboard.refresh() },
-                    onNewService: client == nil ? nil : { isProvisioning = true }
+                    onNewService: client == nil ? nil : { provisioning = ProvisioningRequest() }
                 )
             }
         } else {
@@ -199,20 +208,32 @@ struct ContentView: View {
     private func projectScreen(_ project: ProjectSummary) -> some View {
         let snapshot = dashboard.snapshot
         let identity = DetailIdentity(instanceID: store.selectedID, route: .project(project.id))
+        let resources = snapshot.resources(inProject: project.id)
+        let newService: (() -> Void)? =
+            client == nil
+            ? nil
+            : {
+                provisioning = ProvisioningRequest(
+                    project: project,
+                    hint: PlacementHint(projectUUID: project.id, resourceUUIDs: Set(resources.map(\.route.uuid))))
+            }
         return ProjectDetailScreen(
             client: client,
             page: projectPage,
             key: identity,
             project: project,
-            resources: snapshot.resources(inProject: project.id),
+            resources: resources,
             pending: snapshot.pending,
             actionError: snapshot.actionError,
             onOpen: { route, entry in
                 open(route, entry: entry, from: project)
             },
             onAction: run,
-            onChanged: { await dashboard.reloadProjects() }
+            onChanged: { await dashboard.reloadProjects() },
+            onNewService: newService
         )
+        // Only the project's own page sets this, so the menu's New Service goes dim on a resource it opened.
+        .focusedSceneValue(\.newService, newService.map { NewServiceAction(projectID: project.id, open: $0) })
         .id(identity)
     }
 
@@ -349,6 +370,14 @@ struct ContentView: View {
         .environment(InstanceStore(instances: []))
         .environment(MenuBarModel(preview: true))
         .environment(VariableLock(isRequired: true))
+}
+
+/// A New Service sheet to open: from the empty dashboard, or from a project's page.
+private struct ProvisioningRequest: Identifiable {
+    let id = UUID()
+    /// The project page it opened from. A service created there opens with the way back to it.
+    var project: ProjectSummary?
+    var hint: PlacementHint?
 }
 
 /// Keeps detail tasks isolated even when two instances contain the same resource UUID.
