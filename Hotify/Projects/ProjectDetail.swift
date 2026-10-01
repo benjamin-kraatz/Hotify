@@ -251,8 +251,8 @@ struct ProjectDetail: View {
         #endif
         .toolbar {
             DetailNavigation(title: "Project")
-            // One group, so the two share a glass capsule. The button leaves with the page, since a resource
-            // opened from here brings a toolbar of its own.
+            // One group, and the system decides how its glass falls. The Mac gives the menu a capsule of its own.
+            // The button leaves with the page, since a resource opened from here brings a toolbar of its own.
             ToolbarItemGroup(placement: .primaryAction) {
                 if let onNewService {
                     Button("New Service", systemImage: "plus", action: onNewService)
