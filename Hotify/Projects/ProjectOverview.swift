@@ -24,7 +24,7 @@ struct ProjectOverview: View {
         var groups = project.environments.map { environment in
             EnvironmentGroup(
                 environment: environment,
-                resources: ResourceGroup.sorted(members[environment.id] ?? []),
+                resources: (members[environment.id] ?? []).sortedForDisplay(),
                 isListed: true
             )
         }
@@ -34,7 +34,7 @@ struct ProjectOverview: View {
             groups.append(
                 EnvironmentGroup(
                     environment: EnvironmentSummary(id: id, name: resources.first?.place?.environmentName ?? ""),
-                    resources: ResourceGroup.sorted(resources),
+                    resources: resources.sortedForDisplay(),
                     isListed: false
                 )
             )

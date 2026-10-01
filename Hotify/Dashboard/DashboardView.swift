@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The middle column: one instance's resources, grouped by project and environment, with actions on each row.
-/// A group's header opens its project.
+/// The middle column: one instance's projects, each with its resources by environment and actions on every row.
+/// A project's head opens its page.
 struct DashboardView: View {
     var instanceName: String
     var host: String
@@ -18,6 +18,8 @@ struct DashboardView: View {
     @State private var refreshes = 0
     #if os(macOS)
     @FocusState private var isFiltering: Bool
+    /// Whether the arrow keys go to the list.
+    @FocusState private var isListFocused: Bool
     #endif
 
     /// What the typed text and the filter menu leave of the list. Each narrows what the other lets through.
@@ -43,51 +45,27 @@ struct DashboardView: View {
         snapshot.resources.map { $0.heat(pendingAction: snapshot.pendingAction(for: $0.route)) }
     }
 
-    var body: some View {
-        List(selection: $selection) {
-            Section {
-                DashboardTitle(instanceName: instanceName, teamName: snapshot.teamName, version: snapshot.version)
-                if !heats.isEmpty {
-                    HeatSummary(heats: heats)
-                }
-                ForEach(snapshot.servers) { server in
-                    ServerStatusLine(server: server)
-                }
-                if let loadError = snapshot.loadError {
-                    NoticeBanner(message: loadError)
-                }
-                if let actionError = snapshot.actionError {
-                    NoticeBanner(message: actionError)
-                }
-            }
-            .listRowSeparator(.hidden)
+    /// The list as it stands: a section per project. A project that holds nothing only shows while nothing
+    /// narrows the list.
+    private var sections: [ProjectSection] {
+        let isNarrowed = filter.isActive || !query.trimmingCharacters(in: .whitespaces).isEmpty
+        return ProjectSection.sections(of: visible, projects: snapshot.projects, includesEmpty: !isNarrowed)
+    }
 
-            ForEach(ResourceGroup.grouping(visible)) { group in
-                Section {
-                    ForEach(group.resources) { resource in
-                        row(resource)
-                    }
-                } header: {
-                    GroupHeader(
-                        place: group.place,
-                        isOpen: group.place.map { selection == .project($0.projectID) } ?? false,
-                        onOpen: group.place.map { place in { selection = .project(place.projectID) } }
-                    )
-                }
+    private func heats(of section: ProjectSection) -> [Heat] {
+        section.resources.map { $0.heat(pendingAction: snapshot.pendingAction(for: $0.route)) }
+    }
+
+    var body: some View {
+        let sections = sections
+        return list(sections)
+            .overlay {
+                overlay(isEmpty: sections.isEmpty)
             }
-        }
-        #if os(macOS)
-        .listStyle(.inset)
-        #else
-        .listStyle(.insetGrouped)
-        #endif
-        .overlay {
-            overlay
-        }
-        #if os(macOS)
-        // A search field in the toolbar would land over the detail column, far from the list it filters, and take
-        // the trailing edge that column's own actions belong at. So the Mac filters from a bar above the list.
-        // The field stays out of the list's rows, where a text field draws a box behind its text while it is edited.
+            #if os(macOS)
+        // A search field in the toolbar would land over the detail column, far from the list it filters, and
+        // take the trailing edge that column's own actions belong at. So the Mac filters from a bar above the
+        // list.
         .safeAreaBar(edge: .top) {
             if snapshot.hasLoaded, !snapshot.resources.isEmpty {
                 FilterField("Filter resources", text: $query, isFiltered: filter.isActive) {
@@ -107,14 +85,14 @@ struct DashboardView: View {
             .opacity(0)
             .accessibilityHidden(true)
         }
-        #else
+            #else
         .searchable(text: $query, prompt: "Filter resources")
-        #endif
         .refreshable {
             await onRefresh()
         }
-        .navigationTitle(instanceName)
-        #if os(macOS)
+            #endif
+            .navigationTitle(instanceName)
+            #if os(macOS)
         // The header already names the instance in the display face.
         .toolbar(removing: .title)
         #endif
@@ -160,16 +138,120 @@ struct DashboardView: View {
         .sensoryFeedback(trigger: snapshot.pending) { old, new in
             new.count > old.count ? .impact(weight: .light) : nil
         }
+        .animation(.snappy, value: sections.map(\.id))
         .animation(.snappy, value: visible.map(\.id))
         .animation(.snappy, value: snapshot.loadError)
         .animation(.snappy, value: snapshot.actionError)
     }
 
+    /// The instance's own facts, above the projects: its name on the Mac, the team, how much runs, the servers.
+    @ViewBuilder
+    private var summary: some View {
+        DashboardTitle(instanceName: instanceName, teamName: snapshot.teamName, version: snapshot.version)
+        if !heats.isEmpty {
+            HeatSummary(heats: heats)
+        }
+        ForEach(snapshot.servers) { server in
+            ServerStatusLine(server: server)
+        }
+        if let loadError = snapshot.loadError {
+            NoticeBanner(message: loadError)
+        }
+        if let actionError = snapshot.actionError {
+            NoticeBanner(message: actionError)
+        }
+    }
+
+    #if os(macOS)
+    /// A panel per project. Not a `List`: its rows cannot sit inside a shared panel, and it animates a row's
+    /// height poorly. The arrow keys step through the rows as they would in one.
+    private func list(_ sections: [ProjectSection]) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        summary
+                    }
+                    // In line with what the panels below hold, so every name in the column starts at one edge.
+                    .padding(.horizontal, 4 + DashboardRowMetrics.inset)
+                    .padding(.bottom, 4)
+
+                    ForEach(sections) { section in
+                        ProjectCard(section: section, heats: heats(of: section), selection: selection) { route in
+                            isListFocused = true
+                            selection = route
+                        } row: { resource in
+                            row(resource)
+                        }
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 20)
+            }
+            .focusable()
+            .focusEffectDisabled()
+            .focused($isListFocused)
+            .onKeyPress(keys: [.upArrow, .downArrow]) { press in
+                step(press.key == .downArrow ? 1 : -1, through: sections.flatMap(\.routes), scroll: proxy)
+            }
+        }
+    }
+
+    /// Moves the selection one row up or down, and keeps it in view.
+    private func step(_ offset: Int, through routes: [DetailRoute], scroll proxy: ScrollViewProxy) -> KeyPress.Result {
+        guard !routes.isEmpty else { return .ignored }
+        let current = selection.flatMap { routes.firstIndex(of: $0) }
+        let next = current.map { min(max($0 + offset, 0), routes.count - 1) } ?? (offset > 0 ? 0 : routes.count - 1)
+        selection = routes[next]
+        proxy.scrollTo(routes[next])
+        return .handled
+    }
+    #else
+    /// A grouped section per project, headed by a row that opens it.
+    private func list(_ sections: [ProjectSection]) -> some View {
+        List(selection: $selection) {
+            Section {
+                summary
+            }
+            .listRowSeparator(.hidden)
+
+            ForEach(sections) { section in
+                Section {
+                    if let projectID = section.projectID {
+                        ProjectSectionHeader(section: section, heats: heats(of: section))
+                            .tag(DetailRoute.project(projectID))
+                    }
+                    ForEach(section.environments) { environment in
+                        if section.labelsEnvironments {
+                            EnvironmentBadge(name: environment.name.isEmpty ? "Environment" : environment.name)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+                                .selectionDisabled()
+                                .accessibilityAddTraits(.isHeader)
+                        }
+                        ForEach(environment.resources) { resource in
+                            row(resource)
+                                .tag(DetailRoute.resource(resource.route))
+                        }
+                    }
+                } header: {
+                    if section.projectID == nil {
+                        Text(section.name)
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        // The label of an environment is a short row of its own. The default would pad it out to a full one.
+        .environment(\.defaultMinListRowHeight, 24)
+    }
+    #endif
+
     private func row(_ resource: ResourceSummary) -> some View {
         let pendingAction = snapshot.pendingAction(for: resource.route)
         let actions = ResourceAction.available(for: resource)
         return ResourceRow(resource: resource, pendingAction: pendingAction)
-            .tag(DetailRoute.resource(resource.route))
             .contextMenu {
                 ResourceActionButtons(resource: resource, pendingAction: pendingAction) { action in
                     run(action, on: resource)
@@ -214,7 +296,7 @@ struct DashboardView: View {
     }
 
     @ViewBuilder
-    private var overlay: some View {
+    private func overlay(isEmpty: Bool) -> some View {
         if !snapshot.hasLoaded, snapshot.loadError == nil {
             VStack(spacing: 14) {
                 FlameGlyph(heat: .warming, height: 44)
@@ -223,7 +305,8 @@ struct DashboardView: View {
                     .foregroundStyle(.secondary)
             }
             .transition(.opacity)
-        } else if snapshot.hasLoaded, snapshot.resources.isEmpty {
+        } else if snapshot.hasLoaded, snapshot.resources.isEmpty, isEmpty {
+            // A project that holds nothing still shows as a panel, so this is for a team without projects either.
             ContentUnavailableView {
                 Label("Nothing deployed yet", systemImage: "flame")
             } description: {

@@ -11,7 +11,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
-  - `Projects/` shows one project: its resources by environment, the previews of all its applications, and the variables the project and its environments share. It opens from a group's header in the dashboard and takes the detail column. A resource opened from it offers the way back.
+  - `Projects/` shows one project: its resources by environment, the previews of all its applications, and the variables the project and its environments share. It opens from the project's head in the dashboard and takes the detail column. A resource opened from it offers the way back.
   - `Provisioning/` creates services from Coolify's one-click templates: a gallery, then placement, setup, and the first start, in one sheet that opens from the dashboard's New Service button.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
@@ -76,6 +76,7 @@ The live tests in `LiveCoolifyTests.swift` skip unless `COOLIFY_LIVE_TESTS=1` is
 ### Look and feel
 
 - The window has three columns: instances, the selected instance's resources, then the open resource or project. iPhone pushes them as a stack.
+- The dashboard holds one panel per project: the project on top, which opens its page, then its resources. A project with one environment names it beside its own name. One with several labels each inside the panel, so a project's name never repeats. On the Mac the panels are `ProjectCard`s in a scroll view, and the open row shows as a tinted pill so the flames keep their colors. iOS draws the same sections as a grouped list.
 - Move inside the detail column by swapping the screen in place. The view that owns the column's toolbar lists a `DetailNavigation` first, with the screen's title and where back leads. A navigation stack nested in the detail column loses its `.task` on iPhone.
 - On the Mac, a column's toolbar items pack at its leading edge. `DetailNavigation` ends in a flexible spacer that sends the actions after it to the trailing edge. A `.searchable` field would take that edge and add a spacer of its own, which leaves the actions in the middle, so the Mac filters the dashboard with a `FilterField` in a `safeAreaBar` above the list. Keep that field out of the list's rows, where a text field draws a box behind its text while it is edited.
 - A `FilterField` icon that opens a menu has to filter something. The dashboard's narrows the list by state and by kind, and lights up while a filter is on.

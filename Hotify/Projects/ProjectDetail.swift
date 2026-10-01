@@ -144,7 +144,7 @@ struct ProjectDetail: View {
     private var activity: ProjectActivityModel { page.activity }
 
     private var applications: [ResourceSummary] {
-        ResourceGroup.sorted(resources.filter { $0.kind == .application })
+        resources.filter { $0.kind == .application }.sortedForDisplay()
     }
 
     /// Only applications have previews, so a project of databases and services goes without the tab.
