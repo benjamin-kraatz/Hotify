@@ -4,6 +4,7 @@ import copy
 import datetime
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -71,7 +72,26 @@ class Fixture(ThreadingHTTPServer):
             {"uuid": "preview", "key": "PREVIEW_ONLY", "value": "preview-value", "is_preview": True},
         ]
         self.executions = [{"uuid": "failed-backup", "status": "failed", "message": "Fixture storage unavailable", "created_at": now(), "size": "0"}]
+        self.projects = [{"uuid": "fixture-project", "name": "Fixture project", "environments": [{"id": 1, "uuid": "fixture-production", "name": "production"}]}]
+        # Services created from templates. Each comes up a few seconds after its start request.
+        self.services = {}
         self.lock = threading.Lock()
+
+    def service(self, uuid):
+        record = self.services[uuid]
+        started = record.get("started_at")
+        elapsed = time.monotonic() - started if started else None
+        if elapsed is None or elapsed < 3:
+            states = ["exited", "exited"]
+        elif elapsed < 9:
+            states = ["starting", "running:healthy"]
+        else:
+            states = ["running:healthy", "running:healthy"]
+        app, db = record["containers"]
+        applications = [{"id": 1, "name": app, "status": states[0], "image": f"{app}:latest", "fqdn": record["fqdn"]}]
+        databases = [{"id": 2, "name": db, "status": states[1], "image": "postgres:16-alpine"}]
+        status = "running:healthy" if states == ["running:healthy", "running:healthy"] else states[0]
+        return {"uuid": uuid, "name": record["name"], "service_type": record["type"], "status": status, "environment_id": 1, "applications": applications, "databases": databases}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -102,7 +122,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/team":
             return self.respond({"id": 1, "name": "Fixture team"})
         if path == "/projects":
-            return self.respond([])
+            return self.respond([{"uuid": p["uuid"], "name": p["name"]} for p in self.server.projects])
+        if path.startswith("/projects/"):
+            project = next((p for p in self.server.projects if p["uuid"] == path.split("/")[2]), None)
+            return self.respond(project) if project else self.respond({"message": "Project not found."}, 404)
+        if path == "/servers/server/destinations":
+            return self.respond([{"uuid": "fixture-network", "name": "Fixture network", "network": "coolify", "server_uuid": "server"}])
         if path == "/servers":
             return self.respond([{"uuid": "server", "name": "Fixture server", "is_reachable": 1}])
         if path == "/applications":
@@ -112,7 +137,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/databases":
             return self.respond([{"uuid": "db", "name": "Fixture Postgres", "database_type": "standalone-postgresql", "status": "running:healthy"}])
         if path == "/services":
-            return self.respond([])
+            return self.respond([self.server.service(uuid) for uuid in self.server.services])
+        if path.startswith("/services/") and path.endswith("/envs"):
+            record = self.server.services.get(path.split("/")[2])
+            return self.respond(copy.deepcopy(record["envs"])) if record else self.respond({"message": "Service not found."}, 404)
+        if path.startswith("/services/") and path.count("/") == 2:
+            uuid = path.split("/")[2]
+            return self.respond(self.server.service(uuid)) if uuid in self.server.services else self.respond({"message": "Service not found."}, 404)
         if path == "/deployments":
             return self.respond([])
         if path == "/deployments/applications/web":
@@ -157,6 +188,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/databases/db/backups/daily" and body == {"backup_now": True}:
                 self.server.executions.insert(0, {"uuid": f"backup-{len(self.server.executions)}", "status": "success", "message": "Fixture backup completed", "created_at": now(), "size": "1024", "filename": "fixture.sql"})
                 return self.respond({"message": "Database backup configuration updated"})
+            handled = self.provision(path, body)
+            if handled is not None:
+                return handled
             if path.endswith("/envs"):
                 target = next((v for v in self.server.variables if v["key"] == body["key"] and v.get("is_preview", False) == body.get("is_preview", False)), None)
                 if self.command == "POST":
@@ -185,6 +219,61 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/deploy" or path.endswith("/restart"):
                 return self.respond({"message": "Queued", "deployments": []})
             return self.respond({"message": "Fixture write not supported"}, 404)
+
+    def provision(self, path, body):
+        """Creates, sets up, starts, and deletes services the way Coolify 4.3 answers. `None` passes the request on."""
+        services = self.server.services
+        if path == "/services" and self.command == "POST":
+            uuid = f"svc-{len(services) + 1}"
+            name = body.get("name") or body["type"]
+            fqdn = f"http://{name}-{uuid}.127.0.0.1.sslip.io"
+            services[uuid] = {
+                "name": name, "type": body["type"], "containers": [body["type"], "postgres"], "fqdn": fqdn,
+                "envs": [
+                    {"uuid": f"{uuid}-1", "key": "SERVICE_PASSWORD_POSTGRES", "value": "fixture-generated"},
+                    {"uuid": f"{uuid}-2", "key": f"SERVICE_URL_{body['type'].upper().replace('-', '_')}", "value": fqdn},
+                    {"uuid": f"{uuid}-3", "key": "POSTGRES_DB", "value": body["type"]},
+                    {"uuid": f"{uuid}-4", "key": "ADMIN_EMAIL", "value": ""},
+                    {"uuid": f"{uuid}-5", "key": "SMTP_PASSWORD", "value": ""},
+                ],
+            }
+            return self.respond({"uuid": uuid, "domains": [fqdn]}, 201)
+        if not path.startswith("/services/"):
+            if path == "/projects" and self.command == "POST":
+                uuid = f"project-{len(self.server.projects) + 1}"
+                self.server.projects.append({"uuid": uuid, "name": body["name"], "environments": [{"id": 10 + len(self.server.projects), "uuid": f"{uuid}-production", "name": "production"}]})
+                return self.respond({"uuid": uuid}, 201)
+            if path.startswith("/projects/") and path.endswith("/environments") and self.command == "POST":
+                project = next(p for p in self.server.projects if p["uuid"] == path.split("/")[2])
+                uuid = f"{project['uuid']}-{body['name']}"
+                project["environments"].append({"id": 20 + len(project["environments"]), "uuid": uuid, "name": body["name"]})
+                return self.respond({"uuid": uuid}, 201)
+            return None
+        uuid = path.split("/")[2]
+        record = services.get(uuid)
+        if record is None:
+            return None
+        if path == f"/services/{uuid}" and self.command == "DELETE":
+            del services[uuid]
+            return self.respond({"message": "Service deletion request queued."})
+        if path == f"/services/{uuid}" and self.command == "PATCH":
+            for item in body.get("urls", []):
+                if "taken.example" in item["url"] and not body.get("force_domain_override"):
+                    return self.respond({"message": "Domain conflicts detected. Use force_domain_override=true to proceed.", "conflicts": [{"domain": item["url"], "resource_name": "Fixture Web", "resource_type": "application"}], "warning": "Shared domains split traffic."}, 409)
+                record["fqdn"] = item["url"]
+            return self.respond({"uuid": uuid, "domains": [record["fqdn"]]})
+        if path == f"/services/{uuid}/envs/bulk":
+            for item in body["data"]:
+                target = next((v for v in record["envs"] if v["key"] == item["key"]), None)
+                if target is None:
+                    target = {"uuid": f"{uuid}-{len(record['envs']) + 1}", "key": item["key"]}
+                    record["envs"].append(target)
+                target["value"] = item["value"]
+            return self.respond(copy.deepcopy(record["envs"]), 201)
+        if path == f"/services/{uuid}/start":
+            record["started_at"] = time.monotonic()
+            return self.respond({"message": "Service starting request queued."})
+        return None
 
 
 if __name__ == "__main__":

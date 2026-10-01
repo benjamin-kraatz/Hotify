@@ -28,7 +28,7 @@ Use mock HTTP fixtures for decoding, write request shapes, two-instance sync, an
 
 ## Native fixture workflow
 
-Run `python3 scripts/mock_coolify.py` to start two in-memory HTTP fixtures on loopback ports 18081 and 18082. They serve deployment output/history, backup history, variables, and manual writes. Restarting the script resets all fixture data. It never reads `.env`, logs request bodies, or contacts another host.
+Run `python3 scripts/mock_coolify.py` to start two in-memory HTTP fixtures on loopback ports 18081 and 18082. They serve deployment output/history, backup history, variables, and manual writes. They also take New Service end to end: projects and environments, service create, setup, and delete, and a start whose containers come up a few seconds later. An address containing `taken.example` answers 409 until it is forced. The template gallery itself still loads Coolify's public catalog from cdn.coollabs.io. Restarting the script resets all fixture data. It never reads `.env`, logs request bodies, or contacts another host.
 
 Launch a Debug build with `HOTIFY_FIXTURES=1`. This supplies two in-memory instances and fake clients, disables the variable lock for fixture values, and refuses instance edits. Release builds do not include this entry point. Use a separate Mac bundle identifier, for example `PRODUCT_BUNDLE_IDENTIFIER=de.benn.HotifyFixtures`, to keep menu bar preferences separate from the installed app. The iOS simulator can receive the flag through `SIMCTL_CHILD_HOTIFY_FIXTURES=1 xcrun simctl launch <device-id> com.sebastiankraatz.Hotify`.
 
