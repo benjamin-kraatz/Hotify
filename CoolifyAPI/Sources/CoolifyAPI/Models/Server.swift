@@ -60,6 +60,14 @@ public struct Server: Decodable, Sendable, Hashable {
         isUsable = container.flexBool(.isUsable)
         settings = try container.decodeIfPresent(ServerSettings.self, forKey: .settings)
     }
+
+    public init(uuid: String, name: String, ip: String? = nil, isReachable: Bool? = nil, isUsable: Bool? = nil) {
+        self.uuid = uuid
+        self.name = name
+        self.ip = ip
+        self.isReachable = isReachable
+        self.isUsable = isUsable
+    }
 }
 
 /// A resource row from `GET /servers/{uuid}/resources`.

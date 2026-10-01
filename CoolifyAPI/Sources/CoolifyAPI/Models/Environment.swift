@@ -6,4 +6,11 @@ public struct Environment: Decodable, Sendable, Hashable {
     public var uuid: String?
     public var name: String?
     public var description: String?
+
+    public init(id: Int? = nil, uuid: String? = nil, name: String? = nil, description: String? = nil) {
+        self.id = id
+        self.uuid = uuid
+        self.name = name
+        self.description = description
+    }
 }
