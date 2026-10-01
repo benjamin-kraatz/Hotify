@@ -92,7 +92,7 @@ struct VariableList: View {
 
     private var controls: some View {
         HStack(spacing: 10) {
-            KeyFilterField(text: $filter)
+            FilterField("Filter keys", text: $filter)
 
             LockCountdownButton(lock: lock)
 

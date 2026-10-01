@@ -15,6 +15,9 @@ struct DashboardView: View {
     @State private var query = ""
     @State private var stopCandidate: ResourceSummary?
     @State private var refreshes = 0
+    #if os(macOS)
+    @FocusState private var isFiltering: Bool
+    #endif
 
     private var visible: [ResourceSummary] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -49,6 +52,14 @@ struct DashboardView: View {
                 if let actionError = snapshot.actionError {
                     NoticeBanner(message: actionError)
                 }
+                #if os(macOS)
+                // A search field in the toolbar would land over the detail column, far from the list it filters,
+                // and take the trailing edge that column's own actions belong at. So the Mac filters from here.
+                if snapshot.hasLoaded, !snapshot.resources.isEmpty {
+                    FilterField("Filter resources", text: $query)
+                        .focused($isFiltering)
+                }
+                #endif
             }
             .listRowSeparator(.hidden)
 
@@ -75,8 +86,15 @@ struct DashboardView: View {
             overlay
         }
         #if os(macOS)
-        // The default placement parks the field over the detail column, far from the list it filters.
-        .searchable(text: $query, placement: .sidebar, prompt: "Filter resources")
+        .background {
+            // Command-F puts the cursor in the filter, as it would in a search field.
+            Button("Filter Resources") {
+                isFiltering = true
+            }
+            .keyboardShortcut("f")
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
         #else
         .searchable(text: $query, prompt: "Filter resources")
         #endif
@@ -194,6 +212,8 @@ struct DashboardView: View {
             }
         } else if !query.isEmpty, visible.isEmpty {
             ContentUnavailableView.search(text: query)
+                // On the Mac the filter sits in the list underneath, and has to stay within reach to be changed.
+                .allowsHitTesting(false)
         }
     }
 }

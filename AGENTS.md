@@ -77,7 +77,7 @@ The live tests in `LiveCoolifyTests.swift` skip unless `COOLIFY_LIVE_TESTS=1` is
 
 - The window has three columns: instances, the selected instance's resources, then the open resource or project. iPhone pushes them as a stack.
 - Move inside the detail column by swapping the screen in place. The view that owns the column's toolbar lists a `DetailNavigation` first, with the screen's title and where back leads. A navigation stack nested in the detail column loses its `.task` on iPhone.
-- On the Mac, everything in the detail column's toolbar packs at its leading edge, and the search field takes the trailing edge. A flexible spacer centers the actions rather than moving them right.
+- On the Mac, a column's toolbar items pack at its leading edge. `DetailNavigation` ends in a flexible spacer that sends the actions after it to the trailing edge. A `.searchable` field would take that edge and add a spacer of its own, which leaves the actions in the middle, so the Mac filters lists with a `FilterField` in the list.
 - Show status through `Heat` and `FlameGlyph`. A lit red flame means running, and a grey outline means stopped. Anything starting, unhealthy, or failed glows amber. Never use red for an error.
 - Use the asset colors `ember`, `glow`, and `core`, not raw hex. The accent is `ember`.
 - Pull request previews burn blue, like a pilot light. Pass `tone: .preview` to `FlameGlyph` and `heatEdge`, and use `pilot` and `pilotCore` for preview marks, never for production. A building preview keeps its blue body with an amber core. A failed one glows amber like anything else.

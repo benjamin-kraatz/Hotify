@@ -1,14 +1,20 @@
 import SwiftUI
 
-/// The capsule field above a list of variables that narrows it by key.
-struct KeyFilterField: View {
+/// The capsule field above a list that narrows it as you type.
+struct FilterField: View {
+    var prompt: String
     @Binding var text: String
+
+    init(_ prompt: String, text: Binding<String>) {
+        self.prompt = prompt
+        _text = text
+    }
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "line.3.horizontal.decrease")
                 .foregroundStyle(.secondary)
-            TextField("Filter keys", text: $text)
+            TextField(prompt, text: $text)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
                 #if os(iOS)
@@ -33,7 +39,7 @@ struct KeyFilterField: View {
 
 #Preview {
     @Previewable @State var text = "API"
-    KeyFilterField(text: $text)
+    FilterField("Filter keys", text: $text)
         .padding()
         .frame(width: 320)
 }

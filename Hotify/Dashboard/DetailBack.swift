@@ -9,8 +9,8 @@ struct DetailBack {
 /// The leading end of the detail column's toolbar: the way back, when there is one, and on the Mac the screen's title.
 ///
 /// The detail column swaps its screens in place rather than pushing them, so whichever view owns the column's
-/// toolbar says where back leads. List this first in that toolbar, ahead of the screen's actions. Escape goes
-/// back too.
+/// toolbar says where back leads. List this first in that toolbar. The screen's actions follow it, and on the Mac
+/// they land at the trailing edge. Escape goes back too.
 struct DetailNavigation: ToolbarContent {
     /// Names the screen, such as `Application` or `Previews`. The name of the thing itself heads the screen below.
     var title: String
@@ -38,8 +38,10 @@ struct DetailNavigation: ToolbarContent {
                 .padding(.horizontal, 4)
         }
         .sharedBackgroundVisibility(.hidden)
-        // Keeps the title apart from the actions after it, which share one glass panel.
-        ToolbarSpacer(.fixed)
+        // The Mac packs a column's toolbar items at its leading edge. This sends what follows to the far side.
+        // It only works while nothing else in the window toolbar stretches, which is why the list filters from
+        // a field of its own rather than a search field up here.
+        ToolbarSpacer(.flexible)
         #endif
     }
 
