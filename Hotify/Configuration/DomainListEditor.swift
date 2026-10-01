@@ -1,20 +1,28 @@
 import SwiftUI
 
-/// Edits a list of web addresses as form rows, one per address, with a way to add another and to remove each.
+/// Edits a list of web addresses as form rows, one per address, each with a way to remove it. The section's
+/// `DomainSectionHeader` adds a row, and the new row takes the focus.
 struct DomainListEditor: View {
     @Binding var domains: [String]
-    /// Says what the addresses are for, for VoiceOver and the field's prompt.
+    /// Says what the addresses are for, for VoiceOver.
     var owner: String
 
+    @FocusState private var focused: Int?
+
     var body: some View {
+        if domains.isEmpty {
+            Text("No domain")
+                .foregroundStyle(.secondary)
+        }
         ForEach(domains.indices, id: \.self) { index in
             row(index)
+                .focused($focused, equals: index)
         }
-        Button("Add Domain", systemImage: "plus") {
-            domains.append("https://")
+        .onChange(of: domains.count) { old, new in
+            if new > old {
+                focused = new - 1
+            }
         }
-        .buttonStyle(.borderless)
-        .accessibilityHint("Adds an address for \(owner)")
     }
 
     private func row(_ index: Int) -> some View {
@@ -55,13 +63,42 @@ struct DomainListEditor: View {
     }
 }
 
+/// A domains section's header: its title, and the button that adds a domain at the trailing end.
+struct DomainSectionHeader: View {
+    var title: String
+    @Binding var domains: [String]
+    var owner: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+            Spacer(minLength: 8)
+            Button("Add Domain", systemImage: "plus") {
+                domains.append("https://")
+            }
+            .buttonStyle(.borderless)
+            .textCase(nil)
+            .help("Add a domain for \(owner)")
+            .accessibilityHint("Adds an address for \(owner)")
+        }
+    }
+}
+
 #Preview {
     @Previewable @State var domains = ["https://hotify.example.com", "www.hotify.example.com"]
+    @Previewable @State var none: [String] = []
     Form {
-        Section("Domains") {
+        Section {
             DomainListEditor(domains: $domains, owner: "marketing-site")
+        } header: {
+            DomainSectionHeader(title: "Domains", domains: $domains, owner: "marketing-site")
+        }
+        Section {
+            DomainListEditor(domains: $none, owner: "worker")
+        } header: {
+            DomainSectionHeader(title: "worker", domains: $none, owner: "worker")
         }
     }
     .formStyle(.grouped)
-    .frame(width: 480, height: 260)
+    .frame(width: 480, height: 360)
 }

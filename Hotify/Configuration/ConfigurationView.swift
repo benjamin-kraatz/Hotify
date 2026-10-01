@@ -158,23 +158,28 @@ struct ConfigurationView: View {
         .disabled(model.isSaving)
     }
 
+    /// The domains alone in their section, then how the proxy redirects them in a section of its own.
+    @ViewBuilder
     private var applicationDomains: some View {
         Section {
             DomainListEditor(domains: draft.domains, owner: resource.name)
-            Picker("www", selection: draft.redirect) {
-                Text("Answer on both").tag(DomainRedirect.both)
-                Text("Redirect to www").tag(DomainRedirect.www)
-                Text("Redirect to the bare domain").tag(DomainRedirect.nonWWW)
-            }
-            Toggle("Redirect HTTP to HTTPS", isOn: draft.forcesHTTPS)
         } header: {
-            Text("Domains")
+            DomainSectionHeader(title: "Domains", domains: draft.domains, owner: resource.name)
         } footer: {
             Text(
                 draft.wrappedValue.domains.isEmpty
                     ? "Without a domain, the app is only reachable inside the server's network."
                     : "Coolify routes these to the app through the server's proxy. Changes take effect with the next deployment."
             )
+        }
+
+        Section("Redirects") {
+            Picker("www", selection: draft.redirect) {
+                Text("Answer on both").tag(DomainRedirect.both)
+                Text("Redirect to www").tag(DomainRedirect.www)
+                Text("Redirect to the bare domain").tag(DomainRedirect.nonWWW)
+            }
+            Toggle("Redirect HTTP to HTTPS", isOn: draft.forcesHTTPS)
         }
     }
 
@@ -191,7 +196,9 @@ struct ConfigurationView: View {
                 Section {
                     DomainListEditor(domains: container.domains, owner: container.wrappedValue.label)
                 } header: {
-                    Text(container.wrappedValue.label)
+                    DomainSectionHeader(
+                        title: container.wrappedValue.label, domains: container.domains,
+                        owner: container.wrappedValue.label)
                 } footer: {
                     if container.wrappedValue.id == containers.wrappedValue.last?.id {
                         Text(
