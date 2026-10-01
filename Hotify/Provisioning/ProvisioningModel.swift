@@ -27,11 +27,20 @@ final class ProvisioningModel {
     var serviceName = ""
     var setup = SetupDraft()
     var isLoadingSetup = false
+    /// Whether the setup has loaded. Until it has, nothing says what the service still needs, so it cannot start.
+    var hasLoadedSetup = false
     var isSaving = false
     var isDiscarding = false
     var setupProblem: ProvisioningProblem?
-    /// Set when the user chose to share a domain another resource already uses.
-    private var overridesDomains = false
+    /// The domains the user chose to share with another resource. Changing them asks again.
+    private var sharedDomains: [ServiceDomain]?
+    /// What the last save was for, so sharing a taken domain carries on with it.
+    private var intent = Intent.start
+
+    private enum Intent {
+        case start
+        case later
+    }
 
     var ignition = Ignition()
 
@@ -54,6 +63,7 @@ final class ProvisioningModel {
 
     var canCreate: Bool {
         client != nil && placement.placement.isComplete && !isCreating && !placement.isCreatingPlace
+            && !placement.isLoadingDestinations
     }
 
     /// Creates the service, stopped, and moves on to setup.
@@ -103,6 +113,7 @@ final class ProvisioningModel {
             let loadedService = try await service
             setup = SetupDraft(service: loadedService, variables: try await variables, outline: template.outline)
             serviceName = loadedService.name.isEmpty ? serviceName : loadedService.name
+            hasLoadedSetup = true
             setupProblem = nil
         } catch is CancellationError {
             return
@@ -113,7 +124,8 @@ final class ProvisioningModel {
 
     /// Saves the setup, starts the service, and moves on to watching it.
     func start() async {
-        guard let client, let serviceUUID, await save() else { return }
+        intent = .start
+        guard let client, let serviceUUID, hasLoadedSetup, await save() else { return }
         isSaving = true
         defer { isSaving = false }
         do {
@@ -125,10 +137,23 @@ final class ProvisioningModel {
         }
     }
 
-    /// Repeats the start after the user chose to share a taken domain.
-    func startSharingDomains() async {
-        overridesDomains = true
-        await start()
+    /// Saves without starting. Returns whether the service can be opened.
+    func saveForLater() async -> Bool {
+        intent = .later
+        return await save()
+    }
+
+    /// Repeats the last save or start, sharing the domains that were taken. Returns whether to close, which is
+    /// after a save for later.
+    func shareDomains() async -> Bool {
+        sharedDomains = setup.changedDomains
+        switch intent {
+        case .start:
+            await start()
+            return false
+        case .later:
+            return await saveForLater()
+        }
     }
 
     /// Saves what the user changed. Domains go first, because Coolify parses the compose file again after them.
@@ -142,7 +167,7 @@ final class ProvisioningModel {
             if !domains.isEmpty {
                 _ = try await client.updateService(
                     serviceUUID,
-                    ServiceUpdate(urls: domains, forceDomainOverride: overridesDomains ? true : nil)
+                    ServiceUpdate(urls: domains, forceDomainOverride: sharedDomains == domains ? true : nil)
                 )
                 for index in setup.domains.indices {
                     setup.domains[index].original = setup.domains[index].trimmed
@@ -151,7 +176,7 @@ final class ProvisioningModel {
             let values = setup.changedValues
             if !values.isEmpty {
                 _ = try await client.setEnvironmentVariables(values, on: .service(serviceUUID))
-                for index in setup.settings.indices where !setup.settings[index].isHidden {
+                for index in setup.settings.indices where setup.settings[index].isChanged {
                     setup.settings[index].original = setup.settings[index].value
                 }
             }

@@ -21,7 +21,16 @@ struct PlacementSection: View {
 
     var body: some View {
         Section {
-            if !model.hasLoaded {
+            if !model.hasLoaded, model.problem != nil, !model.isLoading {
+                HStack {
+                    Text("Servers and projects didn't load.")
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 12)
+                    Button("Try Again", systemImage: "arrow.clockwise") {
+                        Task { await model.load() }
+                    }
+                }
+            } else if !model.hasLoaded {
                 HStack(spacing: 10) {
                     ProgressView()
                         .controlSize(.small)
@@ -71,7 +80,7 @@ struct PlacementSection: View {
             selection: Binding(
                 get: { model.placement.serverUUID ?? "" },
                 set: { uuid in
-                    Task { await model.selectServer(uuid) }
+                    model.selectServer(uuid)
                 })
         ) {
             ForEach(model.hostServers, id: \.uuid) { server in

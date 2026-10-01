@@ -37,10 +37,13 @@ struct Ignition: Hashable {
     }
 
     mutating func observe(_ service: Service, at now: Date = .now) {
-        let members = (service.applications ?? []) + (service.databases ?? [])
-        containers = members.map { container in
+        let applications = service.applications ?? []
+        let databases = service.databases ?? []
+        let members = applications + databases
+        containers = members.enumerated().map { index, container in
             ContainerSummary(
-                id: container.id,
+                // Applications and databases are numbered in separate tables, so their ids can collide.
+                id: index < applications.count ? container.id : -container.id - 1,
                 name: container.humanName ?? container.name,
                 serviceName: container.name,
                 status: container.status,

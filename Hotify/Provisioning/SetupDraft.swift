@@ -54,8 +54,10 @@ struct SetupDraft: Hashable {
     }
 
     /// Required settings still empty. Compose refuses to start the service until they have a value.
+    /// A hidden value may already be set, so it never counts as missing.
     var missingKeys: [String] {
-        settings.filter { $0.isRequired && $0.value.trimmingCharacters(in: .whitespaces).isEmpty }.map(\.key)
+        settings.filter { $0.isRequired && !$0.isHidden && $0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+            .map(\.key)
     }
 }
 
@@ -92,7 +94,7 @@ struct DomainDraft: Identifiable, Hashable {
 /// One environment variable of the new service.
 struct VariableDraft: Identifiable, Hashable {
     var key: String
-    /// `nil` when the token cannot read values. Such a variable is shown but left alone.
+    /// `nil` when the token cannot read values. Such a variable is only written when the user types a new value.
     var original: String?
     var value: String
     var isRequired = false
@@ -109,7 +111,7 @@ struct VariableDraft: Identifiable, Hashable {
     }
 
     var isHidden: Bool { original == nil }
-    var isChanged: Bool { !isHidden && value != original }
+    var isChanged: Bool { isHidden ? !value.isEmpty : value != original }
 
     /// Coolify fills `SERVICE_*` variables itself: passwords, users, and each container's address.
     var isGenerated: Bool { key.hasPrefix("SERVICE_") }

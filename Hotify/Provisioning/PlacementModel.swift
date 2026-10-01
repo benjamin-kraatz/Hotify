@@ -15,6 +15,8 @@ final class PlacementModel {
     var problem: ProvisioningProblem?
     /// A project or environment being created from the picker.
     var isCreatingPlace = false
+    /// The picked server's networks are loading. Creating waits, since a server with several needs one named.
+    var isLoadingDestinations = false
 
     private var client: CoolifyClient?
     private var instanceID: UUID?
@@ -81,12 +83,13 @@ final class PlacementModel {
         }
     }
 
-    func selectServer(_ uuid: String) async {
+    /// Picks the server at once, so the picker shows it, and loads its networks behind it.
+    func selectServer(_ uuid: String) {
         guard placement.serverUUID != uuid else { return }
         placement.serverUUID = uuid
         placement.destinationUUID = nil
         destinations = []
-        await loadDestinations()
+        Task { await loadDestinations() }
     }
 
     func selectProject(_ uuid: String) {
@@ -164,8 +167,10 @@ final class PlacementModel {
     /// Lists the server's networks. A failure is not fatal: with one network Coolify picks it on its own.
     private func loadDestinations() async {
         guard let client, let serverUUID = placement.serverUUID else { return }
+        isLoadingDestinations = true
         let loaded = (try? await client.destinations(onServer: serverUUID)) ?? []
         guard placement.serverUUID == serverUUID else { return }
+        isLoadingDestinations = false
         destinations = loaded.count > 1 ? loaded : []
         if destinations.isEmpty {
             placement.destinationUUID = nil

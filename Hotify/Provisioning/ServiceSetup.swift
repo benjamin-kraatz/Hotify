@@ -50,6 +50,15 @@ struct ServiceSetup: View {
             Section {
                 if model.isLoadingSetup, model.setup.settings.isEmpty {
                     loadingRow("Reading its settings…")
+                } else if !model.hasLoadedSetup, model.setupProblem != nil {
+                    HStack {
+                        Text("Its settings didn't load.")
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 12)
+                        Button("Try Again", systemImage: "arrow.clockwise") {
+                            Task { await model.loadSetup() }
+                        }
+                    }
                 } else if model.setup.settings.isEmpty {
                     Text("Nothing to fill in. \(displayName) runs as it is.")
                         .foregroundStyle(.secondary)
@@ -97,7 +106,9 @@ struct ServiceSetup: View {
             if let problem = model.setupProblem {
                 Section {
                     ProblemNotice(problem: problem, instanceRoot: model.instanceRoot) {
-                        Task { await model.startSharingDomains() }
+                        Task {
+                            if await model.shareDomains() { onClose(model.route) }
+                        }
                     }
                 }
             }
@@ -123,7 +134,13 @@ struct ServiceSetup: View {
             isPresented: $isConfirmingCancel,
             titleVisibility: .visible
         ) {
-            Button("Keep It, Stopped") { onClose(model.route) }
+            Button("Keep It, Stopped") {
+                // Keep what was typed too. A failed save stays open and says why.
+                Task {
+                    let saved = model.setup.hasChanges ? await model.saveForLater() : true
+                    if saved { onClose(model.route) }
+                }
+            }
             Button("Delete \(model.serviceName)", role: .destructive) {
                 Task {
                     if await model.discard() { onClose(nil) }
@@ -213,7 +230,7 @@ struct ServiceSetup: View {
     private var startButtons: some View {
         Button("Start Later") {
             Task {
-                if await model.save() { onClose(model.route) }
+                if await model.saveForLater() { onClose(model.route) }
             }
         }
         .glassButton()
@@ -227,7 +244,7 @@ struct ServiceSetup: View {
         .glassButton(prominent: true)
         .controlSize(.large)
         .keyboardShortcut(.defaultAction)
-        .disabled(isBusy || model.isLoadingSetup || !model.setup.missingKeys.isEmpty)
+        .disabled(isBusy || !model.hasLoadedSetup || !model.setup.missingKeys.isEmpty)
     }
 }
 
@@ -329,9 +346,9 @@ private struct SettingRow: View {
     private var field: some View {
         let prompt = Text(verbatim: variable.defaultValue.map { "Default: \($0)" } ?? "Empty")
         if variable.isHidden {
-            Text("This token can't read its value. Change it later under Variables.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            // The token can't read it, so it may already be set. Typing replaces it, leaving it empty keeps it.
+            SecureField(variable.key, text: $variable.value, prompt: Text("Hidden. Type to replace it."))
+                .labelsHidden()
         } else if variable.isSecret {
             SecureField(variable.key, text: $variable.value, prompt: prompt)
                 .labelsHidden()
@@ -356,6 +373,7 @@ private struct SettingRow: View {
         )
     )
     model.serviceName = "blog"
+    model.hasLoadedSetup = true
     model.setup = SetupDraft(
         domains: [
             DomainDraft(container: "ghost", label: "ghost", image: "ghost:5", original: "https://ghost-x1.example.com"),
