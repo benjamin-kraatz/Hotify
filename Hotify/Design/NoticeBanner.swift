@@ -7,10 +7,11 @@ struct NoticeBanner: View {
 
     var body: some View {
         Label {
+            // Not fixed to its full height. The Mac sizes the window's minimum at the narrowest width, where a
+            // fixed text wraps word by word and grows the window past the screen. A stack still gives it every line.
             Text(message)
                 .font(.callout)
                 .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         } icon: {
             Image(systemName: systemImage)

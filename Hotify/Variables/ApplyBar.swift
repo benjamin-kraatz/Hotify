@@ -16,7 +16,6 @@ struct ApplyBar: View {
                 .accessibilityHidden(true)
             Text(message)
                 .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let action {
                 Button(action.title) {

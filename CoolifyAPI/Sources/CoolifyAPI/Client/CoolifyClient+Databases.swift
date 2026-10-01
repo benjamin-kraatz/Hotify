@@ -9,6 +9,13 @@ extension CoolifyClient {
         try await get("databases/\(CoolifyURL.encodePathComponent(uuid))")
     }
 
+    /// Changes a database's settings. Turning public access on or off starts or stops its proxy at once.
+    ///
+    /// Coolify answers 400 when another database on the server already has the public port.
+    public func updateDatabase(_ uuid: String, _ update: DatabaseUpdate) async throws {
+        let _: QueuedAction = try await patch("databases/\(CoolifyURL.encodePathComponent(uuid))", body: update)
+    }
+
     public func startDatabase(_ uuid: String) async throws -> QueuedAction {
         try await post("databases/\(CoolifyURL.encodePathComponent(uuid))/start")
     }

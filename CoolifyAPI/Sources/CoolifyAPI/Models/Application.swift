@@ -35,6 +35,14 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
     public var previewURLTemplate: String?
     /// The environment the application lives in. Match it against `Project.environments` to find its project.
     public var environmentID: Int?
+    public var redirect: DomainRedirect?
+    /// The domains of each service, by name, when the application builds from a Docker Compose file. Services
+    /// that never had a domain are missing.
+    public var dockerComposeDomains: [String: String]?
+    public var healthCheck: HealthCheck?
+
+    /// Whether the application builds from a Docker Compose file, whose domains are set per service.
+    public var isDockerCompose: Bool { buildPack == "dockercompose" }
 
     public var createdAtDate: Date? { createdAt.flatMap(CoolifyTimestamp.parse) }
 
@@ -52,6 +60,8 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         case settings
         case previewURLTemplate = "previewUrlTemplate"
         case environmentID = "environmentId"
+        case redirect
+        case dockerComposeDomains
     }
 
     public init(from decoder: Decoder) throws {
@@ -69,6 +79,24 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         settings = try container.decodeIfPresent(ApplicationSettings.self, forKey: .settings)
         previewURLTemplate = container.flexString(.previewURLTemplate)
         environmentID = container.flexInt(.environmentID)
+        redirect = container.flexString(.redirect).flatMap(DomainRedirect.init(rawValue:))
+        dockerComposeDomains = container.flexString(.dockerComposeDomains).flatMap(Self.composeDomains(from:))
+        healthCheck = try? HealthCheck(from: decoder)
+    }
+
+    /// Coolify stores `docker_compose_domains` as a JSON string, `{"web": {"domain": "https://…"}}`, and sends it
+    /// as that string. Reading it as an object would let snake_case conversion rename services such as `my_app`.
+    static func composeDomains(from text: String) -> [String: String]? {
+        guard let data = text.data(using: .utf8),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return object.reduce(into: [:]) { domains, entry in
+            if let fields = entry.value as? [String: Any] {
+                domains[entry.key] = fields["domain"] as? String ?? ""
+            } else if let domain = entry.value as? String {
+                domains[entry.key] = domain
+            }
+        }
     }
 }
 

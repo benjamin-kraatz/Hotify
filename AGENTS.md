@@ -7,6 +7,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
 - `Hotify/` is the app target.
   - `App/` has the entry point.
   - `Design/` has the shared look: brand colors, the display font, the flame glyph, the stokable flame and its fire, and `Heat`.
+  - `Configuration/` is a resource's Settings tab: its name and description, its domains, a database's public port, and its health check, in one form with one Save.
   - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource.
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
