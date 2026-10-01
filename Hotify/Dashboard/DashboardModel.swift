@@ -217,6 +217,7 @@ final class DashboardModel {
             guard generation == self.generation else { return }
             actionError = nil
             transitions[target]?.isSending = false
+            WidgetRefresh.all()
             await refresh()
         } catch is CancellationError {
             return
@@ -228,38 +229,14 @@ final class DashboardModel {
     }
 
     private func send(_ action: ResourceAction, route: ResourceRoute, client: CoolifyClient) async throws {
-        switch (route, action) {
-        case (.application(let uuid), .start):
-            _ = try await client.startApplication(uuid)
-        case (.application(let uuid), .deploy):
-            _ = try await client.deploy(uuid: uuid)
-        case (.application(let uuid), .restart):
-            _ = try await client.restartApplication(uuid)
-        case (.application(let uuid), .stop):
-            // The list control stops the resource and leaves volumes in place.
-            _ = try await client.stopApplication(uuid, dockerCleanup: false)
-        case (.application(let uuid), .cancelDeployment):
-            guard
-                let application = applications.first(where: { $0.uuid == uuid }),
+        var deploymentID: String?
+        if case .application(let uuid) = route, action == .cancelDeployment {
+            guard let application = applications.first(where: { $0.uuid == uuid }),
                 let deployment = activeDeployment(for: application)
             else { return }
-            _ = try await client.cancelDeployment(deployment.deploymentUUID)
-        case (.database(let uuid), .start):
-            _ = try await client.startDatabase(uuid)
-        case (.database(let uuid), .restart):
-            _ = try await client.restartDatabase(uuid)
-        case (.database(let uuid), .stop):
-            _ = try await client.stopDatabase(uuid, dockerCleanup: false)
-        case (.service(let uuid), .start):
-            _ = try await client.startService(uuid)
-        case (.service(let uuid), .restart):
-            _ = try await client.restartService(uuid)
-        case (.service(let uuid), .stop):
-            _ = try await client.stopService(uuid, dockerCleanup: false)
-        case (.database, .deploy), (.database, .cancelDeployment), (.service, .deploy), (.service, .cancelDeployment):
-            // Only applications deploy. The action lists never offer these.
-            return
+            deploymentID = deployment.deploymentUUID
         }
+        try await client.run(action, on: route, deploymentID: deploymentID)
     }
 
     /// Ends every transition whose resource reached its new state, and says so when one never did.

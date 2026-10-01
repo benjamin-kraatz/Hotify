@@ -63,6 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .background {
                     variableLock.lock()
+                    // Leaving is the last chance to refresh widgets without spending their daily budget.
+                    WidgetRefresh.all()
                 }
             }
 

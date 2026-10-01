@@ -1,0 +1,13 @@
+import SwiftUI
+import WidgetKit
+
+/// Hotify's widgets and controls.
+@main
+struct HotifyWidgetsBundle: WidgetBundle {
+    var body: some Widget {
+        PinnedResourcesWidget()
+        InstancePulseWidget()
+        ResourcePowerControl()
+        ResourceButtonControl()
+    }
+}

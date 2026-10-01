@@ -44,6 +44,11 @@ struct ContentView: View {
             followMenuBarSelection()
         }
         .onChange(of: menuBar.navigation) { _, _ in followMenuBarSelection() }
+        .onOpenURL { url in
+            // A widget's link goes through the menu bar's request, so a switch of instance reopens it the same way.
+            guard let link = ResourceLink(url: url) else { return }
+            menuBar.navigation = MenuBarNavigation(instanceID: link.instanceID, route: link.route)
+        }
         .onChange(of: store.selectedID) { _, _ in
             isProvisioning = false
             selection = nil

@@ -2,6 +2,9 @@ import Foundation
 import Security
 
 /// Instance credentials stored in the data protection Keychain and synced by iCloud Keychain.
+///
+/// The app and its widgets both list `<team>.com.sebastiankraatz.Hotify` first in `keychain-access-groups`. That is
+/// the group the app saved to before it had the entitlement, so tokens saved by older builds need no migration.
 enum TokenStore {
     private static let service = "com.sebastiankraatz.Hotify.token"
 

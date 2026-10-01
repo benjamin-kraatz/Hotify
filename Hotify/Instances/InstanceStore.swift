@@ -18,6 +18,8 @@ final class InstanceStore {
 
     init() {
         load()
+        // Builds before the widgets kept the list only in the app's own defaults.
+        AppGroup.saveInstances(instances)
         let sync = InstanceSync()
         self.sync = sync
         sync.onChange = { [weak self] records in self?.apply(records) }
@@ -164,5 +166,7 @@ final class InstanceStore {
     private func persist() {
         guard let data = try? JSONEncoder().encode(instances) else { return }
         UserDefaults.standard.set(data, forKey: defaultsKey)
+        AppGroup.saveInstances(instances)
+        WidgetRefresh.all()
     }
 }

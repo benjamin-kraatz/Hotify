@@ -11,10 +11,35 @@
 		3302C881306AD494001B6155 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3302C880306AD494001B6155 /* CoolifyAPI */; };
 		3302C887306AD532001B6155 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3302C886306AD532001B6155 /* CoolifyAPI */; };
 		33F663E8306AD1DD00682500 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = 33F663E7306AD1DD00682500 /* PostHog */; };
+		000000000000000161000000 /* HotifyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000000220 /* HotifyWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		000000000000000251000000 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000250000000 /* CoolifyAPI */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		000000000000000170000000 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000200000000;
+			remoteInfo = HotifyWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		000000000000000160000000 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				000000000000000161000000 /* HotifyWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* Hotify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hotify.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000220 /* HotifyWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HotifyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		33AB7694306BA41600E8B52D /* AGENTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = AGENTS.md; sourceTree = "<group>"; };
 		33AB7695306BA41600E8B52D /* env.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = env.example; sourceTree = "<group>"; };
 		33AB7696306BA41600E8B52D /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
@@ -24,6 +49,16 @@
 		000000000000000000000010 /* Hotify */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Hotify;
+			sourceTree = "<group>";
+		};
+		000000000000000000000210 /* HotifyWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = HotifyWidgets;
+			sourceTree = "<group>";
+		};
+		000000000000000000000310 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -38,6 +73,12 @@
 				3302C87E306AD482001B6155 /* CoolifyAPI in Frameworks */,
 			);
 		};
+		000000000000000230000000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				000000000000000251000000 /* CoolifyAPI in Frameworks */,
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -48,6 +89,8 @@
 				33AB7695306BA41600E8B52D /* env.example */,
 				33AB7696306BA41600E8B52D /* README.md */,
 				000000000000000000000010 /* Hotify */,
+				000000000000000000000210 /* HotifyWidgets */,
+				000000000000000000000310 /* Shared */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -56,6 +99,7 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000000120 /* Hotify.app */,
+				000000000000000000000220 /* HotifyWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -71,11 +115,16 @@
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
 				000000000000000150000000 /* Embed build info */,
+				000000000000000160000000 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
+			dependencies = (
+				000000000000000171000000 /* PBXTargetDependency */,
+			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* Hotify */,
+				000000000000000000000310 /* Shared */,
 			);
 			name = Hotify;
 			packageProductDependencies = (
@@ -87,6 +136,28 @@
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* Hotify.app */;
 			productType = "com.apple.product-type.application";
+		};
+		000000000000000200000000 /* HotifyWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000210000000 /* Build configuration list for PBXNativeTarget "HotifyWidgets" */;
+			buildPhases = (
+				000000000000000220000000 /* Sources */,
+				000000000000000230000000 /* Frameworks */,
+				000000000000000240000000 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				000000000000000000000210 /* HotifyWidgets */,
+				000000000000000000000310 /* Shared */,
+			);
+			name = HotifyWidgets;
+			packageProductDependencies = (
+				000000000000000250000000 /* CoolifyAPI */,
+			);
+			productName = HotifyWidgets;
+			productReference = 000000000000000000000220 /* HotifyWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -100,6 +171,9 @@
 				TargetAttributes = {
 					000000000000000100000000 = {
 						CreatedOnToolsVersion = 26.3;
+					};
+					000000000000000200000000 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -122,12 +196,18 @@
 			projectRoot = "";
 			targets = (
 				000000000000000100000000 /* Hotify */,
+				000000000000000200000000 /* HotifyWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		000000000000000140000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		000000000000000240000000 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -159,7 +239,20 @@
 			files = (
 			);
 		};
+		000000000000000220000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		000000000000000171000000 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000200000000 /* HotifyWidgets */;
+			targetProxy = 000000000000000170000000 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		000000000000000011000000 /* Debug configuration for PBXProject "Hotify" */ = {
@@ -440,6 +533,82 @@
 			};
 			name = Release;
 		};
+		000000000000000211000000 /* Debug configuration for PBXNativeTarget "HotifyWidgets" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = HotifyWidgets/HotifyWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U7H5KA9MG4;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "HotifyWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Hotify;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 26.6;
+				MARKETING_VERSION = 0.2.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sebastiankraatz.Hotify.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		000000000000000212000000 /* Release configuration for PBXNativeTarget "HotifyWidgets" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = HotifyWidgets/HotifyWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U7H5KA9MG4;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "HotifyWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Hotify;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 26.6;
+				MARKETING_VERSION = 0.2.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sebastiankraatz.Hotify.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -456,6 +625,14 @@
 			buildConfigurations = (
 				000000000000000111000000 /* Debug configuration for PBXNativeTarget "Hotify" */,
 				000000000000000112000000 /* Release configuration for PBXNativeTarget "Hotify" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		000000000000000210000000 /* Build configuration list for PBXNativeTarget "HotifyWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000211000000 /* Debug configuration for PBXNativeTarget "HotifyWidgets" */,
+				000000000000000212000000 /* Release configuration for PBXNativeTarget "HotifyWidgets" */,
 			);
 			defaultConfigurationName = Release;
 		};
@@ -491,6 +668,11 @@
 		};
 		3302C886306AD532001B6155 /* CoolifyAPI */ = {
 			isa = XCSwiftPackageProductDependency;
+			productName = CoolifyAPI;
+		};
+		000000000000000250000000 /* CoolifyAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3302C885306AD532001B6155 /* XCLocalSwiftPackageReference "CoolifyAPI" */;
 			productName = CoolifyAPI;
 		};
 		33F663E7306AD1DD00682500 /* PostHog */ = {

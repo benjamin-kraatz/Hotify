@@ -22,6 +22,7 @@ A Mac and iPhone app for your self-hosted [Coolify](https://coolify.io).
 - See your team, Coolify version, server status, applications, databases, and services at a glance.
 - Start, stop, and restart applications, databases, and services.
 - Open one to read its logs. An application also shows its deployments and previews, and you can deploy it from there.
+- Pin up to six resources to a Home Screen or desktop widget, and start or stop them from there. A Lock Screen widget counts what runs on an instance, and Control Center gets a toggle and a restart button.
 - Works over plain `http` on your LAN too.
 
 Hotify supports Coolify 4.3.x. Older versions aren't tested. It uses Coolify's HTTP API, so it can do what the API can do. The [OpenAPI spec](https://github.com/coollabsio/coolify/blob/main/openapi.yaml) lists what that is.
@@ -54,6 +55,8 @@ The live tests talk to a real instance and only run with `COOLIFY_LIVE_TESTS=1`.
 ## Layout
 
 ```text
-Hotify/       SwiftUI app
-CoolifyAPI/   Swift package with the Coolify client and its tests
+Hotify/          SwiftUI app
+HotifyWidgets/   Widgets and controls, a WidgetKit extension
+Shared/          Code and colors that both the app and the widgets build
+CoolifyAPI/      Swift package with the Coolify client and its tests
 ```
