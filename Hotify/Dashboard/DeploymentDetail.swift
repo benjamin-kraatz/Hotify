@@ -2,12 +2,10 @@ import CoolifyAPI
 import SwiftUI
 
 /// One deployment: what shipped, how it went, and its build output. Refreshes while the build runs.
+/// The screen that shows it supplies the way back, through `detailBack`.
 struct DeploymentDetail: View {
     var client: CoolifyClient?
     var initial: DeploymentLine
-    /// Names where the back button returns to.
-    var backTitle = "Deployments"
-    var onBack: () -> Void
     @State private var deployment: Deployment?
     @State private var error: String?
     @State private var isLoading = false
@@ -33,7 +31,6 @@ struct DeploymentDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 12) {
-                navigation
                 DeploymentSummary(line: line, message: message)
                 if let error {
                     NoticeBanner(message: error)
@@ -79,25 +76,6 @@ struct DeploymentDetail: View {
         .animation(.snappy, value: canExplain)
         .task(id: initial.id) { await followDeployment() }
         .onDisappear { analyst.reset() }
-    }
-
-    private var navigation: some View {
-        HStack(spacing: 12) {
-            Button(backTitle, systemImage: "chevron.left", action: onBack)
-                .fontWeight(.medium)
-                .help("Back to \(backTitle)")
-                .keyboardShortcut(.cancelAction)
-            Spacer(minLength: 8)
-            if let url = line.url, let urlLabel = line.urlLabel {
-                Link(destination: url) {
-                    Label(urlLabel, systemImage: "arrow.up.right")
-                }
-                .font(.subheadline)
-                .foregroundStyle(.tint)
-                .lineLimit(1)
-            }
-        }
-        .buttonStyle(.borderless)
     }
 
     private func followDeployment() async {
@@ -152,6 +130,15 @@ private struct DeploymentSummary: View {
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+                if let url = line.url, let urlLabel = line.urlLabel {
+                    Link(destination: url) {
+                        Label(urlLabel, systemImage: "arrow.up.right")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+                    .lineLimit(1)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -213,8 +200,7 @@ private struct DeploymentSummary: View {
             message: "chore: bump node to 24",
             startedAt: .now.addingTimeInterval(-86_400),
             finishedAt: .now.addingTimeInterval(-86_380)
-        ),
-        onBack: {}
+        )
     )
     .frame(width: 560, height: 480)
 }
@@ -231,8 +217,7 @@ private struct DeploymentSummary: View {
             startedAt: .now.addingTimeInterval(-40),
             url: URL(string: "https://pr-18.example.com"),
             urlLabel: "pr-18.example.com"
-        ),
-        onBack: {}
+        )
     )
     .frame(width: 560, height: 480)
 }

@@ -6,6 +6,8 @@ struct ResourceHeader: View {
     var pendingAction: ResourceAction?
     /// The newest production deployment failed. With the app stopped, that is why.
     var lastDeploymentFailed = false
+    /// Opens the project the resource lives in. `nil` leaves its place as plain text.
+    var onOpenProject: (() -> Void)?
     var onAction: (ResourceAction) -> Void
 
     private var hasFailed: Bool {
@@ -47,13 +49,7 @@ struct ResourceHeader: View {
                     .font(.subheadline)
 
                     if let place = resource.place {
-                        Text(
-                            place.environmentName.isEmpty
-                                ? place.projectName : "\(place.projectName) · \(place.environmentName)"
-                        )
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        placeLine(place)
                     }
 
                     if let link = resource.link {
@@ -75,6 +71,31 @@ struct ResourceHeader: View {
         .animation(.snappy, value: heat)
         .animation(.snappy, value: statusText)
         .animation(.snappy, value: actions)
+    }
+
+    /// The project and environment. With somewhere to go, it is the way up to the project's page.
+    @ViewBuilder
+    private func placeLine(_ place: ResourcePlace) -> some View {
+        let text =
+            place.environmentName.isEmpty ? place.projectName : "\(place.projectName) · \(place.environmentName)"
+        if let onOpenProject {
+            Button(action: onOpenProject) {
+                Label(text, systemImage: "chevron.right")
+                    .labelStyle(TrailingIconLabelStyle())
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .help("Show the \(place.projectName) project")
+            .accessibilityHint("Shows the project")
+        } else {
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
     }
 
     /// Every label when they fit. Then the lead action keeps its label and the rest shrink to icons,
@@ -183,8 +204,11 @@ private struct TrailingIconLabelStyle: LabelStyle {
                     name: "marketing-site",
                     status: "running:healthy",
                     link: URL(string: "https://hotify.example.com"),
-                    place: ResourcePlace(projectName: "Website", environmentName: "production", environmentID: 1)
+                    place: ResourcePlace(
+                        projectID: "website", projectName: "Website", environmentName: "production",
+                        environmentID: 1)
                 ),
+                onOpenProject: {},
                 onAction: { _ in }
             )
             ResourceHeader(

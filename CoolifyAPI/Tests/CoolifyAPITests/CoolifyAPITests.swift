@@ -697,6 +697,137 @@ final class CoolifyAPITests: XCTestCase {
         XCTAssertEqual(outline.variables.first?.defaultValue, "ghost")
         XCTAssertEqual(outline.requiredKeys, ["ADMIN_EMAIL"])
     }
+
+    func testProjectDetailCarriesEnvironmentsAndCreationDate() throws {
+        let json = """
+            {
+              "id": 4, "uuid": "proj-1", "name": "Website", "description": null,
+              "team_id": 0, "created_at": "2026-03-02T09:30:00.000000Z",
+              "environments": [
+                { "id": 7, "uuid": "env-prod", "name": "production", "project_id": 4, "description": null },
+                { "id": 9, "uuid": "env-stage", "name": "staging", "description": "Release candidates" }
+              ]
+            }
+            """.data(using: .utf8)!
+
+        let project = try CoolifyJSON.decoder().decode(Project.self, from: json)
+        XCTAssertNil(project.description)
+        XCTAssertNotNil(project.createdAtDate)
+        XCTAssertEqual(project.environments?.map(\.uuid), ["env-prod", "env-stage"])
+        XCTAssertEqual(project.environments?.last?.description, "Release candidates")
+
+        // The list endpoint selects four columns and nothing else.
+        let listed = try CoolifyJSON.decoder().decode(
+            Project.self, from: Data(#"{"id":4,"uuid":"proj-1","name":"Website","description":"Marketing"}"#.utf8))
+        XCTAssertNil(listed.environments)
+        XCTAssertNil(listed.createdAtDate)
+    }
+
+    func testProjectAndEnvironmentWritesSendOnlyAllowedFields() async throws {
+        let client = try makeClient { request in
+            XCTAssertNil(request.url?.query)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+            switch (request.httpMethod, request.url?.path) {
+            case ("PATCH", "/api/v1/projects/proj-1"):
+                XCTAssertEqual(bodyText(request), #"{"description":"","name":"Website"}"#)
+                // Coolify answers an update with 201 and a cut-down project.
+                return (201, Data(#"{"uuid":"proj-1","name":"Website","description":null}"#.utf8), [:])
+            case ("POST", "/api/v1/projects/proj-1/environments"):
+                // A description here would be an extra field, which Coolify rejects with 422.
+                XCTAssertEqual(bodyText(request), #"{"name":"staging"}"#)
+                return (201, Data(#"{"uuid":"env-new"}"#.utf8), [:])
+            case ("PATCH", "/api/v1/projects/proj-1/environments/env-stage"):
+                XCTAssertEqual(bodyText(request), #"{"description":"Release candidates","name":"preprod"}"#)
+                return (
+                    200, Data(#"{"uuid":"env-stage","name":"preprod","description":"Release candidates"}"#.utf8), [:]
+                )
+            default:
+                XCTFail("Unexpected \(request.httpMethod ?? "") \(request.url?.path ?? "")")
+                return (404, Data(), [:])
+            }
+        }
+
+        let project = try await client.updateProject("proj-1", name: "Website", description: "")
+        XCTAssertEqual(project.name, "Website")
+        XCTAssertNil(project.description)
+        let created = try await client.createEnvironment(name: "staging", inProject: "proj-1")
+        XCTAssertEqual(created.uuid, "env-new")
+        let environment = try await client.updateEnvironment(
+            "env-stage", inProject: "proj-1", name: "preprod", description: "Release candidates")
+        XCTAssertEqual(environment.name, "preprod")
+    }
+
+    func testSharedVariablesReadNumericIDsAndWithheldValues() throws {
+        let json = """
+            [
+              { "id": 12, "key": "API_URL", "value": "https://api.example.com", "is_literal": 1,
+                "is_multiline": false, "is_shown_once": 0, "comment": "Used by web and worker", "type": "project" },
+              { "id": "13", "key": "STRIPE_KEY", "is_shown_once": true },
+              { "id": 14, "key": "EMPTY", "value": "" }
+            ]
+            """.data(using: .utf8)!
+
+        let variables = try CoolifyJSON.decoder().decode([SharedVariable].self, from: json)
+        XCTAssertEqual(variables.map(\.id), [12, 13, 14])
+        XCTAssertEqual(variables[0].value, "https://api.example.com")
+        XCTAssertTrue(variables[0].isLiteral)
+        XCTAssertEqual(variables[0].comment, "Used by web and worker")
+        // Withheld, which is not the same as empty.
+        XCTAssertNil(variables[1].value)
+        XCTAssertTrue(variables[1].isShownOnce)
+        XCTAssertEqual(variables[2].value, "")
+        XCTAssertThrowsError(
+            try CoolifyJSON.decoder().decode(SharedVariable.self, from: Data(#"{"key":"NO_ID"}"#.utf8)))
+    }
+
+    func testSharedVariableRequestsAddressTheScopeAndTheNumericID() async throws {
+        let client = try makeClient { request in
+            XCTAssertNil(request.url?.query)
+            switch (request.httpMethod, request.url?.path) {
+            case ("GET", "/api/v1/projects/proj-1/envs"):
+                XCTAssertNil(bodyText(request))
+                return (200, Data(#"[{"id":12,"key":"API_URL"}]"#.utf8), [:])
+            case ("GET", "/api/v1/projects/proj-1/environments/env-prod/envs"):
+                return (200, Data("[]".utf8), [:])
+            case ("POST", "/api/v1/projects/proj-1/envs"):
+                // No `is_preview`, `is_runtime`, or `comment`: Coolify answers 422 to fields outside its list.
+                XCTAssertEqual(
+                    bodyText(request),
+                    #"{"is_literal":true,"is_multiline":false,"is_shown_once":false,"key":"API_URL","value":"https:\/\/api.example.com"}"#
+                )
+                return (201, Data(#"{"id":15}"#.utf8), [:])
+            case ("PATCH", "/api/v1/projects/proj-1/environments/env-prod/envs/13"):
+                XCTAssertEqual(
+                    bodyText(request),
+                    #"{"comment":"Rotated","is_literal":false,"is_multiline":false,"is_shown_once":true,"key":"STRIPE_KEY","value":"sk_live"}"#
+                )
+                return (200, Data(#"{"id":13,"key":"STRIPE_KEY","is_shown_once":true}"#.utf8), [:])
+            case ("DELETE", "/api/v1/projects/proj-1/envs/12"):
+                XCTAssertNil(bodyText(request))
+                return (200, Data(#"{"message":"Environment variable deleted."}"#.utf8), [:])
+            default:
+                XCTFail("Unexpected \(request.httpMethod ?? "") \(request.url?.path ?? "")")
+                return (404, Data(), [:])
+            }
+        }
+
+        let project = SharedVariableScope.project("proj-1")
+        let environment = SharedVariableScope.environment(project: "proj-1", environment: "env-prod")
+        let listed = try await client.sharedVariables(in: project)
+        XCTAssertEqual(listed.map(\.id), [12])
+        let empty = try await client.sharedVariables(in: environment)
+        XCTAssertTrue(empty.isEmpty)
+        let created = try await client.createSharedVariable(
+            SharedVariableDraft(key: "API_URL", value: "https://api.example.com", isLiteral: true), in: project)
+        XCTAssertEqual(created, 15)
+        let updated = try await client.updateSharedVariable(
+            13,
+            with: SharedVariableDraft(key: "STRIPE_KEY", value: "sk_live", isShownOnce: true, comment: "Rotated"),
+            in: environment
+        )
+        XCTAssertNil(updated.value)
+        try await client.deleteSharedVariable(12, from: project)
+    }
 }
 
 /// URLSession hands a protocol the body as a stream, not as `httpBody`.

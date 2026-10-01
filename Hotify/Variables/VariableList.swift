@@ -92,47 +92,9 @@ struct VariableList: View {
 
     private var controls: some View {
         HStack(spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "line.3.horizontal.decrease")
-                    .foregroundStyle(.secondary)
-                TextField("Filter keys", text: $filter)
-                    .textFieldStyle(.plain)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                .textInputAutocapitalization(.never)
-                    #endif
-                if !filter.isEmpty {
-                    Button("Clear filter", systemImage: "xmark.circle.fill") {
-                        filter = ""
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(.quaternary.opacity(0.6), in: .capsule)
-            .animation(.snappy, value: filter.isEmpty)
+            FilterField("Filter keys", text: $filter)
 
-            if lock.isRequired, lock.isOpen, let until = lock.unlockedUntil {
-                Button {
-                    lock.lock()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "lock.open.fill")
-                            .foregroundStyle(.ember)
-                        Text(timerInterval: Date.now...max(until, .now), countsDown: true)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .help("Values lock again at \(until.formatted(date: .omitted, time: .shortened)). Click to lock now.")
-                .accessibilityLabel("Lock values")
-                .transition(.opacity)
-            }
+            LockCountdownButton(lock: lock)
 
             Button {
                 Task {
@@ -358,7 +320,7 @@ struct VariableList: View {
             }
         return VariableEditor(
             original: original,
-            kind: resource.kind,
+            hasPreviewVariables: resource.kind == .application,
             takenKeys: { isPreview in
                 Set(model.variables.filter { $0.isPreview == isPreview }.map(\.key))
             },

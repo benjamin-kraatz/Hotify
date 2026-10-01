@@ -72,7 +72,26 @@ class Fixture(ThreadingHTTPServer):
             {"uuid": "preview", "key": "PREVIEW_ONLY", "value": "preview-value", "is_preview": True},
         ]
         self.executions = [{"uuid": "failed-backup", "status": "failed", "message": "Fixture storage unavailable", "created_at": now(), "size": "0"}]
-        self.projects = [{"uuid": "fixture-project", "name": "Fixture project", "environments": [{"id": 1, "uuid": "fixture-production", "name": "production"}]}]
+        # Two projects. The first has two environments, one of them with a stopped app, and one resource that fails.
+        self.projects = [
+            {"id": 1, "uuid": "storefront", "name": "Storefront", "description": "The shop, its API, and what they store.", "created_at": "2026-03-02T09:30:00.000000Z", "environments": [
+                {"id": 1, "uuid": "env-prod", "name": "production", "description": None},
+                {"id": 2, "uuid": "env-staging", "name": "staging", "description": "Release candidates"},
+            ]},
+            {"id": 2, "uuid": "tools", "name": "Internal tools", "description": None, "created_at": "2026-06-11T14:00:00.000000Z", "environments": [
+                {"id": 3, "uuid": "env-tools", "name": "production", "description": None},
+            ]},
+        ]
+        # Shared variables by scope: a project uuid, or a project uuid and an environment uuid.
+        self.shared = {
+            ("storefront",): [
+                {"id": 1, "key": "API_URL", "value": "https://api.fixture.example", "is_literal": True, "comment": "Used by web and the API"},
+                {"id": 2, "key": "STRIPE_SECRET_KEY", "is_shown_once": True},
+            ],
+            ("storefront", "env-prod"): [{"id": 3, "key": "LOG_LEVEL", "value": "warn"}],
+        }
+        # New environments and shared variables count up from here, clear of the ids above.
+        self.next_id = 100
         # Services created from templates. Each comes up a few seconds after its start request.
         self.services = {}
         self.lock = threading.Lock()
@@ -122,22 +141,41 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/team":
             return self.respond({"id": 1, "name": "Fixture team"})
         if path == "/projects":
-            return self.respond([{"uuid": p["uuid"], "name": p["name"]} for p in self.server.projects])
+            return self.respond([{k: p.get(k) for k in ("id", "uuid", "name", "description")} for p in self.server.projects])
         if path.startswith("/projects/"):
-            project = next((p for p in self.server.projects if p["uuid"] == path.split("/")[2]), None)
-            return self.respond(project) if project else self.respond({"message": "Project not found."}, 404)
+            parts = path.split("/")[2:]
+            project = next((p for p in self.server.projects if p["uuid"] == parts[0]), None)
+            if project is None:
+                return self.respond({"message": "Project not found."}, 404)
+            if len(parts) == 1:
+                return self.respond(project)
+            if parts[-1] == "envs":
+                return self.respond(copy.deepcopy(self.server.shared.get(self.scope(project, parts), [])))
         if path == "/servers/server/destinations":
             return self.respond([{"uuid": "fixture-network", "name": "Fixture network", "network": "coolify", "server_uuid": "server"}])
         if path == "/servers":
             return self.respond([{"uuid": "server", "name": "Fixture server", "is_reachable": 1}])
         if path == "/applications":
-            return self.respond([{"uuid": "web", "id": 1, "name": "Fixture Web", "status": "running:healthy", "fqdn": "https://fixture.example"}])
+            return self.respond([
+                {"uuid": "web", "id": 1, "name": "Fixture Web", "status": "running:healthy", "fqdn": "https://fixture.example", "environment_id": 1},
+                {"uuid": "api", "id": 2, "name": "Fixture API", "status": "running:unhealthy", "fqdn": "https://api.fixture.example", "environment_id": 1},
+                {"uuid": "web-staging", "id": 3, "name": "Fixture Web", "status": "exited", "fqdn": "https://staging.fixture.example", "environment_id": 2},
+            ])
         if path == "/applications/web":
-            return self.respond({"uuid": "web", "name": "Fixture Web", "git_repository": "coollabsio/coolify", "git_branch": "main", "settings": {"is_preview_deployments_enabled": 1}})
+            return self.respond({"uuid": "web", "name": "Fixture Web", "fqdn": "https://fixture.example", "preview_url_template": "{{pr_id}}.{{domain}}", "git_repository": "coollabsio/coolify", "git_branch": "main", "settings": {"is_preview_deployments_enabled": 1}})
+        if path == "/applications/api":
+            # Not on github.com, so its previews go without pull request titles.
+            return self.respond({"uuid": "api", "name": "Fixture API", "fqdn": "https://api.fixture.example", "preview_url_template": "{{pr_id}}.{{domain}}", "git_repository": "https://gitlab.fixture.example/shop/api.git", "git_branch": "main"})
+        if path == "/applications/web-staging":
+            return self.respond({"uuid": "web-staging", "name": "Fixture Web", "git_repository": "coollabsio/coolify", "git_branch": "develop"})
         if path == "/databases":
-            return self.respond([{"uuid": "db", "name": "Fixture Postgres", "database_type": "standalone-postgresql", "status": "running:healthy"}])
+            return self.respond([{"uuid": "db", "name": "Fixture Postgres", "database_type": "standalone-postgresql", "status": "running:healthy", "environment_id": 1}])
         if path == "/services":
-            return self.respond([self.server.service(uuid) for uuid in self.server.services])
+            standing = {"uuid": "metrics", "name": "metrics", "service_type": "grafana-with-postgresql", "status": "running:healthy", "environment_id": 3, "applications": [
+                {"id": 1, "name": "grafana", "status": "running:healthy", "fqdn": "https://grafana.fixture.example"},
+                {"id": 2, "name": "postgres", "status": "running:healthy"},
+            ]}
+            return self.respond([standing] + [self.server.service(uuid) for uuid in self.server.services])
         if path.startswith("/services/") and path.endswith("/envs"):
             record = self.server.services.get(path.split("/")[2])
             return self.respond(copy.deepcopy(record["envs"])) if record else self.respond({"message": "Service not found."}, 404)
@@ -145,7 +183,17 @@ class Handler(BaseHTTPRequestHandler):
             uuid = path.split("/")[2]
             return self.respond(self.server.service(uuid)) if uuid in self.server.services else self.respond({"message": "Service not found."}, 404)
         if path == "/deployments":
-            return self.respond([])
+            return self.respond([{"deployment_uuid": "api-pr-7", "application_id": 2, "application_name": "Fixture API", "pull_request_id": 7, "status": "in_progress"}])
+        if path == "/deployments/applications/api":
+            return self.respond({"count": 3, "deployments": [
+                {"deployment_uuid": "api-pr-7", "application_id": 2, "pull_request_id": 7, "status": "in_progress", "commit": "9f2c1ab4", "commit_message": "feat: rate limits", "created_at": now()},
+                {"deployment_uuid": "api-2", "application_id": 2, "pull_request_id": 0, "status": "finished", "commit": "5aa01e77", "commit_message": "fix: retry on 502", "created_at": "2026-09-30T16:20:00Z", "finished_at": "2026-09-30T16:21:30Z"},
+                {"deployment_uuid": "api-pr-5", "application_id": 2, "pull_request_id": 5, "status": "failed", "commit": "77aa01e0", "commit_message": "chore: bump node to 24", "created_at": "2026-09-28T09:00:00Z", "finished_at": "2026-09-28T09:00:40Z"},
+            ]})
+        if path == "/deployments/applications/web-staging":
+            return self.respond({"count": 1, "deployments": [
+                {"deployment_uuid": "staging-1", "application_id": 3, "pull_request_id": 0, "status": "failed", "commit": "c0ffee12", "commit_message": "feat: new checkout", "created_at": "2026-09-30T08:00:00Z", "finished_at": "2026-09-30T08:01:10Z"},
+            ]})
         if path == "/deployments/applications/web":
             query = parse_qs(parsed.query)
             take = int(query.get("take", [20])[0])
@@ -159,6 +207,8 @@ class Handler(BaseHTTPRequestHandler):
             output = FAILED_BUILD if index == 0 else FINISHED_BUILD
             result["logs"] = json.dumps([{"timestamp": "2026-09-29T12:00:00Z", "output": line} for line in output])
             return self.respond(result)
+        if path.startswith("/deployments/") and path.count("/") == 2:
+            return self.respond({"deployment_uuid": path.rsplit("/", 1)[1], "status": "finished", "commit_message": "Fixture deployment", "logs": [{"output": "Fixture build output"}]})
         if path.endswith("/envs"):
             return self.respond(copy.deepcopy(self.server.variables))
         if path.endswith("/logs"):
@@ -166,6 +216,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/databases/db/backups":
             return self.respond([{"uuid": "daily", "enabled": "1", "frequency": "daily", "databases_to_backup": "app", "executions": self.server.executions}])
         return self.respond({"message": "Fixture endpoint not found"}, 404)
+
+    @staticmethod
+    def scope(project, parts):
+        """`[uuid, "envs"]` is the project. `[uuid, "environments", ref, "envs", ...]` is one environment."""
+        if parts[1] != "environments":
+            return (project["uuid"],)
+        environment = next((e for e in project["environments"] if parts[2] in (e["uuid"], e["name"])), None)
+        return (project["uuid"], environment["uuid"] if environment else parts[2])
 
     @staticmethod
     def deployment(index):
@@ -188,6 +246,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/databases/db/backups/daily" and body == {"backup_now": True}:
                 self.server.executions.insert(0, {"uuid": f"backup-{len(self.server.executions)}", "status": "success", "message": "Fixture backup completed", "created_at": now(), "size": "1024", "filename": "fixture.sql"})
                 return self.respond({"message": "Database backup configuration updated"})
+            if path.startswith("/projects/"):
+                return self.write_project(path.split("/")[2:], body)
             handled = self.provision(path, body)
             if handled is not None:
                 return handled
@@ -243,11 +303,6 @@ class Handler(BaseHTTPRequestHandler):
                 uuid = f"project-{len(self.server.projects) + 1}"
                 self.server.projects.append({"uuid": uuid, "name": body["name"], "environments": [{"id": 10 + len(self.server.projects), "uuid": f"{uuid}-production", "name": "production"}]})
                 return self.respond({"uuid": uuid}, 201)
-            if path.startswith("/projects/") and path.endswith("/environments") and self.command == "POST":
-                project = next(p for p in self.server.projects if p["uuid"] == path.split("/")[2])
-                uuid = f"{project['uuid']}-{body['name']}"
-                project["environments"].append({"id": 20 + len(project["environments"]), "uuid": uuid, "name": body["name"]})
-                return self.respond({"uuid": uuid}, 201)
             return None
         uuid = path.split("/")[2]
         record = services.get(uuid)
@@ -274,6 +329,62 @@ class Handler(BaseHTTPRequestHandler):
             record["started_at"] = time.monotonic()
             return self.respond({"message": "Service starting request queued."})
         return None
+
+
+    def write_project(self, parts, body):
+        """Renames, new environments, and shared variables. Like Coolify, it answers 422 to a field it does not list."""
+        project = next((p for p in self.server.projects if p["uuid"] == parts[0]), None)
+        if project is None:
+            return self.respond({"message": "Project not found."}, 404)
+        if "envs" in parts:
+            return self.write_shared(project, parts, body)
+        allowed = {"name"} if self.command == "POST" else {"name", "description"}
+        extra = set(body) - allowed
+        if extra or len(body.get("name") or "xxx") < 3:
+            errors = {field: ["This field is not allowed."] for field in extra} or {"name": ["The name must be at least 3 characters."]}
+            return self.respond({"message": "Validation failed.", "errors": errors}, 422)
+        if len(parts) == 1 and self.command == "PATCH":
+            project.update(body)
+            return self.respond({k: project.get(k) for k in ("uuid", "name", "description")}, 201)
+        taken = [e for e in project["environments"] if e["name"] == body.get("name")]
+        if parts[1:] == ["environments"] and self.command == "POST":
+            if taken:
+                return self.respond({"message": "Environment with this name already exists."}, 409)
+            self.server.next_id += 1
+            environment = {"id": self.server.next_id, "uuid": f"env-{self.server.next_id}", "name": body["name"], "description": None}
+            project["environments"].append(environment)
+            return self.respond({"uuid": environment["uuid"]}, 201)
+        if len(parts) == 3 and parts[1] == "environments" and self.command == "PATCH":
+            environment = next((e for e in project["environments"] if parts[2] in (e["uuid"], e["name"])), None)
+            if environment is None:
+                return self.respond({"message": "Environment not found."}, 404)
+            if any(e is not environment for e in taken):
+                return self.respond({"message": "Environment with this name already exists."}, 409)
+            environment.update(body)
+            return self.respond({k: environment.get(k) for k in ("uuid", "name", "description")})
+        return self.respond({"message": "Fixture write not supported"}, 404)
+
+    def write_shared(self, project, parts, body):
+        variables = self.server.shared.setdefault(self.scope(project, parts), [])
+        extra = set(body) - {"key", "value", "is_literal", "is_multiline", "is_shown_once", "comment"}
+        if extra:
+            return self.respond({"message": "Validation failed.", "errors": {field: ["This field is not allowed."] for field in extra}}, 422)
+        if parts[-1] == "envs" and self.command == "POST":
+            if any(v["key"] == body.get("key") for v in variables):
+                return self.respond({"message": "Environment variable already exists. Use PATCH request to update it."}, 409)
+            self.server.next_id += 1
+            variables.append({"id": self.server.next_id, **body})
+            return self.respond({"id": self.server.next_id}, 201)
+        target = next((v for v in variables if str(v["id"]) == parts[-1]), None)
+        if target is None:
+            return self.respond({"message": "Environment variable not found."}, 404)
+        if self.command == "DELETE":
+            variables.remove(target)
+            return self.respond({"message": "Environment variable deleted."})
+        target.update(body)
+        if target.get("is_shown_once"):
+            target.pop("value", None)
+        return self.respond(target)
 
 
 if __name__ == "__main__":

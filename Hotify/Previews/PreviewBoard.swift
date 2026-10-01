@@ -9,7 +9,6 @@ struct PreviewBoard: View {
     var isLoading: Bool
     var canLoadMore = false
     var onLoadMore: () -> Void = {}
-    var onBack: () -> Void
     var onDeploy: () -> Void
     var onOpen: (Int) -> Void
     var onRemove: (PreviewLine) -> Void
@@ -49,12 +48,6 @@ struct PreviewBoard: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Button(resourceName, systemImage: "chevron.left", action: onBack)
-                    .buttonStyle(.borderless)
-                    .fontWeight(.medium)
-                    .help("Back to \(resourceName)")
-                    .keyboardShortcut(.cancelAction)
-
                 hero
 
                 if let error = model.actionError {
@@ -83,7 +76,7 @@ struct PreviewBoard: View {
                 }
             }
             .padding(.horizontal, 24)
-            .padding(.top, 16)
+            .padding(.top, 20)
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -230,7 +223,6 @@ struct PreviewBoard: View {
         model: PreviewsModel(repository: try? GitHubRepository("hotify/website")),
         isLoading: false,
         canLoadMore: true,
-        onBack: {},
         onDeploy: {},
         onOpen: { _ in },
         onRemove: { _ in }

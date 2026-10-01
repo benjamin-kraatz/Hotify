@@ -9,7 +9,6 @@ struct PreviewDetail: View {
     var application: String
     /// The build whose output is open. The deploy sheet sets it to follow the build it queued.
     @Binding var selectedDeployment: DeploymentLine?
-    var onBack: () -> Void
     var onRemove: (PreviewLine) -> Void
 
     @State private var tab = PreviewTab.activity
@@ -19,11 +18,9 @@ struct PreviewDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let selectedDeployment {
-                DeploymentDetail(client: client, initial: selectedDeployment, backTitle: "PR #\(preview.number)") {
-                    self.selectedDeployment = nil
-                }
-                .padding(.top, 16)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
+                DeploymentDetail(client: client, initial: selectedDeployment)
+                    .padding(.top, 20)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             } else {
                 overview
                     .transition(.move(edge: .leading).combined(with: .opacity))
@@ -35,11 +32,6 @@ struct PreviewDetail: View {
     private var overview: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
-                Button("Previews", systemImage: "chevron.left", action: onBack)
-                    .buttonStyle(.borderless)
-                    .fontWeight(.medium)
-                    .help("Back to all previews")
-                    .keyboardShortcut(.cancelAction)
                 PreviewHeader(preview: preview)
                 actionBar
                 if let error = model.actionError {
@@ -47,7 +39,7 @@ struct PreviewDetail: View {
                 }
             }
             .padding(.horizontal, 24)
-            .padding(.top, 16)
+            .padding(.top, 20)
             .padding(.bottom, 18)
 
             Picker("Show", selection: $tab) {
@@ -250,7 +242,6 @@ enum PreviewTab: Hashable, CaseIterable, Identifiable {
         client: nil,
         application: "app",
         selectedDeployment: $selected,
-        onBack: {},
         onRemove: { _ in }
     )
     .tint(.pilot)
