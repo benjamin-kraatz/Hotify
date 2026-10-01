@@ -828,6 +828,111 @@ final class CoolifyAPITests: XCTestCase {
         XCTAssertNil(updated.value)
         try await client.deleteSharedVariable(12, from: project)
     }
+
+    func testSettingsDecodeMixedHealthCheckAndComposeDomains() throws {
+        // Coolify sends the health check port as a string, the flags as 0 and 1, and the compose domains as a JSON
+        // string whose service names must keep their underscores.
+        let application = try CoolifyJSON.decoder().decode(
+            Application.self,
+            from: Data(
+                #"""
+                {"uuid":"app","name":"web","build_pack":"dockercompose","redirect":"non-www",
+                 "docker_compose_domains":"{\"my_app\":{\"domain\":\"https://a.example.com\"},\"worker\":{\"domain\":\"\"}}",
+                 "health_check_enabled":1,"health_check_type":"http","health_check_path":"/health",
+                 "health_check_port":"8080","health_check_return_code":200,"health_check_interval":"30",
+                 "health_check_timeout":5,"health_check_retries":3,"health_check_start_period":10}
+                """#.utf8))
+        XCTAssertTrue(application.isDockerCompose)
+        XCTAssertEqual(application.redirect, .nonWWW)
+        XCTAssertEqual(application.dockerComposeDomains, ["my_app": "https://a.example.com", "worker": ""])
+        XCTAssertEqual(application.healthCheck?.isEnabled, true)
+        XCTAssertEqual(application.healthCheck?.kind, .http)
+        XCTAssertEqual(application.healthCheck?.port, 8080)
+        XCTAssertEqual(application.healthCheck?.interval, 30)
+
+        let database = try CoolifyJSON.decoder().decode(
+            Database.self,
+            from: Data(
+                #"{"uuid":"db","is_public":0,"public_port":"5433","health_check_enabled":true,"health_check_retries":5}"#
+                    .utf8))
+        XCTAssertEqual(database.isPublic, false)
+        XCTAssertEqual(database.publicPort, 5433)
+        XCTAssertEqual(database.healthCheck?.retries, 5)
+    }
+
+    func testSettingsWritesShape() async throws {
+        let client = try makeClient { request in
+            let method = request.httpMethod ?? ""
+            let path = request.url?.path ?? ""
+            switch (method, path) {
+            case ("PATCH", "/api/v1/applications/app-1"):
+                XCTAssertTrue(queryItems(request).isEmpty)
+                XCTAssertEqual(
+                    bodyText(request),
+                    #"{"description":"","domains":"https:\/\/a.example.com,https:\/\/b.example.com","force_domain_override":true,"health_check_enabled":true,"health_check_interval":30,"health_check_method":"GET","health_check_path":"\/health","health_check_port":8080,"health_check_return_code":200,"health_check_type":"http","is_force_https_enabled":true,"redirect":"non-www"}"#
+                )
+                return (200, Data(#"{"uuid":"app-1"}"#.utf8), [:])
+            case ("PATCH", "/api/v1/applications/compose-1"):
+                XCTAssertEqual(
+                    bodyText(request),
+                    #"{"docker_compose_domains":[{"domain":"https:\/\/a.example.com","name":"my_app"},{"domain":"","name":"worker"}]}"#
+                )
+                return (200, Data(#"{"uuid":"compose-1"}"#.utf8), [:])
+            case ("PATCH", "/api/v1/databases/db-1"):
+                // Only the switch and the timings. Coolify answers 422 to the HTTP fields on a database.
+                XCTAssertEqual(
+                    bodyText(request),
+                    #"{"health_check_enabled":false,"health_check_retries":5,"is_public":true,"public_port":5433}"#)
+                return (200, Data(#"{"message":"Database updated."}"#.utf8), [:])
+            default:
+                XCTFail("Unexpected \(method) \(path)")
+                return (500, Data(), [:])
+            }
+        }
+
+        try await client.updateApplication(
+            "app-1",
+            ApplicationUpdate(
+                description: "",
+                domains: "https://a.example.com,https://b.example.com",
+                redirect: .nonWWW,
+                isForceHTTPSEnabled: true,
+                healthCheck: HealthCheck(
+                    isEnabled: true, kind: .http, method: "GET", host: "", port: 8080, path: "/health",
+                    returnCode: 200, interval: 30),
+                forceDomainOverride: true
+            )
+        )
+        try await client.updateApplication(
+            "compose-1",
+            ApplicationUpdate(dockerComposeDomains: [
+                ComposeDomain(name: "my_app", domain: "https://a.example.com"),
+                ComposeDomain(name: "worker", domain: ""),
+            ])
+        )
+        try await client.updateDatabase(
+            "db-1",
+            DatabaseUpdate(
+                isPublic: true, publicPort: 5433,
+                healthCheck: HealthCheck(isEnabled: false, method: "GET", path: "/health", retries: 5))
+        )
+    }
+
+    func testApplicationUpdateReadsDomainConflicts() async throws {
+        let client = try makeClient { _ in
+            let body = #"""
+                {"message":"Domain conflicts detected. Use force_domain_override=true to proceed.",
+                 "conflicts":[{"domain":"shop.example.com","resource_name":"storefront","resource_type":"service"}]}
+                """#
+            return (409, Data(body.utf8), [:])
+        }
+        do {
+            try await client.updateApplication("app-1", ApplicationUpdate(domains: "https://shop.example.com"))
+            XCTFail("A conflict should throw")
+        } catch let error as CoolifyError {
+            XCTAssertEqual(error.conflicts.map(\.domain), ["shop.example.com"])
+        }
+    }
 }
 
 /// URLSession hands a protocol the body as a stream, not as `httpBody`.
