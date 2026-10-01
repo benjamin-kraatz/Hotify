@@ -20,6 +20,7 @@ final class PlacementModel {
 
     private var client: CoolifyClient?
     private var instanceID: UUID?
+    private var hint: PlacementHint?
 
     init(servers: [Server] = [], projects: [Project] = [], placement: Placement = Placement()) {
         self.servers = servers
@@ -28,9 +29,10 @@ final class PlacementModel {
         hasLoaded = !servers.isEmpty
     }
 
-    func prepare(_ client: CoolifyClient?, instanceID: UUID?) {
+    func prepare(_ client: CoolifyClient?, instanceID: UUID?, hint: PlacementHint? = nil) {
         self.client = client
         self.instanceID = instanceID
+        self.hint = hint
     }
 
     /// Servers a service can go to. Build servers only build images, and Coolify refuses to place resources there.
@@ -72,9 +74,10 @@ final class PlacementModel {
             }
             self.servers = loadedServers.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             self.projects = detailed.sorted(by: Self.byName)
+            let hosting = await hostingServer(client)
             problem = nil
             hasLoaded = true
-            restore()
+            restore(hostingServer: hosting)
             await loadDestinations()
         } catch is CancellationError {
             return
@@ -145,24 +148,52 @@ final class PlacementModel {
         placement.remember(for: instanceID)
     }
 
-    /// The last placement on this instance where it still exists, else the first reachable server, the first project,
-    /// and its production environment.
-    private func restore() {
+    /// The hinted project and the server that runs it, when there is a hint. Otherwise the last placement on this
+    /// instance where it still exists, else the first reachable server, the first project, and its production
+    /// environment.
+    private func restore(hostingServer: String?) {
         let remembered = instanceID.flatMap(Placement.remembered(for:))
         let hosts = hostServers
         placement.serverUUID =
-            hosts.first { $0.uuid == remembered?.serverUUID }?.uuid
+            hostingServer
+            ?? hosts.first { $0.uuid == remembered?.serverUUID }?.uuid
             ?? hosts.first(where: isReachable)?.uuid ?? hosts.first?.uuid
-        if let remembered, let project = projects.first(where: { $0.uuid == remembered.projectUUID }) {
+        let projectUUID = hint?.projectUUID ?? remembered?.projectUUID
+        if let project = projects.first(where: { $0.uuid == projectUUID }) {
             placement.projectUUID = project.uuid
+            // The remembered environment only matches when the last service went to this same project.
             let environments = project.environments ?? []
             placement.environmentUUID =
-                environments.first { $0.uuid == remembered.environmentUUID }?.uuid
+                environments.first { $0.uuid == remembered?.environmentUUID }?.uuid
                 ?? Self.preferredEnvironment(in: project)?.uuid
         } else if let first = projects.first {
             selectProject(first.uuid)
         }
         placement.destinationUUID = remembered?.serverUUID == placement.serverUUID ? remembered?.destinationUUID : nil
+    }
+
+    /// The server that runs most of the hinted project's resources. Coolify's lists of applications, databases, and
+    /// services do not name their server, so each server is asked what it runs. `nil` without a hint, with a single
+    /// server, or when no server runs any of the project.
+    private func hostingServer(_ client: CoolifyClient) async -> String? {
+        let hosts = hostServers.map(\.uuid)
+        guard let uuids = hint?.resourceUUIDs, !uuids.isEmpty, hosts.count > 1 else { return nil }
+        let counts = await withTaskGroup(of: (String, Int).self) { group in
+            for server in hosts {
+                group.addTask {
+                    let resources = (try? await client.resources(onServer: server)) ?? []
+                    return (server, resources.count { uuids.contains($0.uuid) })
+                }
+            }
+            var counts: [String: Int] = [:]
+            for await (server, count) in group {
+                counts[server] = count
+            }
+            return counts
+        }
+        // In the servers' order, so a tie always goes the same way.
+        let best = hosts.max { counts[$0, default: 0] < counts[$1, default: 0] }
+        return best.flatMap { counts[$0, default: 0] > 0 ? $0 : nil }
     }
 
     /// Lists the server's networks. A failure is not fatal: with one network Coolify picks it on its own.

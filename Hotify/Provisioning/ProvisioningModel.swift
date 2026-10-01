@@ -50,9 +50,9 @@ final class ProvisioningModel {
         self.placement = placement
     }
 
-    func prepare(_ client: CoolifyClient?, instanceID: UUID?) {
+    func prepare(_ client: CoolifyClient?, instanceID: UUID?, hint: PlacementHint? = nil) {
         self.client = client
-        placement.prepare(client, instanceID: instanceID)
+        placement.prepare(client, instanceID: instanceID, hint: hint)
     }
 
     var instanceRoot: URL? {

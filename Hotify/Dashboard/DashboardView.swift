@@ -9,7 +9,8 @@ struct DashboardView: View {
     @Binding var selection: DetailRoute?
     var onRun: (ResourceAction, ResourceRoute) -> Void
     var onRefresh: () async -> Void
-    /// Opens provisioning. `nil` hides the button, such as before the instance connects.
+    /// Opens provisioning from the empty dashboard. A project's page has the button otherwise. `nil` hides it, such as
+    /// before the instance connects.
     var onNewService: (() -> Void)?
 
     @State private var query = ""
@@ -118,13 +119,6 @@ struct DashboardView: View {
                 }
             }
             #endif
-            if let onNewService {
-                ToolbarItem {
-                    Button("New Service", systemImage: "plus", action: onNewService)
-                        .keyboardShortcut("n")
-                        .help("Create a service from one of Coolify's templates")
-                }
-            }
             ToolbarItem {
                 Button {
                     refreshes += 1
