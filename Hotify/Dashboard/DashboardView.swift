@@ -16,6 +16,9 @@ struct DashboardView: View {
     @State private var filter = ResourceFilter()
     @State private var stopCandidate: ResourceSummary?
     @State private var refreshes = 0
+    #if os(iOS)
+    @Environment(\.openURL) private var openURL
+    #endif
     #if os(macOS)
     @FocusState private var isFiltering: Bool
     /// Whether the arrow keys go to the list.
@@ -265,7 +268,15 @@ struct DashboardView: View {
             }
             #if os(iOS)
         .swipeActions(edge: .leading) {
-            ForEach(actions.filter { $0 == .deploy || $0 == .restart }) { action in
+            // The first button is the one a full swipe runs, so opening the site comes before the action.
+            if let link = resource.link {
+                Button("Open", systemImage: "safari") {
+                    openURL(link)
+                }
+                .tint(.gray)
+            }
+            // An application offers Redeploy ahead of Restart, and the rest offer only Restart.
+            if let action = actions.first(where: { $0 == .deploy || $0 == .restart }) {
                 swipeButton(action, on: resource, isBusy: action.isBlocked(by: pendingAction))
             }
         }
