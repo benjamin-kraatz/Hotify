@@ -26,8 +26,13 @@ extension CoolifyClient {
         return try decode(T.self, from: data, response: response)
     }
 
-    func delete<T: Decodable>(_ path: String) async throws -> T {
-        let (data, response) = try await send("DELETE", path: path)
+    func patchList<T: Decodable>(_ path: String, body: some Encodable) async throws -> [T] {
+        let (data, response) = try await send("PATCH", path: path, body: try CoolifyJSON.encoder().encode(body))
+        return try decodeList(T.self, from: data, response: response)
+    }
+
+    func delete<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
+        let (data, response) = try await send("DELETE", path: path, query: query)
         return try decode(T.self, from: data, response: response)
     }
 
@@ -159,7 +164,8 @@ extension CoolifyClient {
             message: message,
             fieldErrors: parsed?.errors ?? [:],
             retryAfter: retryAfter,
-            responseBody: snippet
+            responseBody: snippet,
+            conflicts: parsed?.conflicts ?? []
         )
     }
 
@@ -175,13 +181,16 @@ private struct LogPayload: Decodable {
 }
 
 /// Laravel validation errors are `{ field: [messages] }`, and some endpoints send a single string per field.
+/// Service domain checks send a plain list of messages instead, which lands under the empty key.
 private struct ErrorPayload: Decodable {
     var message: String?
     var errors: [String: [String]]?
+    var conflicts: [DomainConflict]?
 
     enum CodingKeys: String, CodingKey {
         case message
         case errors
+        case conflicts
     }
 
     init(from decoder: Decoder) throws {
@@ -191,8 +200,11 @@ private struct ErrorPayload: Decodable {
             errors = keyed
         } else if let single = try? container.decode([String: String].self, forKey: .errors) {
             errors = single.mapValues { [$0] }
+        } else if let list = try? container.decode([String].self, forKey: .errors), !list.isEmpty {
+            errors = ["": list]
         } else {
             errors = nil
         }
+        conflicts = try? container.decodeIfPresent([DomainConflict].self, forKey: .conflicts)
     }
 }

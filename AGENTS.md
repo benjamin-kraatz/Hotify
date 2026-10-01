@@ -11,6 +11,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
+  - `Provisioning/` creates services from Coolify's one-click templates: a gallery, then placement, setup, and the first start, in one sheet that opens from the dashboard's New Service button.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
   - `Storage/` wraps the Keychain.
@@ -18,6 +19,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Client/` has `CoolifyClient` and one `CoolifyClient+<Group>.swift` extension per endpoint group.
   - `HTTP/` has URL normalization and errors.
   - `Decoding/` has the lenient decoding helpers.
+  - `Templates/` reads Coolify's template catalog from its CDN, since the API has no template endpoint, and outlines a template's compose file.
   - `Models/` has one file per Coolify type.
 
 `Hotify/` is a synchronized folder in Xcode. New files there join the target on their own, so do not edit `project.pbxproj` to add them.

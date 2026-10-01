@@ -84,7 +84,7 @@ extension ResourceSummary {
         let count = containers.count
         self.init(
             route: .service(service.uuid),
-            name: service.serviceType ?? service.name,
+            name: service.displayName,
             status: service.status,
             subtitle: count == 1 ? "1 container" : "\(count) containers",
             link: containers.lazy.compactMap(\.link).first,

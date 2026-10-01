@@ -14,6 +14,8 @@ struct ContentView: View {
     @State private var isAdding = false
     @State private var editing: CoolifyInstance?
     @State private var selectedResource: ResourceRoute?
+    @State private var catalog = TemplateCatalog()
+    @State private var isProvisioning = false
 
     var body: some View {
         ZStack {
@@ -38,6 +40,7 @@ struct ContentView: View {
         }
         .onChange(of: menuBar.navigation) { _, _ in followMenuBarSelection() }
         .onChange(of: store.selectedID) { _, _ in
+            isProvisioning = false
             selectedResource = nil
             rebind()
             if menuBar.navigation?.instanceID == store.selectedID { selectedResource = menuBar.navigation?.route }
@@ -61,6 +64,18 @@ struct ContentView: View {
                     let _ = try store.add(name: name, baseURL: url, token: token)
                 }
             )
+        }
+        .sheet(isPresented: $isProvisioning) {
+            ProvisioningSheet(client: client, instanceID: store.selectedID, catalog: catalog) { route in
+                isProvisioning = false
+                guard let route else { return }
+                Task {
+                    // The dashboard learns of the new service on its next poll. Ask now, so it opens at once.
+                    await dashboard.refresh()
+                    selectedResource = route
+                }
+            }
+            .id(store.selectedID)
         }
         .sheet(item: $editing) { instance in
             formSheet(
@@ -119,7 +134,8 @@ struct ContentView: View {
                     snapshot: dashboard.snapshot,
                     selection: $selectedResource,
                     onRun: run,
-                    onRefresh: { await dashboard.refresh() }
+                    onRefresh: { await dashboard.refresh() },
+                    onNewService: client == nil ? nil : { isProvisioning = true }
                 )
             }
         } else {

@@ -286,7 +286,7 @@ final class DashboardModel {
             return TargetState(name: database.name ?? uuid, status: database.status)
         case .service(let uuid):
             guard let service = services.first(where: { $0.uuid == uuid }) else { return nil }
-            return TargetState(name: service.serviceType ?? service.name, status: service.status)
+            return TargetState(name: service.displayName, status: service.status)
         }
     }
 }

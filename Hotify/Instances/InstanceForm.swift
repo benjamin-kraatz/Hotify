@@ -97,7 +97,7 @@ struct InstanceForm: View {
                     Text("API token")
                 } footer: {
                     Text(
-                        "Create one in Coolify under Keys & Tokens. Hotify syncs instances through iCloud and tokens through iCloud Keychain. Enable both on your devices."
+                        "Create one in Coolify under Keys & Tokens. Give it the root permission for everything Hotify can do, including creating services. A read-only token can watch, but not start, stop, or create. Hotify syncs instances through iCloud and tokens through iCloud Keychain. Enable both on your devices."
                     )
                 }
 

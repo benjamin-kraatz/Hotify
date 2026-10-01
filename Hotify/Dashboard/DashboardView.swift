@@ -8,6 +8,8 @@ struct DashboardView: View {
     @Binding var selection: ResourceRoute?
     var onRun: (ResourceAction, ResourceRoute) -> Void
     var onRefresh: () async -> Void
+    /// Opens provisioning. `nil` hides the button, such as before the instance connects.
+    var onNewService: (() -> Void)?
 
     @State private var query = ""
     @State private var stopCandidate: ResourceSummary?
@@ -82,6 +84,13 @@ struct DashboardView: View {
         .toolbar(removing: .title)
         #endif
         .toolbar {
+            if let onNewService {
+                ToolbarItem {
+                    Button("New Service", systemImage: "plus", action: onNewService)
+                        .keyboardShortcut("n")
+                        .help("Create a service from one of Coolify's templates")
+                }
+            }
             ToolbarItem {
                 Button {
                     refreshes += 1
@@ -168,8 +177,15 @@ struct DashboardView: View {
                 Label("Nothing deployed yet", systemImage: "flame")
             } description: {
                 Text(
-                    "This team has no applications, databases, or services. Create one in Coolify and it shows up here."
+                    onNewService == nil
+                        ? "This team has no applications, databases, or services. Create one in Coolify and it shows up here."
+                        : "This team has no applications, databases, or services yet. Start one from Coolify's templates."
                 )
+            } actions: {
+                if let onNewService {
+                    Button("Browse Templates", systemImage: "plus", action: onNewService)
+                        .glassButton(prominent: true)
+                }
             }
         } else if !query.isEmpty, visible.isEmpty {
             ContentUnavailableView.search(text: query)
