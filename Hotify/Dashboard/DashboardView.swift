@@ -52,8 +52,9 @@ struct DashboardView: View {
         return ProjectSection.sections(of: visible, projects: snapshot.projects, includesEmpty: !isNarrowed)
     }
 
-    private func heats(of section: ProjectSection) -> [Heat] {
-        section.resources.map { $0.heat(pendingAction: snapshot.pendingAction(for: $0.route)) }
+    /// A resource's heat as the list shows it. An action or deployment in flight counts as warming.
+    private func heat(of resource: ResourceSummary) -> Heat {
+        resource.heat(pendingAction: snapshot.pendingAction(for: resource.route))
     }
 
     var body: some View {
@@ -163,21 +164,21 @@ struct DashboardView: View {
     }
 
     #if os(macOS)
-    /// A panel per project. Not a `List`: its rows cannot sit inside a shared panel, and it animates a row's
-    /// height poorly. The arrow keys step through the rows as they would in one.
+    /// A group per project, with a panel per environment. Not a `List`: its rows cannot sit inside a shared
+    /// panel, and it animates a row's height poorly. The arrow keys step through the rows as they would in one.
     private func list(_ sections: [ProjectSection]) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                // Wider than the gaps inside a project, so each project reads as one group.
+                VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 10) {
                         summary
                     }
                     // In line with what the panels below hold, so every name in the column starts at one edge.
                     .padding(.horizontal, 4 + DashboardRowMetrics.inset)
-                    .padding(.bottom, 4)
 
                     ForEach(sections) { section in
-                        ProjectCard(section: section, heats: heats(of: section), selection: selection) { route in
+                        ProjectGroup(section: section, heat: heat(of:), selection: selection) { route in
                             isListFocused = true
                             selection = route
                         } row: { resource in
@@ -208,7 +209,7 @@ struct DashboardView: View {
         return .handled
     }
     #else
-    /// A grouped section per project, headed by a row that opens it.
+    /// A grouped section per project, headed by a row that opens it, with each environment named above its rows.
     private func list(_ sections: [ProjectSection]) -> some View {
         List(selection: $selection) {
             Section {
@@ -219,16 +220,15 @@ struct DashboardView: View {
             ForEach(sections) { section in
                 Section {
                     if let projectID = section.projectID {
-                        ProjectSectionHeader(section: section, heats: heats(of: section))
+                        ProjectSectionHeader(section: section, heats: section.resources.map(heat(of:)))
                             .tag(DetailRoute.project(projectID))
                     }
                     ForEach(section.environments) { environment in
-                        if section.labelsEnvironments {
-                            EnvironmentBadge(name: environment.name.isEmpty ? "Environment" : environment.name)
+                        if section.projectID != nil {
+                            EnvironmentHeading(name: environment.name, heats: environment.resources.map(heat(of:)))
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
                                 .selectionDisabled()
-                                .accessibilityAddTraits(.isHeader)
                         }
                         ForEach(environment.resources) { resource in
                             row(resource)

@@ -13,15 +13,6 @@ struct ProjectSection: Identifiable, Hashable {
 
     var resources: [ResourceSummary] { environments.flatMap(\.resources) }
 
-    /// With several environments each one gets its own label inside the section.
-    var labelsEnvironments: Bool { environments.count > 1 }
-
-    /// With one environment its name rides along beside the project's instead.
-    var soleEnvironmentName: String? {
-        guard environments.count == 1, let name = environments.first?.name, !name.isEmpty else { return nil }
-        return name
-    }
-
     /// The project, then its resources, in the order the list shows them. What the arrow keys step through.
     var routes: [DetailRoute] {
         (projectID.map { [DetailRoute.project($0)] } ?? []) + resources.map { .resource($0.route) }

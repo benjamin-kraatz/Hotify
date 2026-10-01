@@ -1,51 +1,34 @@
 import SwiftUI
 
-/// One project in the Mac's dashboard column: a panel with the project on top and its resources underneath.
+/// One project in the Mac's dashboard column: its head, then a panel per environment with that environment's
+/// resources.
 ///
-/// The panel is what says these belong together, so the project's name shows once however many environments it
-/// has. The head opens the project. Each row opens its resource.
-struct ProjectCard<Row: View>: View {
+/// The head stands on the column itself and opens the project. Each panel is one environment, named at its top,
+/// so what belongs together shares a panel and a project's name shows once however many environments it has.
+struct ProjectGroup<Row: View>: View {
     var section: ProjectSection
-    var heats: [Heat]
+    /// Each resource's heat as the list shows it, by route.
+    var heat: (ResourceSummary) -> Heat
     var selection: DetailRoute?
     var onSelect: (DetailRoute) -> Void
-    /// A resource's row, without the highlight and the click. The card adds those.
+    /// A resource's row, without the highlight and the click. The group adds those.
     @ViewBuilder var row: (ResourceSummary) -> Row
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 6) {
             head
 
             ForEach(section.environments) { environment in
-                if section.labelsEnvironments {
-                    EnvironmentBadge(name: environment.name.isEmpty ? "Environment" : environment.name)
-                        .padding(.leading, DashboardRowMetrics.inset)
-                        .padding(.top, 8)
-                        .padding(.bottom, 2)
-                        .accessibilityAddTraits(.isHeader)
-                }
-                ForEach(environment.resources) { resource in
-                    let route = DetailRoute.resource(resource.route)
-                    DashboardRowButton(isSelected: selection == route) {
-                        onSelect(route)
-                    } label: {
-                        row(resource)
-                    }
-                    .id(route)
+                panel(environment)
                     .transition(.opacity)
-                }
             }
         }
-        // Rows keep this far from the panel's edge, so a highlighted one reads as a pill inside it.
-        .padding(4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .well()
     }
 
     @ViewBuilder
     private var head: some View {
-        let header = ProjectSectionHeader(section: section, heats: heats)
-            .padding(.vertical, 6)
+        let header = ProjectSectionHeader(section: section, heats: section.resources.map(heat))
+            .padding(.vertical, 8)
         if let projectID = section.projectID {
             let route = DetailRoute.project(projectID)
             DashboardRowButton(isSelected: selection == route) {
@@ -56,11 +39,39 @@ struct ProjectCard<Row: View>: View {
             .id(route)
             .help("Show the \(section.name) project")
             .accessibilityHint("Shows the project")
+            // In line with the rows inside the panels below.
+            .padding(.horizontal, 4)
         } else {
             header
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, DashboardRowMetrics.inset)
+                .padding(.horizontal, 4 + DashboardRowMetrics.inset)
         }
+    }
+
+    private func panel(_ environment: EnvironmentSection) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Resources Hotify could not place have no environment to name.
+            if section.projectID != nil {
+                EnvironmentHeading(name: environment.name, heats: environment.resources.map(heat))
+                    .padding(.horizontal, DashboardRowMetrics.inset)
+                    .padding(.top, 7)
+                    .padding(.bottom, 5)
+            }
+            ForEach(environment.resources) { resource in
+                let route = DetailRoute.resource(resource.route)
+                DashboardRowButton(isSelected: selection == route) {
+                    onSelect(route)
+                } label: {
+                    row(resource)
+                }
+                .id(route)
+                .transition(.opacity)
+            }
+        }
+        // Rows keep this far from the panel's edge, so a highlighted one reads as a pill inside it.
+        .padding(4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .well()
     }
 }
 
@@ -122,8 +133,8 @@ struct DashboardRowButton<Label: View>: View {
             route: .application("web-staging"), name: "marketing-site", status: "exited",
             subtitle: "staging.hotify.example.com", place: staging),
     ]
-    VStack(spacing: 14) {
-        ProjectCard(
+    VStack(alignment: .leading, spacing: 22) {
+        ProjectGroup(
             section: ProjectSection(
                 projectID: "website",
                 name: "Website",
@@ -132,15 +143,15 @@ struct DashboardRowButton<Label: View>: View {
                     EnvironmentSection(id: 2, name: "staging", resources: Array(resources.suffix(1))),
                 ]
             ),
-            heats: [.lit, .troubled, .cold],
+            heat: \.heat,
             selection: selection,
             onSelect: { selection = $0 }
         ) { resource in
             ResourceRow(resource: resource)
         }
-        ProjectCard(
+        ProjectGroup(
             section: ProjectSection(projectID: "new", name: "Side project"),
-            heats: [],
+            heat: \.heat,
             selection: selection,
             onSelect: { selection = $0 }
         ) { resource in
