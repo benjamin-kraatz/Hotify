@@ -56,7 +56,22 @@ extension CoolifyClient {
         force: Bool = false,
         dockerTag: String? = nil
     ) async throws -> DeployResult {
-        try await deploy(uuid: applicationUUID, force: force, pullRequestID: pullRequestID, dockerTag: dockerTag)
+        guard pullRequestID > 0, !applicationUUID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw CoolifyError(message: "A preview needs an application and a positive pull request number.")
+        }
+        let result = try await deploy(
+            uuid: applicationUUID, force: force, pullRequestID: pullRequestID, dockerTag: dockerTag)
+        // Coolify 4.3 can return HTTP 200 with a per-resource error and no queued deployment.
+        guard
+            result.deployments.contains(where: {
+                $0.resourceUUID == applicationUUID && !($0.deploymentUUID ?? "").isEmpty
+            })
+        else {
+            throw CoolifyError(
+                message: result.deployments.first(where: { $0.resourceUUID == applicationUUID })?.message
+                    ?? result.message ?? "Coolify did not queue the preview deployment.")
+        }
+        return result
     }
 
     public func startPreview(

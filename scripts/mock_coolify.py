@@ -107,6 +107,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond([{"uuid": "server", "name": "Fixture server", "is_reachable": 1}])
         if path == "/applications":
             return self.respond([{"uuid": "web", "id": 1, "name": "Fixture Web", "status": "running:healthy", "fqdn": "https://fixture.example"}])
+        if path == "/applications/web":
+            return self.respond({"uuid": "web", "name": "Fixture Web", "git_repository": "coollabsio/coolify", "git_branch": "main", "settings": {"is_preview_deployments_enabled": 1}})
         if path == "/databases":
             return self.respond([{"uuid": "db", "name": "Fixture Postgres", "database_type": "standalone-postgresql", "status": "running:healthy"}])
         if path == "/services":
@@ -118,6 +120,8 @@ class Handler(BaseHTTPRequestHandler):
             take = int(query.get("take", [20])[0])
             skip = int(query.get("skip", [0])[0])
             return self.respond({"count": 25, "deployments": [self.deployment(i) for i in range(skip, min(skip + take, 25))]})
+        if path == "/deployments/preview-18":
+            return self.respond({"deployment_uuid": "preview-18", "application_id": 1, "status": "finished", "pull_request_id": 18, "commit_message": "Fixture preview deployment", "logs": [{"output": "Preview ready"}]})
         if path.startswith("/deployments/build-"):
             index = int(path.rsplit("-", 1)[1])
             result = self.deployment(index)
@@ -134,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
 
     @staticmethod
     def deployment(index):
-        return {"deployment_uuid": f"build-{index}", "application_id": 1, "status": "failed" if index == 0 else "finished", "commit": "0123456789abcdef", "commit_message": f"Fixture deployment {index + 1}", "created_at": "2026-09-29T12:00:00Z", "finished_at": "2026-09-29T12:00:10Z"}
+        return {"deployment_uuid": f"build-{index}", "application_id": 1, "pull_request_id": 18 if index == 1 else 0, "status": "failed" if index == 0 else "finished", "commit": "0123456789abcdef", "commit_message": f"Fixture deployment {index + 1}", "created_at": "2026-09-29T12:00:00Z", "finished_at": "2026-09-29T12:00:10Z"}
 
     def do_POST(self):
         self.write()
@@ -167,6 +171,17 @@ class Handler(BaseHTTPRequestHandler):
             if "/envs/" in path and self.command == "DELETE":
                 self.server.variables[:] = [v for v in self.server.variables if v["uuid"] != path.rsplit("/", 1)[1]]
                 return self.respond({"message": "Deleted"})
+            if path == "/deploy" and "pull_request_id" in parse_qs(urlsplit(self.path).query):
+                query = parse_qs(urlsplit(self.path).query)
+                number = int(query["pull_request_id"][0])
+                self.server.events[-1]["pull_request_id"] = number
+                self.server.events[-1]["resource_uuid"] = query.get("uuid", [None])[0]
+                row = {"resource_uuid": "web"}
+                if number == 18:
+                    row.update({"message": "Queued", "deployment_uuid": "preview-18"})
+                else:
+                    row["message"] = f"Pull request {number} not found for this resource."
+                return self.respond({"deployments": [row]})
             if path == "/deploy" or path.endswith("/restart"):
                 return self.respond({"message": "Queued", "deployments": []})
             return self.respond({"message": "Fixture write not supported"}, 404)

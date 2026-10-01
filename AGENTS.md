@@ -10,6 +10,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource.
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
+  - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
   - `Storage/` wraps the Keychain.
@@ -74,6 +75,7 @@ The live tests in `LiveCoolifyTests.swift` skip unless `COOLIFY_LIVE_TESTS=1` is
 - The window has three columns: instances, the selected instance's resources, then the open resource. iPhone pushes them as a stack.
 - Show status through `Heat` and `FlameGlyph`. A lit red flame means running, and a grey outline means stopped. Anything starting, unhealthy, or failed glows amber. Never use red for an error.
 - Use the asset colors `ember`, `glow`, and `core`, not raw hex. The accent is `ember`.
+- Pull request previews burn blue, like a pilot light. Pass `tone: .preview` to `FlameGlyph` and `heatEdge`, and use `pilot` and `pilotCore` for preview marks, never for production. A building preview keeps its blue body with an amber core. A failed one glows amber like anything else.
 - `Font.display` is the only custom type style. Use it for names that head a screen and nothing else.
 - Animate a state change the user can act on or should notice. Respect Reduce Motion.
 

@@ -38,6 +38,9 @@ struct ResourceRow: View {
                         .imageScale(.small)
                         .foregroundStyle(.secondary)
                         .accessibilityLabel(resource.kind.title)
+                    if let first = resource.buildingPreviews.first {
+                        BuildingPreviewMark(first: first, count: resource.buildingPreviews.count)
+                    }
                     if !resource.containers.isEmpty {
                         HeatStrip(heats: resource.containers.map(\.heat), tickWidth: 4, height: 7)
                             .fixedSize()
@@ -52,8 +55,32 @@ struct ResourceRow: View {
         }
         .padding(.vertical, 5)
         .animation(.snappy, value: statusText)
+        .animation(.snappy, value: resource.buildingPreviews)
         .accessibilityElement(children: .combine)
         .accessibilityValue(statusText)
+    }
+}
+
+/// A blue flame beside the row while a pull request preview builds, with the PR it is building.
+private struct BuildingPreviewMark: View {
+    var first: Int
+    var count: Int
+
+    @SwiftUI.Environment(\.backgroundProminence) private var prominence
+
+    var body: some View {
+        HStack(spacing: 3) {
+            FlameGlyph(heat: .warming, height: 11, tone: .preview)
+            Text(verbatim: count > 1 ? "#\(first) +\(count - 1)" : "#\(first)")
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+        }
+        .foregroundStyle(prominence == .increased ? AnyShapeStyle(.white) : AnyShapeStyle(.pilot))
+        .fixedSize()
+        .transition(.scale(scale: 0.6).combined(with: .opacity))
+        .accessibilityElement()
+        .accessibilityLabel(
+            count > 1 ? "Building \(count) previews" : "Building the preview of pull request \(first)")
     }
 }
 
@@ -64,7 +91,8 @@ struct ResourceRow: View {
                 route: .application("web"),
                 name: "marketing-site",
                 status: "running:healthy",
-                subtitle: "hotify.example.com"
+                subtitle: "hotify.example.com",
+                buildingPreviews: [42]
             )
         )
         ResourceRow(

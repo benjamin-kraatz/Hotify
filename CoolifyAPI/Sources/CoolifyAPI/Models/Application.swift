@@ -31,6 +31,8 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
     public var buildPack: String?
     public var createdAt: String?
     public var settings: ApplicationSettings?
+    /// How Coolify names a preview's domain, such as `{{pr_id}}.{{domain}}`.
+    public var previewURLTemplate: String?
     /// The environment the application lives in. Match it against `Project.environments` to find its project.
     public var environmentID: Int?
 
@@ -48,6 +50,7 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         case buildPack
         case createdAt
         case settings
+        case previewURLTemplate = "previewUrlTemplate"
         case environmentID = "environmentId"
     }
 
@@ -64,6 +67,33 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         buildPack = container.flexString(.buildPack)
         createdAt = container.flexString(.createdAt)
         settings = try container.decodeIfPresent(ApplicationSettings.self, forKey: .settings)
+        previewURLTemplate = container.flexString(.previewURLTemplate)
         environmentID = container.flexInt(.environmentID)
+    }
+}
+
+extension Application {
+    /// The address Coolify gives a pull request's preview, built the way Coolify builds it: the template with the
+    /// first domain's host and the PR number filled in, under that domain's scheme and port.
+    ///
+    /// `nil` without a domain or template, or when the template has `{{random}}`, which Coolify fills once and the API
+    /// does not return. A preview whose domain was edited by hand in Coolify lives elsewhere, which the API also hides.
+    public func previewURL(pullRequest: Int) -> URL? {
+        guard pullRequest > 0,
+            let template = previewURLTemplate?.trimmingCharacters(in: .whitespacesAndNewlines), !template.isEmpty,
+            !template.contains("{{random}}"),
+            let first = fqdn?.split(separator: ",").first?.trimmingCharacters(in: .whitespaces),
+            let domain = URLComponents(string: first), let scheme = domain.scheme, let host = domain.host,
+            !host.isEmpty
+        else { return nil }
+        let name =
+            template
+            .replacingOccurrences(of: "{{domain}}", with: host)
+            .replacingOccurrences(of: "{{pr_id}}", with: String(pullRequest))
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = name
+        components.port = domain.port
+        return components.url
     }
 }

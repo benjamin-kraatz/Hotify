@@ -5,6 +5,8 @@ import SwiftUI
 struct DeploymentDetail: View {
     var client: CoolifyClient?
     var initial: DeploymentLine
+    /// Names where the back button returns to.
+    var backTitle = "Deployments"
     var onBack: () -> Void
     @State private var deployment: Deployment?
     @State private var error: String?
@@ -81,9 +83,9 @@ struct DeploymentDetail: View {
 
     private var navigation: some View {
         HStack(spacing: 12) {
-            Button("Deployments", systemImage: "chevron.left", action: onBack)
+            Button(backTitle, systemImage: "chevron.left", action: onBack)
                 .fontWeight(.medium)
-                .help("Back to all deployments")
+                .help("Back to \(backTitle)")
                 .keyboardShortcut(.cancelAction)
             Spacer(minLength: 8)
             if let url = line.url, let urlLabel = line.urlLabel {
@@ -127,7 +129,7 @@ private struct DeploymentSummary: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            FlameGlyph(heat: line.heat, height: 38)
+            FlameGlyph(heat: line.heat, height: 38, tone: line.tone)
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -160,10 +162,10 @@ private struct DeploymentSummary: View {
         HStack(spacing: 6) {
             progress
                 .fontWeight(.semibold)
-                .foregroundStyle(line.heat.tint)
+                .foregroundStyle(line.tone.tint(for: line.heat))
                 .contentTransition(.interpolate)
             if let pullRequest = line.pullRequest {
-                Tag(text: "PR \(pullRequest)")
+                PullRequestBadge(number: pullRequest)
             }
             if line.isRestart {
                 Tag(text: "Restart")

@@ -12,6 +12,7 @@ struct ResourceDetailScreen: View {
 
     @State private var model: ResourceDetailModel
     @State private var variables: VariablesModel
+    @State private var previews = PreviewsModel()
     @State private var chosenContainerID: Int?
 
     init(
@@ -63,6 +64,7 @@ struct ResourceDetailScreen: View {
             logLineCount: $model.logLineCount,
             deployments: model.deployments,
             variables: variables,
+            previewsModel: previews,
             loadError: model.loadError,
             actionError: actionError,
             isLoading: model.isLoading,
@@ -78,6 +80,8 @@ struct ResourceDetailScreen: View {
             guard let client else { return }
             model.prepare(client, route: resource.route)
             variables.prepare(client, route: resource.route)
+            previews.prepare(client, route: resource.route)
+            Task { await previews.load() }
             await model.setLogSource(logSource)
             while !Task.isCancelled {
                 await model.refresh()
@@ -95,6 +99,9 @@ struct ResourceDetailScreen: View {
         .onChange(of: resource.isDeploying) { _, _ in
             Task { await model.refresh() }
         }
+        .onChange(of: resource.buildingPreviews) { _, _ in
+            Task { await model.refresh() }
+        }
     }
 }
 
@@ -109,6 +116,7 @@ struct ResourceDetail: View {
     @Binding var logLineCount: Int
     var deployments: [DeploymentLine]
     var variables: VariablesModel
+    var previewsModel = PreviewsModel()
     var loadError: String?
     var actionError: String?
     var isLoading: Bool
@@ -124,6 +132,12 @@ struct ResourceDetail: View {
     @State private var selectedDeployment: DeploymentLine?
     @State private var tab: DetailTab?
     @State private var stopCandidate: ResourceSummary?
+    @State private var showsPreviewDeployment = false
+    @State private var showsGitHubAccess = false
+    @State private var previewGeneration = 0
+    /// Open while the previews take over the column. `nil` shows production.
+    @State private var previewPlace: PreviewPlace?
+    @State private var followedPreviewDeployment: DeploymentLine?
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var tabs: [DetailTab] {
@@ -132,6 +146,10 @@ struct ResourceDetail: View {
         case .service: [.logs, .containers, .variables]
         case .database: [.logs, .backups, .variables]
         }
+    }
+
+    private var previews: [PreviewLine] {
+        resource.kind == .application ? previewsModel.previews(from: deployments) : []
     }
 
     private var lastDeploymentFailed: Bool {
@@ -165,6 +183,102 @@ struct ResourceDetail: View {
     }
 
     var body: some View {
+        ZStack {
+            if let previewPlace, case .application(let uuid) = resource.route {
+                PreviewSpace(
+                    resourceName: resource.name,
+                    application: uuid,
+                    previews: previews,
+                    model: previewsModel,
+                    client: deploymentClient,
+                    place: Binding(get: { previewPlace }, set: { self.previewPlace = $0 }),
+                    followedDeployment: $followedPreviewDeployment,
+                    // Every poll sets `isLoading`. Only the first load, before any history, should show a spinner.
+                    isLoading: isLoading && deployments.isEmpty,
+                    canLoadMore: canLoadMoreDeployments,
+                    onLoadMore: onLoadMoreDeployments,
+                    onDeploy: { showsPreviewDeployment = true }
+                )
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else {
+                production
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : .snappy, value: previewPlace == nil)
+        // A restart or deploy started anywhere puts saved variable changes to use.
+        .onChange(of: pendingAction) { _, action in
+            if action == .start || action == .deploy || action == .restart {
+                variables.hasUnappliedChanges = false
+            }
+        }
+        #if os(macOS)
+        .navigationTitle(resource.name)
+        #else
+        .navigationTitle(previewPlace == nil ? resource.kind.title : "Previews")
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            #if os(macOS)
+            if let menuBar, menuBar.enabled {
+                ToolbarItem(placement: .primaryAction) {
+                    MenuBarWatchButton(model: menuBar, resource: resource)
+                }
+            }
+            #endif
+            if resource.kind == .application {
+                ToolbarItem(placement: .primaryAction) {
+                    PreviewsMenu(
+                        resourceName: resource.name,
+                        previews: previews,
+                        isShowingPreviews: previewPlace != nil,
+                        canDeploy: deploymentClient != nil,
+                        onDeploy: { showsPreviewDeployment = true },
+                        onShow: { place in
+                            followedPreviewDeployment = nil
+                            previewPlace = place
+                        },
+                        onGitHubAccess: { showsGitHubAccess = true }
+                    )
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                ResourceGuideButton(kind: resource.kind)
+            }
+        }
+        .sheet(isPresented: $showsPreviewDeployment) {
+            if case .application(let uuid) = resource.route {
+                let generation = previewGeneration
+                PreviewDeploymentSheet(
+                    client: deploymentClient, application: uuid, previews: previews, resourceName: resource.name
+                ) {
+                    queued, number in
+                    guard generation == previewGeneration else { return }
+                    followedPreviewDeployment = previewsModel.noteQueued(queued, number: number)
+                    previewPlace = .preview(number)
+                }
+                .id(uuid)
+            }
+        }
+        .sheet(isPresented: $showsGitHubAccess) {
+            GitHubAccessSheet(repository: previewsModel.repository) {
+                Task { await previewsModel.load() }
+            }
+        }
+        .onChange(of: resource.route) { _, _ in
+            previewGeneration += 1
+            showsPreviewDeployment = false
+            selectedDeployment = nil
+            previewPlace = nil
+            followedPreviewDeployment = nil
+        }
+        .stopConfirmation(for: $stopCandidate) { _ in
+            onAction(.stop)
+        }
+    }
+
+    /// The resource itself: its header, actions, and tabs.
+    private var production: some View {
         VStack(alignment: .leading, spacing: 0) {
             ResourceHeader(
                 resource: resource,
@@ -222,7 +336,8 @@ struct ResourceDetail: View {
                                 isLoading: isLoading,
                                 onSelect: { selectedDeployment = $0 },
                                 canLoadMore: canLoadMoreDeployments,
-                                onLoadMore: onLoadMoreDeployments
+                                onLoadMore: onLoadMoreDeployments,
+                                onShowPreviews: { previewPlace = .board }
                             )
                             .transition(.move(edge: .leading).combined(with: .opacity))
                         }
@@ -259,33 +374,6 @@ struct ResourceDetail: View {
         .animation(reduceMotion ? nil : .snappy, value: selectedDeployment)
         .animation(.snappy, value: loadError)
         .animation(.snappy, value: actionError)
-        // A restart or deploy started anywhere puts saved variable changes to use.
-        .onChange(of: pendingAction) { _, action in
-            if action == .start || action == .deploy || action == .restart {
-                variables.hasUnappliedChanges = false
-            }
-        }
-        #if os(macOS)
-        .navigationTitle(resource.name)
-        #else
-        .navigationTitle(resource.kind.title)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            #if os(macOS)
-            if let menuBar, menuBar.enabled {
-                ToolbarItem(placement: .primaryAction) {
-                    MenuBarWatchButton(model: menuBar, resource: resource)
-                }
-            }
-            #endif
-            ToolbarItem(placement: .primaryAction) {
-                ResourceGuideButton(kind: resource.kind)
-            }
-        }
-        .stopConfirmation(for: $stopCandidate) { _ in
-            onAction(.stop)
-        }
     }
 }
 
