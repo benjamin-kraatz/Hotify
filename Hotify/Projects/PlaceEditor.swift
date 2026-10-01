@@ -1,7 +1,7 @@
 import CoolifyAPI
 import SwiftUI
 
-/// Renames a project or an environment, and says what it is for.
+/// Renames a project or an environment, says what it is for, and picks its color.
 struct PlaceEditor: View {
     @SwiftUI.Environment(\.dismiss) private var dismiss
 
@@ -9,16 +9,23 @@ struct PlaceEditor: View {
     var namePrompt = "Name"
     /// Names in use beside this one, to catch a duplicate before Coolify answers 409.
     var takenNames: Set<String> = []
+    /// Whether the color can be picked here. An environment Coolify sent without a uuid has nowhere to keep one.
+    var canTint = false
+    /// Sends a new name or description to Coolify. Not called when only the color changed.
     var onSave: (_ name: String, _ description: String) async throws -> Void
+    /// Keeps a new color. Called after `onSave` succeeds, since the color is Hotify's own and cannot fail.
+    var onTint: (PlaceTint?) -> Void
 
     @State private var name: String
     @State private var description: String
+    @State private var tint: PlaceTint?
     @State private var isSaving = false
     @State private var saveError: String?
     @FocusState private var focus: Field?
 
     private let originalName: String
     private let originalDescription: String
+    private let originalTint: PlaceTint?
 
     private enum Field: Hashable {
         case name
@@ -31,16 +38,23 @@ struct PlaceEditor: View {
         name: String = "",
         description: String = "",
         takenNames: Set<String> = [],
-        onSave: @escaping (_ name: String, _ description: String) async throws -> Void
+        tint: PlaceTint? = nil,
+        canTint: Bool = false,
+        onSave: @escaping (_ name: String, _ description: String) async throws -> Void,
+        onTint: @escaping (PlaceTint?) -> Void = { _ in }
     ) {
         self.title = title
         self.namePrompt = namePrompt
         self.takenNames = takenNames
+        self.canTint = canTint
         self.onSave = onSave
+        self.onTint = onTint
         originalName = name
         originalDescription = description
+        originalTint = tint
         _name = State(initialValue: name)
         _description = State(initialValue: description)
+        _tint = State(initialValue: tint)
     }
 
     private var trimmedName: String {
@@ -63,8 +77,12 @@ struct PlaceEditor: View {
         return nil
     }
 
-    private var isDirty: Bool {
+    private var isRenamed: Bool {
         trimmedName != originalName || trimmedDescription != originalDescription
+    }
+
+    private var isDirty: Bool {
+        isRenamed || tint != originalTint
     }
 
     private var canSave: Bool {
@@ -90,6 +108,17 @@ struct PlaceEditor: View {
                     if let nameProblem {
                         Label(nameProblem, systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.glow)
+                    }
+                }
+
+                if canTint {
+                    Section {
+                        PlaceTintPicker(selection: $tint)
+                            .padding(.vertical, 4)
+                    } header: {
+                        Text("Color")
+                    } footer: {
+                        Text("Marks it wherever Hotify shows it, on all your devices. Coolify doesn't see it.")
                     }
                 }
 
@@ -132,7 +161,7 @@ struct PlaceEditor: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 420, idealWidth: 460, minHeight: 260)
+        .frame(minWidth: 420, idealWidth: 460, minHeight: 360)
         #endif
         .interactiveDismissDisabled(isSaving || isDirty)
         .animation(.snappy, value: nameProblem)
@@ -143,7 +172,12 @@ struct PlaceEditor: View {
         isSaving = true
         defer { isSaving = false }
         do {
-            try await onSave(trimmedName, trimmedDescription)
+            if isRenamed {
+                try await onSave(trimmedName, trimmedDescription)
+            }
+            if tint != originalTint {
+                onTint(tint)
+            }
             dismiss()
         } catch {
             saveError = error.localizedDescription
@@ -171,6 +205,8 @@ struct PlaceWriteError: Error, LocalizedError {
         title: "Edit Project",
         name: "Website",
         description: "The marketing site, its API, and what they store.",
+        tint: .teal,
+        canTint: true,
         onSave: { _, _ in }
     )
 }

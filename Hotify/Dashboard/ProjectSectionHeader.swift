@@ -9,18 +9,22 @@ struct ProjectSectionHeader: View {
     var section: ProjectSection
     /// The heat of each of the project's resources, with an action or deployment in flight counted as warming.
     var heats: [Heat]
+    var tint: PlaceTint?
 
     private var runningCount: Int { heats.count { $0 == .lit } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(section.name)
-                    .font(.headline)
-                    // A long name takes a second line before it is cut.
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .layoutPriority(1)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    PlaceMark(tint: tint)
+                    Text(section.name)
+                        // A long name takes a second line before it is cut.
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                .font(.headline)
+                .layoutPriority(1)
                 Spacer(minLength: 8)
                 if heats.isEmpty {
                     Text("Empty")
@@ -48,7 +52,8 @@ struct ProjectSectionHeader: View {
     VStack(spacing: 20) {
         ProjectSectionHeader(
             section: ProjectSection(projectID: "website", name: "A project with quite a long name to fit"),
-            heats: [.lit, .lit, .troubled, .cold, .cold, .cold, .cold, .cold, .cold]
+            heats: [.lit, .lit, .troubled, .cold, .cold, .cold, .cold, .cold, .cold],
+            tint: .teal
         )
         ProjectSectionHeader(section: ProjectSection(projectID: "new", name: "Side project"), heats: [])
         ProjectSectionHeader(section: ProjectSection(name: "Other"), heats: [.lit])

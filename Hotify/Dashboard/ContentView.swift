@@ -5,6 +5,8 @@ import SwiftUI
 struct ContentView: View {
     @SwiftUI.Environment(MenuBarModel.self) private var menuBar
     @SwiftUI.Environment(InstanceStore.self) private var store
+    /// Missing in previews, which leaves every project and environment without a color.
+    @SwiftUI.Environment(PlaceColors.self) private var placeColors: PlaceColors?
     @SwiftUI.Environment(\.scenePhase) private var scenePhase
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var boundToken: String?
@@ -108,6 +110,8 @@ struct ContentView: View {
                 }
             )
         }
+        // Outside the sheets, so provisioning colors what it creates on the same instance.
+        .environment(\.placePalette, PlacePalette(colors: placeColors, instanceID: store.selectedID))
     }
 
     private var splitView: some View {

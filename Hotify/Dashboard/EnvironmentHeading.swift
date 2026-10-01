@@ -5,6 +5,7 @@ struct EnvironmentHeading: View {
     var name: String
     /// The heat of each resource in the environment, with an action or deployment in flight counted as warming.
     var heats: [Heat]
+    var tint: PlaceTint?
 
     private var runningCount: Int { heats.count { $0 == .lit } }
 
@@ -12,11 +13,14 @@ struct EnvironmentHeading: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(name.isEmpty ? "Environment" : name)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                PlaceMark(tint: tint)
+                Text(name.isEmpty ? "Environment" : name)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .font(.subheadline.weight(.semibold))
             Spacer(minLength: 8)
             Text("\(runningCount) of \(heats.count) running")
                 .font(.caption)
@@ -34,7 +38,7 @@ struct EnvironmentHeading: View {
 
 #Preview {
     VStack(spacing: 12) {
-        EnvironmentHeading(name: "production", heats: [.lit, .lit, .lit])
+        EnvironmentHeading(name: "production", heats: [.lit, .lit, .lit], tint: .orange)
         EnvironmentHeading(name: "previews", heats: [.cold, .troubled, .cold])
     }
     .padding()
