@@ -23,6 +23,7 @@ struct ContentView: View {
     @State private var projectPage = ProjectPageModel()
     @State private var catalog = TemplateCatalog()
     @State private var provisioning: ProvisioningRequest?
+    @State private var columns = NavigationSplitViewVisibility.automatic
 
     var body: some View {
         ZStack {
@@ -124,14 +125,18 @@ struct ContentView: View {
                 }
             )
         }
+        .focusedSceneValue(\.addInstance, AddInstanceAction { isAdding = true })
         // Outside the sheets, so provisioning colors what it creates on the same instance.
         .environment(\.placePalette, PlacePalette(colors: placeColors, instanceID: store.selectedID))
     }
 
     private var splitView: some View {
-        NavigationSplitView {
-            InstanceSidebar(isAdding: $isAdding, editing: $editing, heat: heat(for:))
-                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
+        NavigationSplitView(columnVisibility: $columns) {
+            InstanceSidebar(
+                isAdding: $isAdding, editing: $editing, isCollapsed: columns == .doubleColumn || columns == .detailOnly,
+                heat: heat(for:)
+            )
+            .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
         } content: {
             dashboardColumn
                 .navigationSplitViewColumnWidth(min: 320, ideal: 390, max: 560)

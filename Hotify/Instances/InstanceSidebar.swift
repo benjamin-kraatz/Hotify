@@ -6,6 +6,8 @@ struct InstanceSidebar: View {
     @SwiftUI.Environment(InstanceStore.self) private var store
     @Binding var isAdding: Bool
     @Binding var editing: CoolifyInstance?
+    /// Whether the window hides the sidebar. Its toolbar actions go with it.
+    var isCollapsed = false
     /// The heat of an instance: lit when its dashboard loads, amber when it fails, dashed when Hotify is not watching.
     var heat: (CoolifyInstance) -> Heat
 
@@ -54,18 +56,21 @@ struct InstanceSidebar: View {
         }
         .navigationTitle("Instances")
         .toolbar {
-            ToolbarItemGroup {
-                if let selected = store.selected {
-                    Button("Edit Instance", systemImage: "pencil") {
-                        editing = selected
+            // The Mac keeps a hidden sidebar's items before the sidebar button, where only one fits, and moves
+            // the rest to an overflow menu at the far end of the toolbar. File > New Instance still adds one.
+            if !isCollapsed {
+                ToolbarItemGroup {
+                    if let selected = store.selected {
+                        Button("Edit Instance", systemImage: "pencil") {
+                            editing = selected
+                        }
+                        .help("Edit \(selected.name)")
                     }
-                    .help("Edit \(selected.name)")
+                    Button("Add Instance", systemImage: "plus") {
+                        isAdding = true
+                    }
+                    .help("Add a Coolify instance (⌘N)")
                 }
-                Button("Add Instance", systemImage: "plus") {
-                    isAdding = true
-                }
-                .keyboardShortcut("n")
-                .help("Add a Coolify instance")
             }
             // The Mac has a Settings window in the app menu instead.
             #if os(iOS)

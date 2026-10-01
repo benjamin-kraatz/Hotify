@@ -65,7 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
                 #endif
-                // iPad lists it in its menu bar too.
+                // iPad lists these in its menu bar too.
+                InstanceCommands()
                 ProjectCommands()
             }
             // Not on `.inactive`: the Face ID prompt itself makes the scene inactive on iOS.
