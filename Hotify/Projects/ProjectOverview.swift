@@ -14,9 +14,11 @@ struct ProjectOverview: View {
     var onAction: (ResourceAction, ResourceSummary) -> Void = { _, _ in }
     /// `nil` leaves the environment controls out, as without a connection.
     var onEditEnvironment: ((EnvironmentSummary) -> Void)?
-    var onAddEnvironment: (() -> Void)?
+    /// Creates an environment by name. `nil` leaves the button out, as without a connection.
+    var onAddEnvironment: ((_ name: String) async throws -> Void)?
 
     @State private var stopCandidate: ResourceSummary?
+    @State private var isAddingEnvironment = false
 
     private var groups: [EnvironmentGroup] {
         let members = Dictionary(grouping: resources) { $0.place?.environmentID ?? -1 }
@@ -55,10 +57,15 @@ struct ProjectOverview: View {
                 }
 
                 if let onAddEnvironment, !groups.isEmpty {
-                    Button("New Environment…", systemImage: "plus", action: onAddEnvironment)
-                        .buttonStyle(.borderless)
-                        .font(.subheadline.weight(.medium))
-                        .help("Add an empty environment to \(project.name)")
+                    Button("New Environment…", systemImage: "plus") {
+                        isAddingEnvironment = true
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.subheadline.weight(.medium))
+                    .help("Add an empty environment to \(project.name)")
+                    .popover(isPresented: $isAddingEnvironment, arrowEdge: .bottom) {
+                        newEnvironment(onAddEnvironment)
+                    }
                 }
 
                 if !deployments.isEmpty {
@@ -87,8 +94,13 @@ struct ProjectOverview: View {
                     Text("\(project.name) has no resources. Create one in Coolify and it shows up here.")
                 } actions: {
                     if let onAddEnvironment {
-                        Button("New Environment…", action: onAddEnvironment)
-                            .glassButton()
+                        Button("New Environment…") {
+                            isAddingEnvironment = true
+                        }
+                        .glassButton()
+                        .popover(isPresented: $isAddingEnvironment, arrowEdge: .bottom) {
+                            newEnvironment(onAddEnvironment)
+                        }
                     }
                 }
             }
@@ -100,6 +112,11 @@ struct ProjectOverview: View {
         .animation(.snappy, value: resources.map(\.id))
         .animation(.snappy, value: deployments.map(\.id))
         .animation(.snappy, value: isLoadingDeployments)
+    }
+
+    private func newEnvironment(_ onAdd: @escaping (String) async throws -> Void) -> some View {
+        NewEnvironmentPopover(
+            projectName: project.name, takenNames: Set(project.environments.map(\.name)), onAdd: onAdd)
     }
 
     // MARK: Environments
@@ -388,7 +405,7 @@ private struct ProjectDeploymentRow: View {
         ],
         onOpen: { _ in },
         onEditEnvironment: { _ in },
-        onAddEnvironment: {}
+        onAddEnvironment: { _ in }
     )
     .frame(width: 600, height: 640)
 }
@@ -398,7 +415,7 @@ private struct ProjectDeploymentRow: View {
         project: ProjectSummary(id: "new", name: "Side project"),
         resources: [],
         onOpen: { _ in },
-        onAddEnvironment: {}
+        onAddEnvironment: { _ in }
     )
     .frame(width: 600, height: 420)
 }

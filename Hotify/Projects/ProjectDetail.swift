@@ -139,6 +139,8 @@ struct ProjectDetail: View {
     var onReload: () async -> Void = {}
 
     @State private var sheet: ProjectSheet?
+    /// The popover at the toolbar menu. The overview has one of its own at its button.
+    @State private var isAddingEnvironment = false
     @State private var reloads = 0
 
     private var activity: ProjectActivityModel { page.activity }
@@ -209,7 +211,7 @@ struct ProjectDetail: View {
                         },
                         onAction: { action, resource in onAction(action, resource.route) },
                         onEditEnvironment: canEdit ? { sheet = .editEnvironment($0) } : nil,
-                        onAddEnvironment: canEdit ? { sheet = .newEnvironment } : nil
+                        onAddEnvironment: canEdit ? onAddEnvironment : nil
                     )
                 case .previews:
                     ProjectPreviews(
@@ -244,7 +246,7 @@ struct ProjectDetail: View {
                         sheet = .editProject
                     }
                     Button("New Environment…", systemImage: "plus") {
-                        sheet = .newEnvironment
+                        isAddingEnvironment = true
                     }
                     Divider()
                     Button("Reload", systemImage: "arrow.clockwise") {
@@ -257,6 +259,13 @@ struct ProjectDetail: View {
                 }
                 .disabled(!canEdit)
                 .help("Edit \(project.name), add an environment, or reload")
+                .popover(isPresented: $isAddingEnvironment, arrowEdge: .bottom) {
+                    NewEnvironmentPopover(
+                        projectName: project.name,
+                        takenNames: Set(project.environments.map(\.name)),
+                        onAdd: onAddEnvironment
+                    )
+                }
             }
         }
         .sheet(item: $sheet) { sheet in
@@ -280,16 +289,6 @@ struct ProjectDetail: View {
                 name: project.name,
                 description: project.description ?? "",
                 onSave: onSaveProject
-            )
-        case .newEnvironment:
-            PlaceEditor(
-                title: "New Environment",
-                confirmTitle: "Add",
-                namePrompt: "staging",
-                hasDescription: false,
-                takenNames: names,
-                note: "It starts empty. Resources are created in it from Coolify.",
-                onSave: { name, _ in try await onAddEnvironment(name) }
             )
         case .editEnvironment(let environment):
             PlaceEditor(
@@ -326,7 +325,6 @@ enum ProjectTab: Identifiable, Hashable {
 /// The sheet open over the project page.
 private enum ProjectSheet: Identifiable, Hashable {
     case editProject
-    case newEnvironment
     case editEnvironment(EnvironmentSummary)
 
     var id: Self { self }
