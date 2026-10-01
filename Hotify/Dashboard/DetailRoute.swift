@@ -20,3 +20,13 @@ struct ResourceEntry: Hashable {
     /// History the caller already loaded. It shows at once, until the resource's own request answers.
     var history: [DeploymentLine] = []
 }
+
+extension ResourceEntry {
+    /// The place a widget's link points at.
+    init(_ place: ResourceLink.Place) {
+        switch place {
+        case .deployments: self.init(place: .deployments)
+        case .preview(let pullRequest): self.init(place: .previews(.preview(pullRequest)))
+        }
+    }
+}

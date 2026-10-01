@@ -8,6 +8,7 @@ struct HotifyWidgetsBundle: WidgetBundle {
         PinnedResourcesWidget()
         InstancePulseWidget()
         NeedsAttentionWidget()
+        RecentDeploymentsWidget()
         ResourcePowerControl()
         ResourceButtonControl()
     }

@@ -10,6 +10,21 @@ struct WidgetLedger: Codable {
     var failures: [String: ActionFailure] = [:]
     /// The last count of each instance, by instance id, for when Coolify cannot be reached.
     var pulses: [String: InstancePulse] = [:]
+    /// The newest deployments of each followed application, by pin id.
+    var histories: [String: [DeploymentItem]] = [:]
+
+    init() {}
+
+    /// Every field is optional on the way in, so a ledger saved before a field existed still loads.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        readings = try container.decodeIfPresent([String: ResourceReading].self, forKey: .readings) ?? [:]
+        transitions = try container.decodeIfPresent([String: ResourceTransition].self, forKey: .transitions) ?? [:]
+        armedStop = try container.decodeIfPresent(ArmedStop.self, forKey: .armedStop)
+        failures = try container.decodeIfPresent([String: ActionFailure].self, forKey: .failures) ?? [:]
+        pulses = try container.decodeIfPresent([String: InstancePulse].self, forKey: .pulses) ?? [:]
+        histories = try container.decodeIfPresent([String: [DeploymentItem]].self, forKey: .histories) ?? [:]
+    }
 
     /// How long a stop waits for the second tap.
     static let armDuration: TimeInterval = 6
@@ -79,6 +94,10 @@ struct WidgetLedger: Codable {
         failures = failures.filter { now < $0.value.at.addingTimeInterval(Self.failureDuration) }
         // A transition outlives its resource's widget only until Coolify would have given up on it anyway.
         transitions = transitions.filter { now.timeIntervalSince($0.value.startedAt) < 600 }
+        // A history nobody followed for a month is no use to anyone.
+        histories = histories.filter { history in
+            history.value.contains { $0.startedAt.map { now.timeIntervalSince($0) < 30 * 86_400 } ?? false }
+        }
         readings = readings.filter { reading in
             reading.value.checkedAt.map { now.timeIntervalSince($0) < 7 * 86_400 } ?? true
         }

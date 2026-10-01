@@ -2,13 +2,15 @@ import SwiftUI
 
 /// A widget's background: the system surface with a low glow of whatever burns hottest on it.
 ///
-/// Running warms the bottom edge red, anything that wants a look warms it amber, and a cold widget stays plain.
+/// Running warms the bottom edge red, or blue for a preview, anything that wants a look warms it amber, and a cold
+/// widget stays plain.
 struct HeatBackdrop: View {
     var heats: [Heat]
+    var tone: FlameTone = .production
 
     private var glow: Color? {
         if heats.contains(where: \.needsAttention) { return .glow }
-        if heats.contains(.lit) { return .ember }
+        if heats.contains(.lit) { return tone.fill }
         return nil
     }
 

@@ -28,6 +28,9 @@ struct ResourceEntity: AppEntity, Codable, Hashable {
 
 /// Lists every resource on every saved instance, and finds picked ones again without the network.
 struct ResourceQuery: EntityStringQuery {
+    /// Lists only this kind, for widgets that follow applications or databases.
+    var kind: ResourceKind?
+
     func entities(for identifiers: [ResourceEntity.ID]) async throws -> [ResourceEntity] {
         let known = ResourceCatalog.cached()
         let readings = WidgetLedger.load().readings
@@ -42,7 +45,7 @@ struct ResourceQuery: EntityStringQuery {
     }
 
     func entities(matching string: String) async throws -> IntentItemCollection<ResourceEntity> {
-        let groups = await ResourceCatalog.load()
+        let groups = await groups()
         let filtered = groups.map { group in
             (group.title, group.entities.filter { $0.name.localizedStandardContains(string) })
         }
@@ -50,8 +53,16 @@ struct ResourceQuery: EntityStringQuery {
     }
 
     func suggestedEntities() async throws -> IntentItemCollection<ResourceEntity> {
+        collection(await groups().map { ($0.title, $0.entities) })
+    }
+
+    private func groups() async -> [ResourceCatalog.Group] {
         let groups = await ResourceCatalog.load()
-        return collection(groups.map { ($0.title, $0.entities) })
+        guard let kind else { return groups }
+        return groups.map { group in
+            ResourceCatalog.Group(title: group.title, entities: group.entities.filter { $0.pin?.route.kind == kind })
+        }
+        .filter { !$0.entities.isEmpty }
     }
 
     private func collection(_ groups: [(String, [ResourceEntity])]) -> IntentItemCollection<ResourceEntity> {

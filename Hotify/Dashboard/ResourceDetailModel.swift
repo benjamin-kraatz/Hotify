@@ -19,26 +19,9 @@ struct DeploymentLine: Identifiable, Hashable {
 
     var tone: FlameTone { isPreview ? .preview : .production }
 
-    var heat: Heat {
-        switch status {
-        case "finished": .lit
-        case "in_progress": .warming
-        case "failed": .troubled
-        case "queued": .unknown
-        default: .cold
-        }
-    }
+    var heat: Heat { DeploymentStatus.heat(status) }
 
-    var statusLabel: String {
-        switch status {
-        case "finished": "Deployed"
-        case "in_progress": "Deploying"
-        case "failed": "Failed"
-        case "queued": "Queued"
-        case "cancelled-by-user": "Cancelled"
-        default: status.prefix(1).uppercased() + status.dropFirst()
-        }
-    }
+    var statusLabel: String { DeploymentStatus.label(status) }
 
     /// How long the deployment ran. Only known once it has ended.
     var duration: Duration? {
