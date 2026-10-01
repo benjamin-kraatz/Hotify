@@ -16,11 +16,11 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
   - `Storage/` holds the GitHub token.
-- `HotifyWidgets/` is the WidgetKit extension: the Pinned Resources and Instance widgets, and two Control Center controls.
+- `HotifyWidgets/` is the WidgetKit extension: the Pinned Resources, Instance, and Needs Attention widgets, and two Control Center controls.
   - `Status/` reads pinned resources from Coolify and keeps `WidgetLedger`, what the widgets remember between timelines in the App Group.
   - `Configuration/` has the entities a widget or control is set up with.
   - `Actions/` runs a widget's buttons. Stop arms on the first tap and goes on the second.
-  - `Pinned/`, `Pulse/`, and `Controls/` each hold one widget kind and its views.
+  - `Pinned/`, `Pulse/`, `Attention/`, and `Controls/` each hold one widget kind and its views.
 - `Shared/` is built into both the app and the extension. Keep it free of anything only the app has.
   - `Design/` has the brand look both draw with: the flame glyph, `Heat`, the heat strip, and the display font. The brand colors are in `Colors.xcassets`.
   - `Resource/` has `ResourceSummary`, its route, place, actions, and transitions.

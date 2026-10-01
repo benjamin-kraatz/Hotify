@@ -5,6 +5,8 @@ struct PinTile: Identifiable, Hashable {
     var pin: ResourcePin
     var name: String
     var subtitle: String?
+    /// The instance the resource lives on, for lists that span several.
+    var instanceName: String
     var heat: Heat
     var status: String
     /// The status is a problem, a failed action, or a heat that wants a look. It glows amber.
@@ -27,6 +29,7 @@ struct PinTile: Identifiable, Hashable {
         let failure = ledger.failure(for: pin.id, at: date)
         name = reading.flatMap { $0.name.isEmpty ? nil : $0.name } ?? fallbackName
         subtitle = reading?.subtitle
+        instanceName = reading?.instanceName ?? ""
         checkedAt = reading?.checkedAt
         isArmed = ledger.isArmed(pin.id, at: date)
 
@@ -85,6 +88,7 @@ extension PinTile {
         pin = ResourcePin(instanceID: UUID(), route: kind)
         self.name = name
         self.subtitle = subtitle
+        instanceName = "homelab"
         self.heat = heat
         self.status = status
         isAlert = heat.needsAttention

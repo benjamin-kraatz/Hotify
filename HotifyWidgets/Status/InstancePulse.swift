@@ -46,29 +46,11 @@ struct InstancePulse: Codable, Hashable {
 
     /// Reads every resource on an instance. A failed read keeps the last count, marked with its problem.
     static func read(_ instanceID: UUID, previous: InstancePulse?) async -> InstancePulse {
-        switch InstanceAccess.client(for: instanceID) {
+        switch await InstanceScan.read(instanceID) {
+        case .success(let scan):
+            return InstancePulse(instanceName: scan.instance.name, resources: scan.resources, checkedAt: .now)
         case .failure(let error):
             return failed(previous, name: InstanceAccess.instance(instanceID)?.name ?? "", problem: error.problem)
-        case .success((let instance, let client)):
-            do {
-                async let applications = client.applications()
-                async let databases = client.databases()
-                async let services = client.services()
-                async let deployments = try? client.runningDeployments()
-                let found = try await (applications, databases, services)
-                let queue = (await deployments ?? []).filter { !$0.isPreview }
-                let resources =
-                    found.0.map { application in
-                        ResourceSummary(
-                            application: application,
-                            activeDeployment: queue.first {
-                                application.id != nil && $0.applicationID == application.id
-                            })
-                    } + found.1.map { ResourceSummary(database: $0) } + found.2.map { ResourceSummary(service: $0) }
-                return InstancePulse(instanceName: instance.name, resources: resources, checkedAt: .now)
-            } catch {
-                return failed(previous, name: instance.name, problem: .unreachable)
-            }
         }
     }
 

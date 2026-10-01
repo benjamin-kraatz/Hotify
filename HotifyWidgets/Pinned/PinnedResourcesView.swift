@@ -116,34 +116,8 @@ struct PinnedRows: View {
                 if index > 0 {
                     Divider().padding(.leading, 34)
                 }
-                row(tile)
+                TileRow(tile: tile, showsAge: tiles.count == 1)
                     .frame(maxHeight: .infinity)
-            }
-        }
-    }
-
-    /// The link and the button sit side by side. A button nested in a link would leave the tap to chance.
-    private func row(_ tile: PinTile) -> some View {
-        HStack(spacing: 6) {
-            Link(destination: tile.pin.link) {
-                HStack(spacing: 12) {
-                    FlameGlyph(heat: tile.heat, height: 24)
-                        .widgetAccentable()
-                        .frame(width: 22)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(tile.name)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                        TileStatus(tile: tile, showsAge: tiles.count == 1)
-                            .font(.caption)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .frame(maxHeight: .infinity)
-                .contentShape(.rect)
-            }
-            if let primary = tile.primary {
-                ActionButton(tile: tile, action: primary, style: .labeled)
             }
         }
     }
