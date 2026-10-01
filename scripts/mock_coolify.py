@@ -90,6 +90,25 @@ class Fixture(ThreadingHTTPServer):
             ],
             ("storefront", "env-prod"): [{"id": 3, "key": "LOG_LEVEL", "value": "warn"}],
         }
+        # Applications, the database, and the standing service carry the settings the Settings tab edits.
+        health = {
+            "health_check_enabled": 1, "health_check_type": "http", "health_check_method": "GET",
+            "health_check_scheme": "http", "health_check_host": "localhost", "health_check_port": None,
+            "health_check_path": "/", "health_check_return_code": 200, "health_check_response_text": None,
+            "health_check_interval": 5, "health_check_timeout": 5, "health_check_retries": 10,
+            "health_check_start_period": 5,
+        }
+        self.applications = {
+            "web": {"uuid": "web", "id": 1, "name": "Fixture Web", "description": None, "status": "running:healthy", "fqdn": "https://fixture.example", "environment_id": 1, "build_pack": "nixpacks", "redirect": "both", "preview_url_template": "{{pr_id}}.{{domain}}", "git_repository": "coollabsio/coolify", "git_branch": "main", "settings": {"is_preview_deployments_enabled": 1, "is_force_https_enabled": 1}, **health},
+            # Not on github.com, so its previews go without pull request titles.
+            "api": {"uuid": "api", "id": 2, "name": "Fixture API", "description": None, "status": "running:unhealthy", "fqdn": "https://api.fixture.example", "environment_id": 1, "build_pack": "dockerfile", "redirect": "both", "preview_url_template": "{{pr_id}}.{{domain}}", "git_repository": "https://gitlab.fixture.example/shop/api.git", "git_branch": "main", "settings": {"is_force_https_enabled": 1}, **health, "health_check_path": "/health", "health_check_port": "8080"},
+            "web-staging": {"uuid": "web-staging", "id": 3, "name": "Fixture Web", "description": None, "status": "exited", "fqdn": "https://staging.fixture.example", "environment_id": 2, "build_pack": "nixpacks", "redirect": "both", "git_repository": "coollabsio/coolify", "git_branch": "develop", "settings": {"is_force_https_enabled": 0}, **health, "health_check_enabled": 0},
+        }
+        self.database = {"uuid": "db", "name": "Fixture Postgres", "description": None, "database_type": "standalone-postgresql", "status": "running:healthy", "environment_id": 1, "is_public": False, "public_port": None, "health_check_enabled": True, "health_check_interval": 15, "health_check_timeout": 5, "health_check_retries": 5, "health_check_start_period": 5}
+        self.standing = {"uuid": "metrics", "name": "metrics", "description": None, "service_type": "grafana-with-postgresql", "status": "running:healthy", "environment_id": 3, "applications": [
+            {"id": 1, "name": "grafana", "human_name": "Grafana", "status": "running:healthy", "fqdn": "https://grafana.fixture.example"},
+            {"id": 2, "name": "postgres", "status": "running:healthy"},
+        ]}
         # New environments and shared variables count up from here, clear of the ids above.
         self.next_id = 100
         # Services created from templates. Each comes up a few seconds after its start request.
@@ -156,26 +175,18 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/servers":
             return self.respond([{"uuid": "server", "name": "Fixture server", "is_reachable": 1}])
         if path == "/applications":
-            return self.respond([
-                {"uuid": "web", "id": 1, "name": "Fixture Web", "status": "running:healthy", "fqdn": "https://fixture.example", "environment_id": 1},
-                {"uuid": "api", "id": 2, "name": "Fixture API", "status": "running:unhealthy", "fqdn": "https://api.fixture.example", "environment_id": 1},
-                {"uuid": "web-staging", "id": 3, "name": "Fixture Web", "status": "exited", "fqdn": "https://staging.fixture.example", "environment_id": 2},
-            ])
-        if path == "/applications/web":
-            return self.respond({"uuid": "web", "name": "Fixture Web", "fqdn": "https://fixture.example", "preview_url_template": "{{pr_id}}.{{domain}}", "git_repository": "coollabsio/coolify", "git_branch": "main", "settings": {"is_preview_deployments_enabled": 1}})
-        if path == "/applications/api":
-            # Not on github.com, so its previews go without pull request titles.
-            return self.respond({"uuid": "api", "name": "Fixture API", "fqdn": "https://api.fixture.example", "preview_url_template": "{{pr_id}}.{{domain}}", "git_repository": "https://gitlab.fixture.example/shop/api.git", "git_branch": "main"})
-        if path == "/applications/web-staging":
-            return self.respond({"uuid": "web-staging", "name": "Fixture Web", "git_repository": "coollabsio/coolify", "git_branch": "develop"})
+            return self.respond(list(self.server.applications.values()))
+        if path.startswith("/applications/") and path.count("/") == 2:
+            record = self.server.applications.get(path.split("/")[2])
+            return self.respond(record) if record else self.respond({"message": "Application not found"}, 404)
         if path == "/databases":
-            return self.respond([{"uuid": "db", "name": "Fixture Postgres", "database_type": "standalone-postgresql", "status": "running:healthy", "environment_id": 1}])
+            return self.respond([self.server.database])
+        if path == "/databases/db":
+            return self.respond(self.server.database)
         if path == "/services":
-            standing = {"uuid": "metrics", "name": "metrics", "service_type": "grafana-with-postgresql", "status": "running:healthy", "environment_id": 3, "applications": [
-                {"id": 1, "name": "grafana", "status": "running:healthy", "fqdn": "https://grafana.fixture.example"},
-                {"id": 2, "name": "postgres", "status": "running:healthy"},
-            ]}
-            return self.respond([standing] + [self.server.service(uuid) for uuid in self.server.services])
+            return self.respond([self.server.standing] + [self.server.service(uuid) for uuid in self.server.services])
+        if path == "/services/metrics":
+            return self.respond(self.server.standing)
         if path.startswith("/services/") and path.endswith("/envs"):
             record = self.server.services.get(path.split("/")[2])
             return self.respond(copy.deepcopy(record["envs"])) if record else self.respond({"message": "Service not found."}, 404)
@@ -248,6 +259,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond({"message": "Database backup configuration updated"})
             if path.startswith("/projects/"):
                 return self.write_project(path.split("/")[2:], body)
+            if self.command == "PATCH" and path.count("/") == 2 and not path.startswith("/services/svc-"):
+                handled = self.write_settings(path, body)
+                if handled is not None:
+                    return handled
             handled = self.provision(path, body)
             if handled is not None:
                 return handled
@@ -330,6 +345,50 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond({"message": "Service starting request queued."})
         return None
 
+
+    HEALTH = {"health_check_enabled", "health_check_interval", "health_check_timeout", "health_check_retries", "health_check_start_period"}
+    APPLICATION_FIELDS = HEALTH | {"name", "description", "domains", "redirect", "is_force_https_enabled", "docker_compose_domains", "force_domain_override", "health_check_type", "health_check_command", "health_check_method", "health_check_scheme", "health_check_host", "health_check_port", "health_check_path", "health_check_return_code", "health_check_response_text"}
+
+    def write_settings(self, path, body):
+        """Settings of an application, the database, and the standing service, with Coolify's 422 for a field it
+        does not take and 409 for an address containing `taken.example` until it is forced."""
+        kind, uuid = path.split("/")[1:3]
+        if kind == "applications":
+            record, allowed = self.server.applications.get(uuid), self.APPLICATION_FIELDS
+        elif kind == "databases" and uuid == "db":
+            record, allowed = self.server.database, self.HEALTH | {"name", "description", "is_public", "public_port"}
+        elif kind == "services" and uuid == "metrics":
+            record, allowed = self.server.standing, {"name", "description", "urls", "force_domain_override"}
+        else:
+            return None
+        if record is None:
+            return self.respond({"message": "Not found."}, 404)
+        extra = set(body) - allowed
+        if extra:
+            return self.respond({"message": "Validation failed.", "errors": {field: ["This field is not allowed."] for field in extra}}, 422)
+        addresses = [body.get("domains") or ""] + [item.get("url") or "" for item in body.get("urls", [])] + [item.get("domain") or "" for item in body.get("docker_compose_domains", [])]
+        taken = [a for a in ",".join(addresses).split(",") if "taken.example" in a]
+        if taken and not body.get("force_domain_override"):
+            return self.respond({"message": "Domain conflicts detected. Use force_domain_override=true to proceed.", "conflicts": [{"domain": a, "resource_name": "Fixture Web", "resource_type": "application"} for a in taken], "warning": "Shared domains split traffic."}, 409)
+        if kind == "databases" and body.get("is_public") and body.get("public_port") == 5432:
+            return self.respond({"message": "Public port already used by another database."}, 400)
+        for item in body.pop("urls", []):
+            for container in record["applications"]:
+                if container["name"] == item["name"]:
+                    container["fqdn"] = item["url"] or None
+        body.pop("force_domain_override", None)
+        if "domains" in body:
+            record["fqdn"] = body.pop("domains") or None
+        if "is_force_https_enabled" in body:
+            record.setdefault("settings", {})["is_force_https_enabled"] = body.pop("is_force_https_enabled")
+        if "docker_compose_domains" in body:
+            record["docker_compose_domains"] = json.dumps({item["name"]: {"domain": item["domain"]} for item in body.pop("docker_compose_domains")})
+        record.update(body)
+        if kind == "applications":
+            return self.respond({"uuid": uuid})
+        if kind == "databases":
+            return self.respond({"message": "Database updated."})
+        return self.respond({"uuid": uuid, "domains": [c["fqdn"] for c in record["applications"] if c.get("fqdn")]})
 
     def write_project(self, parts, body):
         """Renames, new environments, and shared variables. Like Coolify, it answers 422 to a field it does not list."""

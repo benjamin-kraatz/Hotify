@@ -13,6 +13,15 @@ extension CoolifyClient {
         try await get(applicationPath(uuid))
     }
 
+    /// Changes an application's settings. Nothing deploys. Domains and the health check reach the running app with
+    /// its next deployment.
+    ///
+    /// Coolify answers 409 with `CoolifyError.conflicts` when another resource has a domain, and saves nothing then.
+    /// On a server without a proxy it answers 200 but keeps the old domains, so read the application back to check.
+    public func updateApplication(_ uuid: String, _ update: ApplicationUpdate) async throws {
+        let _: CreatedResource = try await patch(applicationPath(uuid), body: update)
+    }
+
     public func startApplication(
         _ uuid: String,
         force: Bool = false,
