@@ -5,7 +5,7 @@ import Foundation
 /// Coolify answers start, stop, restart, and deploy as soon as it queues the work, before any container changes.
 /// Hotify keeps the resource in its in-between state until a poll shows the result, so a start does not flash back
 /// to "Exited" while Coolify is still building.
-struct ResourceTransition: Hashable {
+struct ResourceTransition: Codable, Hashable {
     var action: ResourceAction
     var startedAt: Date
     /// Coolify is still answering the request.
@@ -15,7 +15,7 @@ struct ResourceTransition: Hashable {
     var sawChange = false
 
     /// How it ended, once it has.
-    enum Outcome {
+    enum Outcome: Hashable {
         case done
         /// The resource never reached the state the action aims for.
         case gaveUp

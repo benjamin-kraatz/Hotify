@@ -46,6 +46,11 @@ struct ContentView: View {
             followMenuBarSelection()
         }
         .onChange(of: menuBar.navigation) { _, _ in followMenuBarSelection() }
+        .onOpenURL { url in
+            // A widget's link goes through the menu bar's request, so a switch of instance reopens it the same way.
+            guard let link = ResourceLink(url: url) else { return }
+            menuBar.navigation = MenuBarNavigation(instanceID: link.instanceID, route: link.route, place: link.place)
+        }
         .onChange(of: store.selectedID) { _, _ in
             isProvisioning = false
             selection = nil
@@ -223,9 +228,9 @@ struct ContentView: View {
                 pendingAction: snapshot.pendingAction(for: route),
                 actionError: snapshot.actionError,
                 entry: request?.entry,
-                back: request.map { request in
-                    DetailBack(title: snapshot.project(request.projectID)?.name ?? request.projectName) {
-                        show(.project(request.projectID))
+                back: request?.project.map { project in
+                    DetailBack(title: snapshot.project(project.id)?.name ?? project.name) {
+                        show(.project(project.id))
                     }
                 },
                 onOpenProject: resource.place.map { place in
@@ -233,7 +238,7 @@ struct ContentView: View {
                 },
                 onAction: { action in run(action, route) }
             )
-            .id(DetailIdentity(instanceID: store.selectedID, route: .resource(route)))
+            .id(DetailIdentity(instanceID: store.selectedID, route: .resource(route), visit: request?.visit))
         } else {
             nothingOpen("This resource is gone", detail: "Coolify no longer lists it. It may have been deleted.")
         }
@@ -272,7 +277,8 @@ struct ContentView: View {
 
     /// Opens a resource from the project page, at the place the page pointed to.
     private func open(_ route: ResourceRoute, entry: ResourceEntry?, from project: ProjectSummary) {
-        self.entry = EntryRequest(route: route, entry: entry, projectID: project.id, projectName: project.name)
+        self.entry = EntryRequest(
+            route: route, entry: entry, project: EntryRequest.Project(id: project.id, name: project.name))
         show(.resource(route))
     }
 
@@ -286,6 +292,10 @@ struct ContentView: View {
     private func followMenuBarSelection() {
         guard let request = menuBar.navigation, store.instances.contains(where: { $0.id == request.instanceID }) else {
             return
+        }
+        // A widget's link may point inside the resource. Set the entry first, so the new selection keeps it.
+        entry = request.place.map {
+            EntryRequest(route: request.route, entry: ResourceEntry($0), visit: request.id)
         }
         store.selectedID = request.instanceID
         selection = .resource(request.route)
@@ -345,12 +355,21 @@ struct ContentView: View {
 private struct DetailIdentity: Hashable {
     var instanceID: UUID?
     var route: DetailRoute
+    /// A widget's link opens the screen afresh, even on the resource already open, so its place takes effect.
+    var visit: UUID?
 }
 
-/// A resource the project page opened: where in it, and the project to go back to. No entry opens it at its front.
+/// A resource opened at a place: from the project page, which also leads back, or from a widget's link.
+/// No entry opens it at its front.
 private struct EntryRequest: Hashable {
     var route: ResourceRoute
     var entry: ResourceEntry?
-    var projectID: String
-    var projectName: String
+    var project: Project?
+    var visit: UUID?
+
+    /// The project page that opened the resource.
+    struct Project: Hashable {
+        var id: String
+        var name: String
+    }
 }

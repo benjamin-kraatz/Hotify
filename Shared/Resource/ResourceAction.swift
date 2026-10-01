@@ -8,7 +8,7 @@ enum BusyTarget: Hashable {
 }
 
 /// Something the user can ask Coolify to do with a resource.
-enum ResourceAction: String, Identifiable, CaseIterable {
+enum ResourceAction: String, Codable, Identifiable, CaseIterable {
     case start
     case deploy
     case restart

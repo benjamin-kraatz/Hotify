@@ -45,6 +45,31 @@ enum ResourceRoute: Hashable {
         }
     }
 
+    var uuid: String {
+        switch self {
+        case .application(let uuid), .database(let uuid), .service(let uuid): uuid
+        }
+    }
+
+    /// The kind as one stable word, for links and saved selections.
+    var key: String {
+        switch self {
+        case .application: "application"
+        case .database: "database"
+        case .service: "service"
+        }
+    }
+
+    init?(key: String, uuid: String) {
+        guard !uuid.isEmpty else { return nil }
+        switch key {
+        case "application": self = .application(uuid)
+        case "database": self = .database(uuid)
+        case "service": self = .service(uuid)
+        default: return nil
+        }
+    }
+
     var busyTarget: BusyTarget {
         switch self {
         case .application(let uuid): .application(uuid)

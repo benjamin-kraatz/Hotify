@@ -160,4 +160,6 @@ struct MenuBarNavigation: Equatable {
     var id = UUID()
     var instanceID: UUID
     var route: ResourceRoute
+    /// Where in the resource to open, for a widget's link.
+    var place: ResourceLink.Place?
 }

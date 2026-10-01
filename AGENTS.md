@@ -6,7 +6,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
 
 - `Hotify/` is the app target.
   - `App/` has the entry point.
-  - `Design/` has the shared look: brand colors, the display font, the flame glyph, the stokable flame and its fire, and `Heat`.
+  - `Design/` has the app's look: the stokable flame and its fire, heat edges, wells, and the filter field.
   - `Configuration/` is a resource's Settings tab: its name and description, its domains, a database's public port, and its health check, in one form with one Save.
   - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource.
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
@@ -16,7 +16,18 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Provisioning/` creates services from Coolify's one-click templates: a gallery, then placement, setup, and the first start, in one sheet that opens from the dashboard's New Service button.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
-  - `Storage/` wraps the Keychain.
+  - `Storage/` holds the GitHub token.
+- `HotifyWidgets/` is the WidgetKit extension: the Pinned Resources, Instance, Needs Attention, Recent Deployments, and Backups widgets, and two Control Center controls.
+  - `Status/` reads pinned resources from Coolify and keeps `WidgetLedger`, what the widgets remember between timelines in the App Group.
+  - `Configuration/` has the entities a widget or control is set up with.
+  - `Actions/` runs a widget's buttons. Stop arms on the first tap and goes on the second.
+  - `Pinned/`, `Pulse/`, `Attention/`, `Deployments/`, `Backups/`, and `Controls/` each hold one widget kind and its views.
+- `Shared/` is built into both the app and the extension. Keep it free of anything only the app has.
+  - `Design/` has the brand look both draw with: the flame glyph, `Heat`, the heat strip, and the display font. The brand colors are in `Colors.xcassets`.
+  - `Resource/` has `ResourceSummary`, its route, place, actions, and transitions, and how a deployment's status reads.
+  - `Backups/` reads backup runs and schedules, including when one is overdue.
+  - `Storage/` wraps the Keychain and the App Group.
+  - `Widgets/` has the `hotify://` resource link, which can point at a place inside a resource, and the call that reloads every widget.
 - `CoolifyAPI/` is a local Swift package the app depends on.
   - `Client/` has `CoolifyClient` and one `CoolifyClient+<Group>.swift` extension per endpoint group.
   - `HTTP/` has URL normalization and errors.
@@ -24,7 +35,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Templates/` reads Coolify's template catalog from its CDN, since the API has no template endpoint, and outlines a template's compose file.
   - `Models/` has one file per Coolify type.
 
-`Hotify/` is a synchronized folder in Xcode. New files there join the target on their own, so do not edit `project.pbxproj` to add them.
+`Hotify/`, `HotifyWidgets/`, and `Shared/` are synchronized folders in Xcode. New files join their targets on their own, so do not edit `project.pbxproj` to add them.
 
 ## Build and test
 
@@ -36,8 +47,8 @@ cd CoolifyAPI && swift test
 xcodebuild -project Hotify.xcodeproj -scheme Hotify -destination 'platform=macOS' build
 
 # Format, then lint. CI does not check formatting, so run these before you commit. The config is in .swift-format.
-swift format format -i --recursive --parallel Hotify CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
-swift format lint --strict --recursive --parallel Hotify CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
+swift format format -i --recursive --parallel Hotify HotifyWidgets Shared CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
+swift format lint --strict --recursive --parallel Hotify HotifyWidgets Shared CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
 ```
 
 GitHub Actions (`.github/workflows/ci.yml`) validates releases and publishes tags. Xcode Cloud owns app builds on main and iOS/macOS distribution from tags. GitHub tagging does not wait for Xcode Cloud builds. Run the local checks above when changing app or API code.
@@ -66,6 +77,7 @@ The live tests in `LiveCoolifyTests.swift` skip unless `COOLIFY_LIVE_TESTS=1` is
 
 - API tokens live in the Keychain via `TokenStore`, never in UserDefaults, files, or logs.
 - Do not print or log a token, and keep it out of any `description`.
+- The widgets read tokens through the shared Keychain group, not the App Group. Other apps share the App Group, so put nothing secret there, and start every key with `hotify.`.
 - `.env` holds a real token. Never read it into output, commit it, or copy its values anywhere.
 
 ### Documentation
