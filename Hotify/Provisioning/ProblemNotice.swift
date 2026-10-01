@@ -52,7 +52,6 @@ struct ProblemNotice: View {
                 Text(detail)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 if let (label, url) = link {
                     Link(destination: url) {
@@ -92,7 +91,6 @@ struct ProblemNotice: View {
                 )
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
                 if let onOverride {
                     Button("Use Anyway", action: onOverride)
                         .glassButton()

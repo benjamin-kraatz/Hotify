@@ -235,7 +235,7 @@ struct ConfigurationView: View {
             if let problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.glow)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3)
             } else {
                 Text("Unsaved changes")
                     .foregroundStyle(.secondary)
