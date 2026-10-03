@@ -84,6 +84,20 @@ struct ProvisioningSheet: View {
                 }
             }
         }
+        // In the content, not the toolbar: a Mac sheet's toolbar leaves out a principal item.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Picker("Create", selection: $kind) {
+                ForEach(NewResourceKind.allCases) { kind in
+                    Text(kind.title).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(.bar)
+        }
         .provisioningStep(.choose, steps: kind.steps)
         .navigationTitle("New Resource")
         #if os(iOS)
@@ -93,16 +107,6 @@ struct ProvisioningSheet: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { onClose(nil) }
                     .disabled(model.isCreating || databases.isCreating)
-            }
-            ToolbarItem(placement: .principal) {
-                Picker("Kind", selection: $kind) {
-                    ForEach(NewResourceKind.allCases) { kind in
-                        Text(kind.title).tag(kind)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
             }
         }
     }
