@@ -16,6 +16,8 @@ struct ResourceSummary: Identifiable, Hashable {
     var activeDeploymentID: String?
     /// Pull requests whose previews are queued or building, lowest first. They leave production's flame alone.
     var buildingPreviews: [Int] = []
+    /// The commit an application's manual deploys are pinned to, shortened. `nil` when they build the latest.
+    var pinnedCommit: String?
 
     var id: ResourceRoute { route }
     var kind: ResourceKind { route.kind }
@@ -55,7 +57,9 @@ extension ResourceSummary {
             place: place,
             isDeploying: activeDeployment != nil,
             activeDeploymentID: activeDeployment.flatMap { $0.deploymentUUID.isEmpty ? nil : $0.deploymentUUID },
-            buildingPreviews: Set(activePreviews.map(\.pullRequestID)).sorted()
+            buildingPreviews: Set(activePreviews.map(\.pullRequestID)).sorted(),
+            // A Docker image application always runs the tag in its settings, which is no pin to point out.
+            pinnedCommit: application.isDockerImage ? nil : application.pinnedCommit.map { String($0.prefix(7)) }
         )
     }
 

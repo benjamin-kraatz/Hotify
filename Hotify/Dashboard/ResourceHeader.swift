@@ -8,6 +8,8 @@ struct ResourceHeader: View {
     var lastDeploymentFailed = false
     /// Opens the project the resource lives in. `nil` leaves its place as plain text.
     var onOpenProject: (() -> Void)?
+    /// Opens the settings that hold an application's pinned commit. `nil` shows the pin as plain text.
+    var onShowSource: (() -> Void)?
     var onAction: (ResourceAction) -> Void
 
     @SwiftUI.Environment(\.placePalette) private var palette
@@ -47,6 +49,9 @@ struct ResourceHeader: View {
                             .fontWeight(.semibold)
                             .foregroundStyle(heat.tint)
                             .contentTransition(.interpolate)
+                        if let pin = resource.pinnedCommit {
+                            pinTag(pin)
+                        }
                     }
                     .font(.subheadline)
 
@@ -73,6 +78,20 @@ struct ResourceHeader: View {
         .animation(.snappy, value: heat)
         .animation(.snappy, value: statusText)
         .animation(.snappy, value: actions)
+    }
+
+    /// Says that manual deploys build one commit, not the branch's latest. A pin isn't a problem, so it gets no heat.
+    @ViewBuilder
+    private func pinTag(_ pin: String) -> some View {
+        let tag = Tag(text: "Pinned to \(pin)")
+        if let onShowSource {
+            Button(action: onShowSource) { tag }
+                .buttonStyle(.plain)
+                .help("Redeploy builds \(pin), not the branch's latest. Change it in Settings.")
+                .accessibilityHint("Shows the source settings")
+        } else {
+            tag
+        }
     }
 
     /// The project and environment, each after its color. With somewhere to go, it is the way up to the project's
@@ -227,9 +246,11 @@ private struct TrailingIconLabelStyle: LabelStyle {
                     link: URL(string: "https://hotify.example.com"),
                     place: ResourcePlace(
                         projectID: "website", projectName: "Website", environmentName: "production",
-                        environmentID: 1, environmentUUID: "env-prod")
+                        environmentID: 1, environmentUUID: "env-prod"),
+                    pinnedCommit: "528a020"
                 ),
                 onOpenProject: {},
+                onShowSource: {},
                 onAction: { _ in }
             )
             ResourceHeader(

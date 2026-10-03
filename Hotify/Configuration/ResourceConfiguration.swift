@@ -7,6 +7,8 @@ struct ResourceConfiguration: Hashable {
     var kind: ResourceKind
     var name: String
     var description: String
+    /// An application's repository and branch, or its image. `nil` for anything else.
+    var source: ApplicationSource?
     /// An application's own addresses, one per row. Unused when the domains belong to containers.
     var domains: [String] = []
     var redirect: DomainRedirect = .both
@@ -36,6 +38,7 @@ extension ResourceConfiguration {
         kind = .application
         name = application.name
         description = application.description ?? ""
+        source = ApplicationSource(application: application)
         redirect = application.redirect ?? .both
         forcesHTTPS = application.settings?.isForceHTTPSEnabled ?? true
         healthCheck = Self.cleaned(application.healthCheck)
@@ -118,6 +121,9 @@ extension ResourceConfiguration {
         if redirect != saved.redirect { update.redirect = redirect }
         if forcesHTTPS != saved.forcesHTTPS { update.isForceHTTPSEnabled = forcesHTTPS }
         update.healthCheck = healthCheckChanges(from: saved)
+        if let source, let before = saved.source {
+            source.write(changesFrom: before, into: &update)
+        }
         if force, update.domains != nil || update.dockerComposeDomains != nil { update.forceDomainOverride = true }
         return update
     }
@@ -184,6 +190,9 @@ extension ResourceConfiguration {
     var problem: String? {
         if trimmedName.isEmpty {
             return "A name is required."
+        }
+        if let problem = source?.problem {
+            return problem
         }
         let addresses = hasContainerDomains ? containers.flatMap(\.domains) : domains
         if let bad = addresses.map({ $0.trimmingCharacters(in: .whitespaces) }).first(where: {

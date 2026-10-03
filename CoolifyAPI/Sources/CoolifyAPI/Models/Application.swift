@@ -5,16 +5,20 @@ import Foundation
 public struct ApplicationSettings: Decodable, Sendable, Hashable {
     public var isPreviewDeploymentsEnabled: Bool?
     public var isForceHTTPSEnabled: Bool?
+    /// Whether a push to the branch deploys. A push deploys the pushed commit, even when one is pinned.
+    public var isAutoDeployEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
         case isPreviewDeploymentsEnabled
         case isForceHTTPSEnabled = "isForceHttpsEnabled"
+        case isAutoDeployEnabled
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         isPreviewDeploymentsEnabled = container.flexBool(.isPreviewDeploymentsEnabled)
         isForceHTTPSEnabled = container.flexBool(.isForceHTTPSEnabled)
+        isAutoDeployEnabled = container.flexBool(.isAutoDeployEnabled)
     }
 }
 
@@ -28,6 +32,11 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
     public var fqdn: String?
     public var gitRepository: String?
     public var gitBranch: String?
+    /// The commit manual deploys build. `HEAD` or empty means the branch's latest.
+    public var gitCommitSHA: String?
+    /// The image a Docker image application runs, without its tag.
+    public var dockerRegistryImageName: String?
+    public var dockerRegistryImageTag: String?
     public var buildPack: String?
     public var createdAt: String?
     public var settings: ApplicationSettings?
@@ -44,6 +53,15 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
     /// Whether the application builds from a Docker Compose file, whose domains are set per service.
     public var isDockerCompose: Bool { buildPack == "dockercompose" }
 
+    /// Whether the application runs a registry image rather than building from a repository.
+    public var isDockerImage: Bool { buildPack == "dockerimage" }
+
+    /// The commit manual deploys are pinned to. `nil` when they build the branch's latest.
+    public var pinnedCommit: String? {
+        let commit = gitCommitSHA?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return commit.isEmpty || commit.uppercased() == "HEAD" ? nil : commit
+    }
+
     public var createdAtDate: Date? { createdAt.flatMap(CoolifyTimestamp.parse) }
 
     enum CodingKeys: String, CodingKey {
@@ -55,6 +73,10 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         case fqdn
         case gitRepository
         case gitBranch
+        // snake_case conversion gives `gitCommitSha`, not the acronym spelling.
+        case gitCommitSHA = "gitCommitSha"
+        case dockerRegistryImageName
+        case dockerRegistryImageTag
         case buildPack
         case createdAt
         case settings
@@ -74,6 +96,9 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         fqdn = container.flexString(.fqdn)
         gitRepository = container.flexString(.gitRepository)
         gitBranch = container.flexString(.gitBranch)
+        gitCommitSHA = container.flexString(.gitCommitSHA)
+        dockerRegistryImageName = container.flexString(.dockerRegistryImageName)
+        dockerRegistryImageTag = container.flexString(.dockerRegistryImageTag)
         buildPack = container.flexString(.buildPack)
         createdAt = container.flexString(.createdAt)
         settings = try container.decodeIfPresent(ApplicationSettings.self, forKey: .settings)

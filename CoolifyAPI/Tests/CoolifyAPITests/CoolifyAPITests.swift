@@ -595,6 +595,137 @@ final class CoolifyAPITests: XCTestCase {
         XCTAssertEqual(page.deployments.map(\.rollback), [true, false])
     }
 
+    func testDeployOnceWritesTheVersionDeploysThenRestores() async throws {
+        let log = RequestLog()
+        let client = try makeClient { request in
+            log.append(request)
+            if request.url?.path == "/api/v1/deploy" {
+                XCTAssertEqual(request.httpMethod, "POST")
+                XCTAssertEqual(
+                    queryItems(request),
+                    [URLQueryItem(name: "force", value: "0"), URLQueryItem(name: "uuid", value: "app")])
+                return (
+                    200,
+                    Data(
+                        #"{"deployments":[{"message":"Queued","resource_uuid":"app","deployment_uuid":"dep-4"}]}"#.utf8),
+                    [:]
+                )
+            }
+            XCTAssertEqual(request.httpMethod, "PATCH")
+            XCTAssertEqual(request.url?.path, "/api/v1/applications/app")
+            return (200, Data(#"{"uuid":"app"}"#.utf8), [:])
+        }
+        let deployed = try await client.deploy(
+            "app", version: .commit("528a020f525ac31684b4fe5b019f9f2f2154e7f3"), restoring: .latestCommit)
+        XCTAssertEqual(deployed.deploymentUUID, "dep-4")
+        XCTAssertNil(deployed.restoreError)
+        XCTAssertEqual(
+            log.lines, ["PATCH /api/v1/applications/app", "POST /api/v1/deploy", "PATCH /api/v1/applications/app"])
+        XCTAssertEqual(log.bodies[0], ["git_commit_sha": "528a020f525ac31684b4fe5b019f9f2f2154e7f3"] as NSDictionary)
+        XCTAssertEqual(log.bodies[2], ["git_commit_sha": "HEAD"] as NSDictionary)
+    }
+
+    func testDeployAndPinLeavesTheTagAndASkippedDeployStillRestores() async throws {
+        let pinned = RequestLog()
+        let pinning = try makeClient { request in
+            pinned.append(request)
+            if request.url?.path == "/api/v1/deploy" {
+                return (200, Data(#"{"deployments":[{"resource_uuid":"img","deployment_uuid":"dep-5"}]}"#.utf8), [:])
+            }
+            return (200, Data(#"{"uuid":"img"}"#.utf8), [:])
+        }
+        _ = try await pinning.deploy("img", version: .imageTag("v1.12.0"), restoring: nil)
+        XCTAssertEqual(pinned.lines, ["PATCH /api/v1/applications/img", "POST /api/v1/deploy"])
+        XCTAssertEqual(pinned.bodies[0], ["docker_registry_image_tag": "v1.12.0"] as NSDictionary)
+
+        let skipped = RequestLog()
+        let skipping = try makeClient { request in
+            skipped.append(request)
+            if request.url?.path == "/api/v1/deploy" {
+                return (
+                    200,
+                    Data(
+                        #"{"deployments":[{"message":"Deployment already queued for this commit.","resource_uuid":"app"}]}"#
+                            .utf8),
+                    [:]
+                )
+            }
+            return (200, Data(#"{"uuid":"app"}"#.utf8), [:])
+        }
+        do {
+            _ = try await skipping.deploy("app", version: .commit("abc1234"), restoring: .commit("def5678"))
+            XCTFail("A deployment Coolify skipped must not count as queued")
+        } catch let error as CoolifyError {
+            XCTAssertEqual(error.message, "Deployment already queued for this commit.")
+        }
+        XCTAssertEqual(skipped.lines.count, 3)
+        XCTAssertEqual(skipped.bodies[2], ["git_commit_sha": "def5678"] as NSDictionary)
+    }
+
+    func testApplicationReadsItsSourceAndThePin() throws {
+        let json = #"""
+            [{"uuid":"git","git_repository":"coollabsio/coolify-examples","git_branch":"main","git_commit_sha":"HEAD",
+              "build_pack":"static","settings":{"is_auto_deploy_enabled":0}},
+             {"uuid":"pinned","git_commit_sha":"528a020f525ac31684b4fe5b019f9f2f2154e7f3","settings":{"is_auto_deploy_enabled":true}},
+             {"uuid":"img","build_pack":"dockerimage","docker_registry_image_name":"traefik/whoami",
+              "docker_registry_image_tag":"v1.11.0","git_commit_sha":""}]
+            """#
+        let applications = try CoolifyJSON.decoder().decode([Application].self, from: Data(json.utf8))
+        XCTAssertNil(applications[0].pinnedCommit)
+        XCTAssertEqual(applications[0].settings?.isAutoDeployEnabled, false)
+        XCTAssertEqual(applications[1].pinnedCommit, "528a020f525ac31684b4fe5b019f9f2f2154e7f3")
+        XCTAssertEqual(applications[1].settings?.isAutoDeployEnabled, true)
+        XCTAssertTrue(applications[2].isDockerImage)
+        XCTAssertNil(applications[2].pinnedCommit)
+        XCTAssertEqual(applications[2].dockerRegistryImageName, "traefik/whoami")
+        XCTAssertEqual(applications[2].dockerRegistryImageTag, "v1.11.0")
+    }
+
+    func testSourceChangesSendCoolifysFieldNames() throws {
+        let update = ApplicationUpdate(gitBranch: "develop", gitCommitSHA: "HEAD", isAutoDeployEnabled: false)
+        let body = try JSONSerialization.jsonObject(with: CoolifyJSON.encoder().encode(update)) as? NSDictionary
+        XCTAssertEqual(
+            body, ["git_branch": "develop", "git_commit_sha": "HEAD", "is_auto_deploy_enabled": false] as NSDictionary)
+        XCTAssertTrue(update.needsRedeploy)
+        XCTAssertFalse(ApplicationUpdate(isAutoDeployEnabled: true).needsRedeploy)
+        XCTAssertFalse(ApplicationUpdate(dockerRegistryImageTag: "v1").isEmpty)
+    }
+
+    func testGitHubCommitsRequestAndDecoding() async throws {
+        MockURLProtocol.responder = { request in
+            XCTAssertEqual(request.url?.host, "api.github.com")
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.path, "/repos/owner/repo/commits")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer github-only")
+            XCTAssertEqual(
+                queryItems(request),
+                [
+                    URLQueryItem(name: "sha", value: "main"),
+                    URLQueryItem(name: "per_page", value: "30"),
+                    URLQueryItem(name: "page", value: "2"),
+                ])
+            return (
+                200,
+                Data(
+                    #"""
+                    [{"sha":"0006219f4bae86f89a3efb7dabd361db8bd6174a","commit":{"message":"Update index.html\n\nMore words","author":{"name":"Andras","date":"2025-06-21T10:00:00Z"}},"author":{"login":"andrasbacsai"}},
+                     {"sha":"528a020f525ac31684b4fe5b019f9f2f2154e7f3","commit":{"message":"First","author":{"name":"Someone","date":"2025-04-11T09:00:00Z"}},"author":null}]
+                    """#.utf8), [:]
+            )
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let client = GitHubCommitClient(session: URLSession(configuration: configuration))
+        let commits = try await client.commits(
+            repository: GitHubRepository("owner/repo"), branch: "main", token: "github-only", page: 2)
+        XCTAssertEqual(commits.map(\.shortSHA), ["0006219", "528a020"])
+        XCTAssertEqual(commits[0].subject, "Update index.html")
+        XCTAssertEqual(commits[0].authorLogin, "andrasbacsai")
+        XCTAssertNil(commits[1].authorLogin)
+        XCTAssertEqual(commits[1].authorName, "Someone")
+        XCTAssertNotNil(commits[1].date)
+    }
+
     func testEnvironmentVariablesKeepHiddenValuesApartFromEmptyOnes() throws {
         let json = """
             [
@@ -1048,6 +1179,22 @@ private func makeClient(
     configuration.protocolClasses = [MockURLProtocol.self]
     let session = URLSession(configuration: configuration)
     return try CoolifyClient(instanceURL: instanceURL, token: "test-token", session: session)
+}
+
+/// The requests a mock answered, in order, as "METHOD /path" and their JSON bodies.
+private final class RequestLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [(line: String, body: NSDictionary?)] = []
+
+    func append(_ request: URLRequest) {
+        let body = bodyText(request).flatMap {
+            try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? NSDictionary
+        }
+        lock.withLock { entries.append(("\(request.httpMethod ?? "") \(request.url?.path ?? "")", body)) }
+    }
+
+    var lines: [String] { lock.withLock { entries.map(\.line) } }
+    var bodies: [NSDictionary?] { lock.withLock { entries.map(\.body) } }
 }
 
 private final class MockURLProtocol: URLProtocol, @unchecked Sendable {

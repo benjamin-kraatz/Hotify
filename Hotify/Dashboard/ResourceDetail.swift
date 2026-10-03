@@ -109,10 +109,11 @@ struct ResourceDetailScreen: View {
             },
             back: back,
             onOpenProject: onOpenProject,
-            onRolledBack: {
+            onVersionChanged: {
                 Task {
                     await model.refresh()
                     await rollback.load()
+                    await configuration.load()
                 }
             },
             onAction: onAction
@@ -177,8 +178,8 @@ struct ResourceDetail: View {
     /// Where back leads from the resource's own screen. `nil` when the resource is the top of the column.
     var back: DetailBack?
     var onOpenProject: (() -> Void)?
-    /// Reloads the history and the images once a rollback queued.
-    var onRolledBack: () -> Void = {}
+    /// Reloads the history, the images, and the settings once a rollback or another version queued.
+    var onVersionChanged: () -> Void = {}
     var onAction: (ResourceAction) -> Void
 
     #if os(macOS)
@@ -190,6 +191,11 @@ struct ResourceDetail: View {
     @State private var rollbackCandidate: RollbackCandidate?
     /// The iPhone's deployment sheet asks on its own, since a dialog on the screen under it can't show.
     @State private var sheetRollbackCandidate: RollbackCandidate?
+    @State private var showsDeployVersion = false
+    /// A rollback the Deploy a Version sheet handed over. It asks once the sheet is gone.
+    @State private var rollbackAfterSheet: RollbackCandidate?
+    /// Something about the last version deployed that the user should know, such as a pin that stayed.
+    @State private var versionNotice: String?
     @State private var showsPreviewDeployment = false
     @State private var showsGitHubAccess = false
     @State private var previewGeneration = 0
@@ -316,55 +322,7 @@ struct ResourceDetail: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .replacesSystemBack(currentBack != nil)
-        .toolbar {
-            DetailNavigation(title: title, back: currentBack)
-            #if os(macOS)
-            if let menuBar, menuBar.enabled {
-                ToolbarItem(placement: .primaryAction) {
-                    MenuBarWatchButton(model: menuBar, resource: resource)
-                }
-            }
-            #endif
-            if resource.kind == .application {
-                ToolbarItem(placement: .primaryAction) {
-                    PreviewsMenu(
-                        resourceName: resource.name,
-                        previews: previews,
-                        isShowingPreviews: previewPlace != nil,
-                        canDeploy: deploymentClient != nil,
-                        onDeploy: { showsPreviewDeployment = true },
-                        onShow: { place in
-                            followedPreviewDeployment = nil
-                            previewPlace = place
-                        },
-                        onGitHubAccess: { showsGitHubAccess = true }
-                    )
-                }
-            }
-            if resource.kind == .application, previewPlace == nil {
-                if let openDeployment, let image = rollbackTarget(for: openDeployment) {
-                    ToolbarItem(placement: .primaryAction) {
-                        rollBackToThisButton(image) { rollbackCandidate = $0 }
-                    }
-                } else {
-                    ToolbarItem(placement: .primaryAction) {
-                        RollbackMenu(
-                            images: rollbackModel.images,
-                            hasLoaded: rollbackModel.hasLoaded,
-                            loadError: rollbackModel.loadError,
-                            deployments: deployments,
-                            isBusy: rollbackModel.isRollingBack || deploymentClient == nil,
-                            onChoose: { image in
-                                rollbackCandidate = RollbackCandidate(image: image, resourceName: resource.name)
-                            }
-                        )
-                    }
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                ResourceGuideButton(kind: resource.kind)
-            }
-        }
+        .toolbar { toolbarContent }
         .sheet(isPresented: $showsPreviewDeployment) {
             if case .application(let uuid) = resource.route {
                 let generation = previewGeneration
@@ -384,6 +342,27 @@ struct ResourceDetail: View {
                 Task { await previewsModel.load() }
             }
         }
+        .sheet(
+            isPresented: $showsDeployVersion,
+            onDismiss: {
+                // A dialog can't show while the sheet leaves, so the handed-over rollback asks afterwards.
+                rollbackCandidate = rollbackAfterSheet
+                rollbackAfterSheet = nil
+            }
+        ) {
+            if case .application(let uuid) = resource.route {
+                DeployVersionSheet(
+                    model: DeployVersionModel(client: deploymentClient, application: uuid),
+                    resourceName: resource.name,
+                    keptImages: rollbackModel.images,
+                    onRollBack: { image in
+                        rollbackAfterSheet = RollbackCandidate(image: image, resourceName: resource.name)
+                    },
+                    onDeployed: { deployed, version in deployedVersion(deployed, version) }
+                )
+                .id(uuid)
+            }
+        }
         .onChange(of: resource.route) { _, _ in
             previewGeneration += 1
             showsPreviewDeployment = false
@@ -392,6 +371,9 @@ struct ResourceDetail: View {
             followedPreviewDeployment = nil
             rollbackCandidate = nil
             sheetRollbackCandidate = nil
+            showsDeployVersion = false
+            rollbackAfterSheet = nil
+            versionNotice = nil
         }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
@@ -427,6 +409,58 @@ struct ResourceDetail: View {
         #endif
     }
 
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        DetailNavigation(title: title, back: currentBack)
+        #if os(macOS)
+        if let menuBar, menuBar.enabled {
+            ToolbarItem(placement: .primaryAction) {
+                MenuBarWatchButton(model: menuBar, resource: resource)
+            }
+        }
+        #endif
+        if resource.kind == .application {
+            ToolbarItem(placement: .primaryAction) {
+                PreviewsMenu(
+                    resourceName: resource.name,
+                    previews: previews,
+                    isShowingPreviews: previewPlace != nil,
+                    canDeploy: deploymentClient != nil,
+                    onDeploy: { showsPreviewDeployment = true },
+                    onShow: { place in
+                        followedPreviewDeployment = nil
+                        previewPlace = place
+                    },
+                    onGitHubAccess: { showsGitHubAccess = true }
+                )
+            }
+        }
+        if resource.kind == .application, previewPlace == nil {
+            if let openDeployment, let image = rollbackTarget(for: openDeployment) {
+                ToolbarItem(placement: .primaryAction) {
+                    rollBackToThisButton(image) { rollbackCandidate = $0 }
+                }
+            } else {
+                ToolbarItem(placement: .primaryAction) {
+                    VersionsMenu(
+                        images: rollbackModel.images,
+                        hasLoaded: rollbackModel.hasLoaded,
+                        loadError: rollbackModel.loadError,
+                        deployments: deployments,
+                        isBusy: rollbackModel.isRollingBack || deploymentClient == nil,
+                        onChoose: { image in
+                            rollbackCandidate = RollbackCandidate(image: image, resourceName: resource.name)
+                        },
+                        onDeployVersion: { showsDeployVersion = true }
+                    )
+                }
+            }
+        }
+        ToolbarItem(placement: .primaryAction) {
+            ResourceGuideButton(kind: resource.kind)
+        }
+    }
+
     /// The kept image a production deployment built, unless it is the one running.
     private func rollbackTarget(for line: DeploymentLine) -> RollbackImage? {
         guard deploymentClient != nil, let image = rollbackModel.image(for: line), !image.isCurrent else { return nil }
@@ -447,19 +481,39 @@ struct ResourceDetail: View {
     private func rollBack(to image: RollbackImage) {
         Task {
             guard let deployment = await rollbackModel.rollBack(to: image) else { return }
-            let built = deployments.first { !$0.isPreview && image.matches(commit: $0.commitSHA ?? $0.commit) }
-            tab = .deployments
-            selectedDeployment = DeploymentLine(
-                id: deployment,
-                status: "queued",
-                commit: image.isCommit ? image.shortTag : nil,
-                commitSHA: image.isCommit ? image.tag : nil,
-                message: built?.message,
-                isRollback: true,
-                startedAt: .now
-            )
-            onRolledBack()
+            open(queued: deployment, commit: image.isCommit ? image.tag : nil, isRollback: true)
         }
+    }
+
+    /// Opens the deployment a version started, and says so when Coolify kept the version pinned after deploying once.
+    private func deployedVersion(_ deployed: DeployedVersion, _ version: ApplicationVersion) {
+        if case .commit(let sha) = version {
+            open(queued: deployed.deploymentUUID, commit: sha, isRollback: false)
+        } else {
+            open(queued: deployed.deploymentUUID, commit: nil, isRollback: false)
+        }
+        versionNotice = deployed.restoreError.map {
+            "The deployment is queued, but \(resource.name) stays pinned to this version. \($0) Change it in Settings."
+        }
+    }
+
+    /// Opens a deployment that just queued, in place of the one on screen, and reloads what it changes.
+    private func open(queued deployment: String, commit: String?, isRollback: Bool) {
+        let built = commit.flatMap { commit in
+            deployments.first { !$0.isPreview && RollbackImage(tag: commit).matches(commit: $0.commitSHA ?? $0.commit) }
+        }
+        let isSHA = commit.map { $0.count >= 7 && $0.allSatisfy(\.isHexDigit) } ?? false
+        tab = .deployments
+        selectedDeployment = DeploymentLine(
+            id: deployment,
+            status: "queued",
+            commit: isSHA ? commit.map { String($0.prefix(7)) } : nil,
+            commitSHA: isSHA ? commit : nil,
+            message: built?.message,
+            isRollback: isRollback,
+            startedAt: .now
+        )
+        onVersionChanged()
     }
 
     /// The resource itself: its header, actions, and tabs.
@@ -470,6 +524,7 @@ struct ResourceDetail: View {
                 pendingAction: pendingAction,
                 lastDeploymentFailed: lastDeploymentFailed,
                 onOpenProject: onOpenProject,
+                onShowSource: resource.kind == .application ? { tab = .settings } : nil,
                 onAction: { action in
                     if action == .stop {
                         stopCandidate = resource
@@ -492,9 +547,12 @@ struct ResourceDetail: View {
                 if let rollbackError = rollbackModel.error {
                     NoticeBanner(message: rollbackError)
                 }
+                if let versionNotice {
+                    NoticeBanner(message: versionNotice)
+                }
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, loadError == nil && actionError == nil && rollbackModel.error == nil ? 0 : 12)
+            .padding(.bottom, hasBanner ? 12 : 0)
 
             if tabs.count > 1 {
                 Picker("Show", selection: Binding(get: { currentTab }, set: { tab = $0 })) {
@@ -573,6 +631,11 @@ struct ResourceDetail: View {
         .animation(.snappy, value: loadError)
         .animation(.snappy, value: actionError)
         .animation(.snappy, value: rollbackModel.error)
+        .animation(.snappy, value: versionNotice)
+    }
+
+    private var hasBanner: Bool {
+        loadError != nil || actionError != nil || rollbackModel.error != nil || versionNotice != nil
     }
 }
 

@@ -1,9 +1,10 @@
 import CoolifyAPI
 import SwiftUI
 
-/// The toolbar's Roll Back menu: the images Coolify kept for an application, newest first, with the running one
-/// marked. When there is nothing to go back to, it says why rather than going missing.
-struct RollbackMenu: View {
+/// The toolbar's Versions menu: the images Coolify kept for an application to roll back to, newest first, with the
+/// running one marked, then a way to deploy any other version. When there is no image to go back to, it says why
+/// rather than going missing.
+struct VersionsMenu: View {
     var images: [RollbackImage]
     var hasLoaded: Bool
     var loadError: String?
@@ -11,6 +12,8 @@ struct RollbackMenu: View {
     var deployments: [DeploymentLine]
     var isBusy: Bool
     var onChoose: (RollbackImage) -> Void
+    /// Opens the sheet that deploys a commit or tag. `nil` leaves the item out.
+    var onDeployVersion: (() -> Void)?
 
     private var hasEarlierImage: Bool { images.contains { !$0.isCurrent } }
 
@@ -38,11 +41,16 @@ struct RollbackMenu: View {
                     }
                 }
             }
+            if let onDeployVersion {
+                Section {
+                    Button("Deploy a Version…", systemImage: "arrow.up.circle", action: onDeployVersion)
+                }
+            }
         } label: {
-            Label("Roll Back", systemImage: "arrow.uturn.backward")
+            Label("Versions", systemImage: "clock.arrow.circlepath")
         }
         .menuIndicator(.hidden)
-        .help("Run an image Coolify kept from an earlier deployment")
+        .help("Roll back to an image Coolify kept, or deploy another version")
         .disabled(isBusy)
     }
 
@@ -82,7 +90,7 @@ struct RollbackMenu: View {
 }
 
 #Preview {
-    RollbackMenu(
+    VersionsMenu(
         images: [
             RollbackImage(
                 tag: "5aa01e77c3d4e5f60718293a4b5c6d7e8f901234", createdAt: "2026-09-30 16:21:30 +0000 UTC",
@@ -95,7 +103,8 @@ struct RollbackMenu: View {
             DeploymentLine(id: "1", status: "finished", commit: "5aa01e7", message: "fix: retry on 502")
         ],
         isBusy: false,
-        onChoose: { _ in }
+        onChoose: { _ in },
+        onDeployVersion: {}
     )
     .padding()
 }

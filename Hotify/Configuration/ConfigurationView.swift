@@ -1,8 +1,8 @@
 import CoolifyAPI
 import SwiftUI
 
-/// The Settings tab of a resource: its name and description, its domains, a database's public port, and its health
-/// check, in one form with one Save. Nothing restarts or deploys on save. A bar offers that afterwards.
+/// The Settings tab of a resource: its name and description, an application's source, its domains, a database's public
+/// port, and its health check, in one form with one Save. Nothing restarts or deploys on save. A bar offers that afterwards.
 struct ConfigurationView: View {
     var model: ConfigurationModel
     var resource: ResourceSummary
@@ -13,6 +13,14 @@ struct ConfigurationView: View {
         Binding(
             get: { model.draft ?? ResourceConfiguration(kind: resource.kind, name: resource.name, description: "") },
             set: { model.draft = $0 }
+        )
+    }
+
+    private var source: Binding<ApplicationSource>? {
+        guard let source = model.draft?.source else { return nil }
+        return Binding(
+            get: { model.draft?.source ?? source },
+            set: { model.draft?.source = $0 }
         )
     }
 
@@ -127,6 +135,10 @@ struct ConfigurationView: View {
                     .autocorrectionDisabled()
                 TextField("Description", text: draft.description, prompt: Text("What it is for"), axis: .vertical)
                     .lineLimit(1...4)
+            }
+
+            if let source {
+                SourceSection(source: source)
             }
 
             switch resource.kind {
@@ -276,6 +288,7 @@ struct ConfigurationView: View {
                 kind: .application,
                 name: "marketing-site",
                 description: "The public site",
+                source: ApplicationSource(kind: .image(name: "traefik/whoami"), tag: "v1.11.0"),
                 domains: ["https://hotify.example.com", "https://www.hotify.example.com"],
                 redirect: .nonWWW,
                 healthCheck: HealthCheck(
