@@ -256,7 +256,7 @@ struct ContentView: View {
             onChanged: { await dashboard.reloadProjects() },
             onNewService: newService
         )
-        // Only the project's own page sets this, so the menu's New Service goes dim on a resource it opened.
+        // Only the project's own page sets this, so the menu's New Resource goes dim on a resource it opened.
         .focusedSceneValue(\.newService, newService.map { NewServiceAction(projectID: project.id, open: $0) })
         .id(identity)
     }
@@ -396,7 +396,7 @@ struct ContentView: View {
         .environment(VariableLock(isRequired: true))
 }
 
-/// A New Service sheet to open: from the empty dashboard, or from a project's page.
+/// A New Resource sheet to open: from the empty dashboard, or from a project's page.
 private struct ProvisioningRequest: Identifiable {
     let id = UUID()
     /// The project page it opened from. A service created there opens with the way back to it.

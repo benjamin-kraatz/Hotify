@@ -726,6 +726,48 @@ final class CoolifyAPITests: XCTestCase {
         XCTAssertNotNil(commits[1].date)
     }
 
+    func testDatabaseCreationSendsOnlyKnownFieldsAndKeepsTheURLsOutOfDescription() async throws {
+        let client = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/api/v1/databases/postgresql")
+            XCTAssertTrue(queryItems(request).isEmpty)
+            let body = try JSONSerialization.jsonObject(with: Data((bodyText(request) ?? "").utf8)) as? NSDictionary
+            XCTAssertEqual(
+                body,
+                [
+                    "name": "orders", "image": "postgres:17-alpine", "server_uuid": "s1", "project_uuid": "p1",
+                    "environment_uuid": "e1", "is_public": true, "public_port": 5433, "instant_deploy": true,
+                ] as NSDictionary)
+            return (
+                201,
+                Data(
+                    #"{"uuid":"db-9","internal_db_url":"postgres://postgres:secret@db-9:5432/postgres","external_db_url":"postgres://postgres:secret@1.2.3.4:5433/postgres"}"#
+                        .utf8), [:]
+            )
+        }
+        let created = try await client.createDatabase(
+            DatabaseDraft(
+                engine: .postgresql, name: "orders", image: "postgres:17-alpine", serverUUID: "s1", projectUUID: "p1",
+                environmentUUID: "e1", isPublic: true, publicPort: 5433))
+        XCTAssertEqual(created.uuid, "db-9")
+        XCTAssertEqual(created.internalURL, "postgres://postgres:secret@db-9:5432/postgres")
+        XCTAssertNotNil(created.externalURL)
+        XCTAssertFalse(String(describing: created).contains("secret"))
+
+        let plain = try makeClient { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/databases/redis")
+            let body = try JSONSerialization.jsonObject(with: Data((bodyText(request) ?? "").utf8)) as? NSDictionary
+            XCTAssertEqual(
+                body,
+                ["server_uuid": "s1", "project_uuid": "p1", "environment_uuid": "e1", "instant_deploy": true]
+                    as NSDictionary)
+            return (201, Data(#"{"uuid":"db-10","internal_db_url":"redis://default:x@db-10:6379/0"}"#.utf8), [:])
+        }
+        let redis = try await plain.createDatabase(
+            DatabaseDraft(engine: .redis, serverUUID: "s1", projectUUID: "p1", environmentUUID: "e1"))
+        XCTAssertNil(redis.externalURL)
+    }
+
     func testEnvironmentVariablesKeepHiddenValuesApartFromEmptyOnes() throws {
         let json = """
             [

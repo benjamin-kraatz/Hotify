@@ -1,7 +1,7 @@
 import CoolifyAPI
 import Foundation
 
-/// A new service on its way up, from the start request until every container runs.
+/// A new service or database on its way up, from the start request until every container runs.
 struct Ignition: Hashable {
     enum Phase: Hashable {
         case starting
@@ -51,7 +51,16 @@ struct Ignition: Hashable {
             )
         }
         let counted = members.filter { $0.excludeFromStatus != true }.map { Heat(status: $0.status) }
-        let overall = Heat(status: service.status)
+        observe(counted, overall: Heat(status: service.status), at: now)
+    }
+
+    /// A database is its own one container.
+    mutating func observe(_ database: Database, name: String, at now: Date = .now) {
+        containers = [ContainerSummary(id: 0, name: name, status: database.status)]
+        observe([Heat(status: database.status)], overall: Heat(status: database.status), at: now)
+    }
+
+    private mutating func observe(_ counted: [Heat], overall: Heat, at now: Date) {
         let heats = counted.isEmpty ? [overall] : counted
 
         if heats.allSatisfy({ $0 == .lit }) {

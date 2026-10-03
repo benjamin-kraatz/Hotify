@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The four steps from template to running service.
+/// The steps from template to running service. A database skips setup.
 enum ProvisioningStep: Int, CaseIterable, Identifiable {
     case choose
     case place
@@ -24,13 +24,14 @@ struct ProvisioningSteps: View {
     var current: ProvisioningStep
     /// The last step finished, which lights its own flame too.
     var isFinished = false
+    var steps: [ProvisioningStep] = ProvisioningStep.allCases
 
     @SwiftUI.Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         HStack(spacing: 6) {
-            ForEach(ProvisioningStep.allCases) { step in
-                if step != .choose {
+            ForEach(steps) { step in
+                if step != steps.first {
                     Capsule()
                         .fill(
                             step.rawValue <= current.rawValue
@@ -53,7 +54,8 @@ struct ProvisioningSteps: View {
         .animation(.snappy, value: current)
         .animation(.snappy, value: isFinished)
         .accessibilityElement()
-        .accessibilityLabel("Step \(current.rawValue + 1) of \(ProvisioningStep.allCases.count), \(current.title)")
+        .accessibilityLabel(
+            "Step \((steps.firstIndex(of: current) ?? 0) + 1) of \(steps.count), \(current.title)")
     }
 
     private func heat(for step: ProvisioningStep) -> Heat {
