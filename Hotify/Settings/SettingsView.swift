@@ -15,6 +15,7 @@ struct SettingsView: View {
         Form {
             #if os(macOS)
             MenuBarSettings()
+            NotificationSettingsSection()
             #endif
             Section {
                 Toggle(
@@ -74,7 +75,7 @@ struct SettingsView: View {
         #endif
         #if os(macOS)
         .frame(width: 500)
-        .frame(minHeight: 340, idealHeight: 560)
+        .frame(minHeight: 340, idealHeight: 640)
         #endif
     }
 
@@ -91,6 +92,7 @@ struct SettingsView: View {
 #Preview("On") {
     SettingsView()
         .environment(MenuBarModel(preview: true))
+        .environment(NotificationSettings(defaults: nil))
         .environment(InstanceStore(instances: []))
         .environment(VariableLock(isRequired: true))
 }
@@ -98,6 +100,7 @@ struct SettingsView: View {
 #Preview("Off") {
     SettingsView()
         .environment(MenuBarModel(preview: true))
+        .environment(NotificationSettings(defaults: nil))
         .environment(InstanceStore(instances: []))
         .environment(VariableLock(isRequired: false))
 }

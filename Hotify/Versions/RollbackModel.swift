@@ -72,6 +72,7 @@ final class RollbackModel {
         }
         do {
             let deployment = try await client.rollback(application, to: image.tag)
+            LocalActions.note(.deployment, .application(application))
             guard generation == self.generation else { return nil }
             error = nil
             return deployment

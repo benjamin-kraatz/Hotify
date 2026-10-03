@@ -42,3 +42,21 @@ extension DatabaseBackup {
         return step(minute).map { $0 * 60 }
     }
 }
+
+extension DatabaseBackup {
+    /// How long after the last good backup a schedule counts as late: half an interval more, and half an hour for a
+    /// slow run.
+    static func lateness(_ interval: TimeInterval) -> TimeInterval {
+        interval * 1.5 + 1_800
+    }
+
+    /// Whether the last good backup is older than the schedule allows. A schedule that ran but never succeeded is
+    /// late too.
+    func isOverdue(at date: Date) -> Bool {
+        guard let interval = expectedInterval else { return false }
+        guard let lastSuccess = executions.filter({ $0.heat == .lit }).compactMap(\.createdAtDate).max() else {
+            return !executions.isEmpty
+        }
+        return date.timeIntervalSince(lastSuccess) > Self.lateness(interval)
+    }
+}

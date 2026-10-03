@@ -29,6 +29,7 @@ A Mac and iPhone app for your self-hosted [Coolify](https://coolify.io).
 - **Failed deployments.** Apple Intelligence explains what went wrong. It runs on the device, so the log never leaves it.
 - **Widgets.** Up to six pinned resources you can start and stop, an instance's status, what needs attention, recent deployments, and backups. Control Center gets a toggle and a restart button.
 - **Menu bar.** On the Mac, keep an eye on chosen resources from the menu bar.
+- **Notifications.** On the Mac, hear when a deploy fails or finishes, a resource stops or turns unhealthy, a backup fails or runs late, or a server drops, per instance and per event. A failed deploy offers Explain and Roll Back. Hotify checks while it runs.
 
 Hotify supports Coolify 4.3.x. Older versions aren't tested. It uses Coolify's HTTP API, so it can do what the API can do. The [OpenAPI spec](https://github.com/coollabsio/coolify/blob/main/openapi.yaml) lists what that is.
 

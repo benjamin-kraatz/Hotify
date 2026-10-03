@@ -71,6 +71,7 @@ final class PreviewDeploymentModel {
         defer { isDeploying = false }
         do {
             let result = try await client.deployPreview(applicationUUID: application, pullRequestID: number)
+            LocalActions.note(.deployment, .application(application))
             return result.deployments.first { $0.resourceUUID == application && !($0.deploymentUUID ?? "").isEmpty }
         } catch {
             deployError = (error as? CoolifyError)?.message ?? error.localizedDescription

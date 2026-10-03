@@ -16,6 +16,10 @@ struct ResourceEntry: Hashable {
         case previews(PreviewPlace)
         /// A database's backups.
         case backups
+        /// One deployment, and whether to ask Apple Intelligence about it at once.
+        case deployment(String, explains: Bool)
+        /// The confirmation to roll back to the newest earlier image.
+        case rollback
     }
 
     var place: Place
@@ -30,6 +34,8 @@ extension ResourceEntry {
         case .deployments: self.init(place: .deployments)
         case .preview(let pullRequest): self.init(place: .previews(.preview(pullRequest)))
         case .backups: self.init(place: .backups)
+        case .deployment(let id, let explains): self.init(place: .deployment(id, explains: explains))
+        case .rollback: self.init(place: .rollback)
         }
     }
 }

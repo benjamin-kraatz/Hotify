@@ -38,6 +38,13 @@ struct FailureExplainer: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // An analysis started elsewhere, such as from a notification's Explain, opens the card too.
+        .onAppear { if analyst.phase != .idle { isOpen = true } }
+        .onChange(of: analyst.phase) { before, phase in
+            if before == .idle, phase != .idle, !isOpen {
+                withAnimation(.snappy) { isOpen = true }
+            }
+        }
         .sensoryFeedback(trigger: analyst.phase) { _, phase in
             switch phase {
             case .done: .success

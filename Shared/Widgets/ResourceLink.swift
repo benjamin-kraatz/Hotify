@@ -14,6 +14,10 @@ struct ResourceLink: Hashable {
         case preview(Int)
         /// A database's backups.
         case backups
+        /// One deployment's build output. `explains` also asks Apple Intelligence what went wrong, where it can.
+        case deployment(String, explains: Bool)
+        /// The confirmation to roll back to the newest image Coolify kept before the running one.
+        case rollback
     }
 
     static let scheme = "hotify"
@@ -32,6 +36,12 @@ struct ResourceLink: Hashable {
             ]
         case .backups:
             components.queryItems = [URLQueryItem(name: "open", value: "backups")]
+        case .deployment(let id, let explains):
+            components.queryItems =
+                [URLQueryItem(name: "open", value: "deployment"), URLQueryItem(name: "id", value: id)]
+                + (explains ? [URLQueryItem(name: "explain", value: "1")] : [])
+        case .rollback:
+            components.queryItems = [URLQueryItem(name: "open", value: "rollback")]
         case nil:
             break
         }
@@ -57,6 +67,8 @@ struct ResourceLink: Hashable {
             case "deployments": .deployments
             case "preview": value("pr").flatMap(Int.init).map(Place.preview)
             case "backups": .backups
+            case "deployment": value("id").map { Place.deployment($0, explains: value("explain") == "1") }
+            case "rollback": .rollback
             default: nil
             }
         self.init(instanceID: instanceID, route: route, place: place)

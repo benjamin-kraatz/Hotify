@@ -6,7 +6,10 @@ import SwiftUI
 struct DeploymentDetail: View {
     var client: CoolifyClient?
     var initial: DeploymentLine
+    /// Asks Apple Intelligence what went wrong as soon as the output loads, as a notification's Explain does.
+    var explainsOnLoad = false
     @State private var deployment: Deployment?
+    @State private var didExplainOnLoad = false
     @State private var error: String?
     @State private var isLoading = false
     @State private var analyst = FailureAnalyst()
@@ -90,6 +93,10 @@ struct DeploymentDetail: View {
                 try Task.checkCancellation()
                 deployment = loaded
                 error = nil
+                if explainsOnLoad, !didExplainOnLoad, canExplain {
+                    didExplainOnLoad = true
+                    analyst.explain(LogLine.parse(loaded.logs ?? ""))
+                }
             } catch is CancellationError { return } catch {
                 self.error = (error as? CoolifyError)?.message ?? error.localizedDescription
             }

@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 #if os(macOS)
 import AppKit
@@ -19,6 +20,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @State private var menuBar: MenuBarModel
     @State private var variableLock = VariableLock()
     @State private var placeColors: PlaceColors
+    #if os(macOS)
+    @State private var notificationSettings = NotificationSettings()
+    @State private var notificationWatcher = NotificationWatcher()
+    /// The notification center keeps only a weak reference to its delegate.
+    @State private var notificationRouter = NotificationRouter()
+    #endif
     @SwiftUI.Environment(\.scenePhase) private var scenePhase
 
     #if os(macOS)
@@ -42,6 +49,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         companion.connect(store)
         _instanceStore = State(initialValue: store)
         _menuBar = State(initialValue: companion)
+        #if os(macOS)
+        let settings = NotificationSettings()
+        let watcher = NotificationWatcher()
+        let router = NotificationRouter()
+        UNUserNotificationCenter.current().delegate = router
+        watcher.start(store: store, settings: settings)
+        _notificationSettings = State(initialValue: settings)
+        _notificationWatcher = State(initialValue: watcher)
+        _notificationRouter = State(initialValue: router)
+        #endif
         #if os(iOS)
         // SwiftUI has no hook for navigation title fonts, so large titles pick up the brand's wide face here.
         let wide = UIFont.systemFont(ofSize: 34, weight: .heavy, width: .expanded)
@@ -84,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .environment(variableLock)
                 .environment(instanceStore)
                 .environment(menuBar)
+                .environment(notificationSettings)
         }
 
         MenuBarExtra(isInserted: Binding(get: { menuBar.enabled }, set: { menuBar.enabled = $0 })) {
