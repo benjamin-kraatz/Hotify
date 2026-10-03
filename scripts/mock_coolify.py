@@ -70,6 +70,10 @@ ROLLBACK_IMAGES = {
     "web": {"current": "0123456789abcdef0123456789abcdef01234567", "images": [
         {"tag": "0123456789abcdef0123456789abcdef01234567", "created_at": "2026-09-29 12:00:10 +0000 UTC", "is_current": True},
     ]},
+    "whoami": {"current": "v1.11.0", "images": [
+        {"tag": "v1.11.0", "created_at": "2026-10-02 09:00:00 +0000 UTC", "is_current": True},
+        {"tag": "v1.10.1", "created_at": "2026-09-12 09:00:00 +0000 UTC", "is_current": False},
+    ]},
     # Never built, or on a server Coolify can't reach: the list is empty.
     "web-staging": {"current": None, "images": []},
 }
@@ -118,10 +122,12 @@ class Fixture(ThreadingHTTPServer):
             "health_check_start_period": 5,
         }
         self.applications = {
-            "web": {"uuid": "web", "id": 1, "name": "Fixture Web", "description": None, "status": "running:healthy", "fqdn": "https://fixture.example", "environment_id": 1, "build_pack": "nixpacks", "redirect": "both", "preview_url_template": "{{pr_id}}.{{domain}}", "git_repository": "coollabsio/coolify", "git_branch": "main", "settings": {"is_preview_deployments_enabled": 1, "is_force_https_enabled": 1}, **health},
+            "web": {"uuid": "web", "id": 1, "name": "Fixture Web", "description": None, "status": "running:healthy", "fqdn": "https://fixture.example", "environment_id": 1, "build_pack": "nixpacks", "redirect": "both", "preview_url_template": "{{pr_id}}.{{domain}}", "git_repository": "coollabsio/coolify", "git_branch": "main", "git_commit_sha": "HEAD", "settings": {"is_preview_deployments_enabled": 1, "is_force_https_enabled": 1, "is_auto_deploy_enabled": 1}, **health},
             # Not on github.com, so its previews go without pull request titles.
-            "api": {"uuid": "api", "id": 2, "name": "Fixture API", "description": None, "status": "running:unhealthy", "fqdn": "https://api.fixture.example", "environment_id": 1, "build_pack": "dockerfile", "redirect": "both", "preview_url_template": "{{pr_id}}.{{domain}}", "git_repository": "https://gitlab.fixture.example/shop/api.git", "git_branch": "main", "settings": {"is_force_https_enabled": 1}, **health, "health_check_path": "/health", "health_check_port": "8080"},
-            "web-staging": {"uuid": "web-staging", "id": 3, "name": "Fixture Web", "description": None, "status": "exited", "fqdn": "https://staging.fixture.example", "environment_id": 2, "build_pack": "nixpacks", "redirect": "both", "git_repository": "coollabsio/coolify", "git_branch": "develop", "settings": {"is_force_https_enabled": 0}, **health, "health_check_enabled": 0},
+            "api": {"uuid": "api", "id": 2, "name": "Fixture API", "description": None, "status": "running:unhealthy", "fqdn": "https://api.fixture.example", "environment_id": 1, "build_pack": "dockerfile", "redirect": "both", "preview_url_template": "{{pr_id}}.{{domain}}", "git_repository": "https://gitlab.fixture.example/shop/api.git", "git_branch": "main", "git_commit_sha": "HEAD", "settings": {"is_force_https_enabled": 1, "is_auto_deploy_enabled": "1"}, **health, "health_check_path": "/health", "health_check_port": "8080"},
+            "web-staging": {"uuid": "web-staging", "id": 3, "name": "Fixture Web", "description": None, "status": "exited", "fqdn": "https://staging.fixture.example", "environment_id": 2, "build_pack": "nixpacks", "redirect": "both", "git_repository": "coollabsio/coolify", "git_branch": "develop", "git_commit_sha": "c0ffee12", "settings": {"is_force_https_enabled": 0, "is_auto_deploy_enabled": 0}, **health, "health_check_enabled": 0},
+            # A Docker image application, which deploys a tag rather than a commit.
+            "whoami": {"uuid": "whoami", "id": 4, "name": "Fixture Whoami", "description": None, "status": "running:healthy", "fqdn": "https://whoami.fixture.example", "environment_id": 3, "build_pack": "dockerimage", "redirect": "both", "git_repository": None, "git_branch": None, "git_commit_sha": "HEAD", "docker_registry_image_name": "traefik/whoami", "docker_registry_image_tag": "v1.11.0", "settings": {"is_force_https_enabled": 1, "is_auto_deploy_enabled": 0}, **health},
         }
         self.database = {"uuid": "db", "name": "Fixture Postgres", "description": None, "database_type": "standalone-postgresql", "status": "running:healthy", "environment_id": 1, "is_public": False, "public_port": None, "health_check_enabled": True, "health_check_interval": 15, "health_check_timeout": 5, "health_check_retries": 5, "health_check_start_period": 5}
         self.standing = {"uuid": "metrics", "name": "metrics", "description": None, "service_type": "grafana-with-postgresql", "status": "running:healthy", "environment_id": 3, "applications": [
@@ -134,6 +140,7 @@ class Fixture(ThreadingHTTPServer):
             {"deployment_uuid": "api-1", "application_id": 2, "pull_request_id": 0, "status": "finished", "commit": API_OLDER, "commit_message": "feat: rate limit headers", "created_at": "2026-09-28T09:00:00Z", "finished_at": "2026-09-28T09:00:40Z"},
         ]
         self.rollbacks = 0
+        self.deploys = 0
         self.rollback_images = copy.deepcopy(ROLLBACK_IMAGES)
         # New environments and shared variables count up from here, clear of the ids above.
         self.next_id = 100
@@ -231,11 +238,17 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/applications/") and path.endswith("/rollback-images"):
             images = self.server.rollback_images.get(path.split("/")[2])
             return self.respond(images) if images is not None else self.respond({"message": "Application not found."}, 404)
-        if path.startswith("/deployments/rollback-"):
+        if path.startswith("/deployments/rollback-") or path.startswith("/deployments/deploy-"):
             row = next((r for r in self.server.api_history if r["deployment_uuid"] == path.rsplit("/", 1)[1]), None)
             if row is None:
-                return self.respond({"message": "Deployment not found."}, 404)
-            return self.respond({**row, "logs": json.dumps([{"timestamp": "2026-10-03T08:00:00Z", "output": f"Rolling back to {row['commit']}."}, {"timestamp": "2026-10-03T08:00:02Z", "output": "New container started."}])})
+                # Only the API keeps a history. Other applications' deployments answer as plain finished ones.
+                return self.respond({"deployment_uuid": path.rsplit("/", 1)[1], "status": "finished", "commit_message": "Fixture deployment", "logs": [{"output": "Fixture build output"}]})
+            verb = "Rolling back to" if row.get("rollback") else "Building"
+            return self.respond({**row, "logs": json.dumps([{"timestamp": "2026-10-03T08:00:00Z", "output": f"{verb} {row['commit']}."}, {"timestamp": "2026-10-03T08:00:02Z", "output": "New container started."}])})
+        if path == "/deployments/applications/whoami":
+            return self.respond({"count": 1, "deployments": [
+                {"deployment_uuid": "whoami-1", "application_id": 4, "pull_request_id": 0, "status": "finished", "commit": "HEAD", "created_at": "2026-10-02T08:59:00Z", "finished_at": "2026-10-02T09:00:00Z"},
+            ]})
         if path == "/deployments/applications/web-staging":
             return self.respond({"count": 1, "deployments": [
                 {"deployment_uuid": "staging-1", "application_id": 3, "pull_request_id": 0, "status": "failed", "commit": "c0ffee12", "commit_message": "feat: new checkout", "created_at": "2026-09-30T08:00:00Z", "finished_at": "2026-09-30T08:01:10Z"},
@@ -328,9 +341,26 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond({"deployments": [row]})
             if path.startswith("/applications/") and path.endswith("/rollback"):
                 return self.rollback(path.split("/")[2], body)
-            if path == "/deploy" or path.endswith("/restart"):
+            if path == "/deploy":
+                return self.deploy(parse_qs(urlsplit(self.path).query).get("uuid", [None])[0])
+            if path.endswith("/restart"):
                 return self.respond({"message": "Queued", "deployments": []})
             return self.respond({"message": "Fixture write not supported"}, 404)
+
+    def deploy(self, uuid):
+        """Queues a deployment of what the application's settings name, the way Coolify answers one by uuid."""
+        record = self.server.applications.get(uuid)
+        if record is None:
+            return self.respond({"message": "Queued", "deployments": []})
+        self.server.deploys += 1
+        deployment = f"deploy-{self.server.deploys}"
+        commit = record.get("git_commit_sha") or "HEAD"
+        self.server.events[-1].update({"resource_uuid": uuid, "commit": commit, "tag": record.get("docker_registry_image_tag")})
+        if uuid == "api":
+            built = API_CURRENT if commit == "HEAD" else commit
+            message = next((r["commit_message"] for r in self.server.api_history if r["commit"].startswith(built)), "Fixture deployment")
+            self.server.api_history.insert(0, {"deployment_uuid": deployment, "application_id": 2, "pull_request_id": 0, "status": "finished", "commit": built, "commit_message": message, "created_at": now(), "finished_at": now()})
+        return self.respond({"deployments": [{"message": f"Application {record['name']} deployment queued.", "resource_uuid": uuid, "deployment_uuid": deployment}]})
 
     def rollback(self, uuid, body):
         """Queues a rollback the way Coolify 4.3 checks one. Only the API keeps a history the rollback joins."""
@@ -407,7 +437,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
     HEALTH = {"health_check_enabled", "health_check_interval", "health_check_timeout", "health_check_retries", "health_check_start_period"}
-    APPLICATION_FIELDS = HEALTH | {"name", "description", "domains", "redirect", "is_force_https_enabled", "docker_compose_domains", "force_domain_override", "health_check_type", "health_check_command", "health_check_method", "health_check_scheme", "health_check_host", "health_check_port", "health_check_path", "health_check_return_code", "health_check_response_text"}
+    APPLICATION_FIELDS = HEALTH | {"name", "description", "domains", "redirect", "is_force_https_enabled", "docker_compose_domains", "force_domain_override", "git_branch", "git_commit_sha", "docker_registry_image_tag", "is_auto_deploy_enabled", "health_check_type", "health_check_command", "health_check_method", "health_check_scheme", "health_check_host", "health_check_port", "health_check_path", "health_check_return_code", "health_check_response_text"}
 
     def write_settings(self, path, body):
         """Settings of an application, the database, and the standing service, with Coolify's 422 for a field it
@@ -430,6 +460,13 @@ class Handler(BaseHTTPRequestHandler):
         taken = [a for a in ",".join(addresses).split(",") if "taken.example" in a]
         if taken and not body.get("force_domain_override"):
             return self.respond({"message": "Domain conflicts detected. Use force_domain_override=true to proceed.", "conflicts": [{"domain": a, "resource_name": "Fixture Web", "resource_type": "application"} for a in taken], "warning": "Shared domains split traffic."}, 409)
+        # Coolify's rules for an application's source.
+        if "git_commit_sha" in body and not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._\-/]*", str(body["git_commit_sha"] or "")):
+            return self.respond({"message": "Validation failed.", "errors": {"git_commit_sha": ["The git commit sha field format is invalid."]}}, 422)
+        if "docker_registry_image_tag" in body and not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9._\-]{0,127}", str(body["docker_registry_image_tag"] or "")):
+            return self.respond({"message": "Validation failed.", "errors": {"docker_registry_image_tag": ["Invalid Docker image tag."]}}, 422)
+        if kind == "applications" and "is_auto_deploy_enabled" in body:
+            record.setdefault("settings", {})["is_auto_deploy_enabled"] = body.pop("is_auto_deploy_enabled")
         if kind == "databases" and body.get("is_public") and body.get("public_port") == 5432:
             return self.respond({"message": "Public port already used by another database."}, 400)
         for item in body.pop("urls", []):

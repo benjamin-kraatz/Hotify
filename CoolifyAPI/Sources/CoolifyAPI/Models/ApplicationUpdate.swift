@@ -41,6 +41,11 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
     public var healthCheck: HealthCheck?
     /// Takes a domain another resource already uses, after Coolify answered 409.
     public var forceDomainOverride: Bool?
+    public var gitBranch: String?
+    /// The commit manual deploys build. `HEAD` goes back to the branch's latest.
+    public var gitCommitSHA: String?
+    public var dockerRegistryImageTag: String?
+    public var isAutoDeployEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -51,6 +56,10 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         case isForceHTTPSEnabled = "isForceHttpsEnabled"
         case dockerComposeDomains
         case forceDomainOverride
+        case gitBranch
+        case gitCommitSHA = "gitCommitSha"
+        case dockerRegistryImageTag
+        case isAutoDeployEnabled
     }
 
     public init(
@@ -61,7 +70,11 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         isForceHTTPSEnabled: Bool? = nil,
         dockerComposeDomains: [ComposeDomain]? = nil,
         healthCheck: HealthCheck? = nil,
-        forceDomainOverride: Bool? = nil
+        forceDomainOverride: Bool? = nil,
+        gitBranch: String? = nil,
+        gitCommitSHA: String? = nil,
+        dockerRegistryImageTag: String? = nil,
+        isAutoDeployEnabled: Bool? = nil
     ) {
         self.name = name
         self.description = description
@@ -71,19 +84,24 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         self.dockerComposeDomains = dockerComposeDomains
         self.healthCheck = healthCheck
         self.forceDomainOverride = forceDomainOverride
+        self.gitBranch = gitBranch
+        self.gitCommitSHA = gitCommitSHA
+        self.dockerRegistryImageTag = dockerRegistryImageTag
+        self.isAutoDeployEnabled = isAutoDeployEnabled
     }
 
     /// Whether there is anything to send.
     public var isEmpty: Bool {
         name == nil && description == nil && domains == nil && redirect == nil && isForceHTTPSEnabled == nil
-            && dockerComposeDomains == nil && healthCheck == nil
+            && dockerComposeDomains == nil && healthCheck == nil && gitBranch == nil && gitCommitSHA == nil
+            && dockerRegistryImageTag == nil && isAutoDeployEnabled == nil
     }
 
     /// Whether the change only reaches the running app with its next deployment. Coolify writes domains and the
-    /// health check into the container's labels and settings as it deploys.
+    /// health check into the container's labels and settings as it deploys, and builds a new version only then.
     public var needsRedeploy: Bool {
         domains != nil || redirect != nil || isForceHTTPSEnabled != nil || dockerComposeDomains != nil
-            || healthCheck != nil
+            || healthCheck != nil || gitBranch != nil || gitCommitSHA != nil || dockerRegistryImageTag != nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -95,6 +113,10 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         try container.encodeIfPresent(isForceHTTPSEnabled, forKey: .isForceHTTPSEnabled)
         try container.encodeIfPresent(dockerComposeDomains, forKey: .dockerComposeDomains)
         try container.encodeIfPresent(forceDomainOverride, forKey: .forceDomainOverride)
+        try container.encodeIfPresent(gitBranch, forKey: .gitBranch)
+        try container.encodeIfPresent(gitCommitSHA, forKey: .gitCommitSHA)
+        try container.encodeIfPresent(dockerRegistryImageTag, forKey: .dockerRegistryImageTag)
+        try container.encodeIfPresent(isAutoDeployEnabled, forKey: .isAutoDeployEnabled)
         try healthCheck?.encode(to: encoder)
     }
 }

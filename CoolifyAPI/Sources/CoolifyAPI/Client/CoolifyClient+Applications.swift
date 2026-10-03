@@ -65,6 +65,44 @@ extension CoolifyClient {
         return deployment
     }
 
+    /// Deploys one version of an application. Coolify's deploy takes no commit or tag, so this pins the version,
+    /// queues a deployment, and puts `previous` back. Pass `restoring: nil` to leave the version pinned.
+    ///
+    /// Coolify writes the commit into a deployment as it queues it, so putting the previous value back right after
+    /// leaves the queued one alone. If the deploy fails, the previous value still goes back.
+    public func deploy(_ uuid: String, version: ApplicationVersion, restoring previous: ApplicationVersion?)
+        async throws -> DeployedVersion
+    {
+        try await updateApplication(uuid, version.update)
+        let deployment: String
+        do {
+            let result = try await deploy(uuid: uuid)
+            // Coolify answers 200 with a message and no deployment when it skips one, such as a commit already queued.
+            guard
+                let queued = result.deployments.first(where: {
+                    $0.resourceUUID == uuid && !($0.deploymentUUID ?? "").isEmpty
+                })?.deploymentUUID
+            else {
+                throw CoolifyError(
+                    message: result.deployments.first?.message ?? result.message
+                        ?? "Coolify did not queue the deployment.")
+            }
+            deployment = queued
+        } catch {
+            if let previous { try? await updateApplication(uuid, previous.update) }
+            throw error
+        }
+        var restoreError: String?
+        if let previous {
+            do {
+                try await updateApplication(uuid, previous.update)
+            } catch {
+                restoreError = (error as? CoolifyError)?.summary ?? error.localizedDescription
+            }
+        }
+        return DeployedVersion(deploymentUUID: deployment, restoreError: restoreError)
+    }
+
     public func applicationLogs(
         _ uuid: String,
         window: LogWindow = .lines(100),

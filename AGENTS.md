@@ -7,13 +7,13 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
 - `Hotify/` is the app target.
   - `App/` has the entry point.
   - `Design/` has the app's look: the stokable flame and its fire, heat edges, wells, and the filter field.
-  - `Configuration/` is a resource's Settings tab: its name and description, its domains, a database's public port, and its health check, in one form with one Save.
+  - `Configuration/` is a resource's Settings tab: its name and description, an application's source (branch, pinned commit, deploy on push, or image tag), its domains, a database's public port, and its health check, in one form with one Save.
   - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource.
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
   - `Projects/` shows one project: its resources by environment, the previews of all its applications, and the variables the project and its environments share. It opens from the project's head in the dashboard and takes the detail column. A resource opened from it offers the way back. It also holds the colors you give projects and environments: `PlaceColors` keeps them per instance, on the device and in iCloud key-value storage, since Coolify has no such field.
-  - `Rollback/` goes back to an image Coolify kept for an application: the toolbar's Roll Back menu, Roll Back to This on a deployment, and the confirmation before either.
+  - `Versions/` changes which version of an application runs. The toolbar's Versions menu rolls back to an image Coolify kept, and Roll Back to This does the same from a deployment. Deploy a Version deploys any commit or image tag, once or pinned, and lists a GitHub branch's recent commits to pick from.
   - `Provisioning/` creates services from Coolify's one-click templates: a gallery, then placement, setup, and the first start, in one sheet that opens from a project page's New Service button, its ⇧⌘N in the Project menu, or an empty dashboard. From a project, the sheet starts in that project, on the server that runs most of it.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
