@@ -12,5 +12,8 @@ struct HotifyWidgetsBundle: WidgetBundle {
         BackupsWidget()
         ResourcePowerControl()
         ResourceButtonControl()
+        #if os(iOS)
+        DeploymentLiveActivity()
+        #endif
     }
 }

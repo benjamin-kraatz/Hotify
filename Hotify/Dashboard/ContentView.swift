@@ -7,6 +7,10 @@ struct ContentView: View {
     @SwiftUI.Environment(InstanceStore.self) private var store
     /// Missing in previews, which leaves every project and environment without a color.
     @SwiftUI.Environment(PlaceColors.self) private var placeColors: PlaceColors?
+    #if os(iOS)
+    /// Missing in previews, which start no Live Activities.
+    @SwiftUI.Environment(DeploymentActivities.self) private var deploymentActivities: DeploymentActivities?
+    #endif
     @SwiftUI.Environment(\.scenePhase) private var scenePhase
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var boundToken: String?
@@ -72,6 +76,16 @@ struct ContentView: View {
         .onChange(of: store.selected?.baseURL) { _, _ in
             resetConnection()
         }
+        #if os(iOS)
+        // Each poll may show a deploy started here, or the end of one a Live Activity follows.
+        .onChange(of: dashboard.lastUpdated) { _, _ in
+            guard let activities = deploymentActivities, let instance = store.selected, let client,
+                boundID == instance.id
+            else { return }
+            let snapshot = dashboard.snapshot
+            Task { await activities.observe(snapshot, instance: instance, client: client) }
+        }
+        #endif
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             store.refreshSync()

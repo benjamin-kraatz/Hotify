@@ -20,11 +20,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @State private var menuBar: MenuBarModel
     @State private var variableLock = VariableLock()
     @State private var placeColors: PlaceColors
+    /// The notification center keeps only a weak reference to its delegate.
+    @State private var notificationRouter = NotificationRouter()
     #if os(macOS)
     @State private var notificationSettings = NotificationSettings()
     @State private var notificationWatcher = NotificationWatcher()
-    /// The notification center keeps only a weak reference to its delegate.
-    @State private var notificationRouter = NotificationRouter()
+    #else
+    @State private var deploymentActivities = DeploymentActivities()
     #endif
     @SwiftUI.Environment(\.scenePhase) private var scenePhase
 
@@ -49,15 +51,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         companion.connect(store)
         _instanceStore = State(initialValue: store)
         _menuBar = State(initialValue: companion)
+        let router = NotificationRouter()
+        UNUserNotificationCenter.current().delegate = router
+        _notificationRouter = State(initialValue: router)
         #if os(macOS)
         let settings = NotificationSettings()
         let watcher = NotificationWatcher()
-        let router = NotificationRouter()
-        UNUserNotificationCenter.current().delegate = router
         watcher.start(store: store, settings: settings)
         _notificationSettings = State(initialValue: settings)
         _notificationWatcher = State(initialValue: watcher)
-        _notificationRouter = State(initialValue: router)
+        #else
+        let activities = DeploymentActivities()
+        activities.connect(store)
+        _deploymentActivities = State(initialValue: activities)
         #endif
         #if os(iOS)
         // SwiftUI has no hook for navigation title fonts, so large titles pick up the brand's wide face here.
@@ -90,6 +96,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .background {
                     variableLock.lock()
+                    #if os(iOS)
+                    // Keeps Live Activities current for the moments iOS grants, then asks to look again later.
+                    deploymentActivities.followInBackground()
+                    #endif
                     // Leaving is the last chance to refresh widgets without spending their daily budget.
                     WidgetRefresh.all()
                 }
@@ -127,7 +137,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if os(macOS)
         Window("Hotify", id: "main") { mainContent }
         #else
+        let activities = deploymentActivities
         WindowGroup { mainContent }
+            .backgroundTask(.appRefresh(DeploymentActivities.refreshTaskID)) {
+                await activities.refreshAll()
+                await activities.scheduleRefresh()
+            }
         #endif
     }
 
@@ -138,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .environment(menuBar)
             .environment(placeColors)
             #if os(iOS)
+        .environment(deploymentActivities)
         .tint(.ember)
             #endif
     }
