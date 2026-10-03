@@ -3,6 +3,7 @@
 import copy
 import datetime
 import json
+import re
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -54,6 +55,24 @@ FAILED_BUILD = [
     "Deployment failed. Removing the new version of your application.",
     "Oops something is not okay, are you okay? 😢",
 ]
+# The API's images, by the commits they were built from. Coolify tags a built image with the full SHA.
+API_CURRENT = "5aa01e77c3d4e5f60718293a4b5c6d7e8f901234"
+API_OLDER = "1b2c3d4e5f60718293a4b5c6d7e8f9012345678a"
+# Docker's CreatedAt format, which Coolify passes through instead of ISO 8601.
+ROLLBACK_IMAGES = {
+    "api": {"current": API_CURRENT, "images": [
+        {"tag": API_CURRENT, "created_at": "2026-09-30 16:21:30 +0000 UTC", "is_current": True},
+        {"tag": f"{API_CURRENT}-build", "created_at": "2026-09-30 16:21:00 +0000 UTC", "is_current": False},
+        {"tag": "pr-7-9f2c1ab4", "created_at": "2026-10-01 08:00:00 +0000 UTC", "is_current": False},
+        {"tag": API_OLDER, "created_at": "2026-09-28 09:00:40 +0000 UTC", "is_current": False},
+        {"tag": "0f9e8d7c6b5a49382716051f2e3d4c5b6a798081", "created_at": "2026-09-21 10:00:00 +0000 UTC", "is_current": False},
+    ]},
+    "web": {"current": "0123456789abcdef0123456789abcdef01234567", "images": [
+        {"tag": "0123456789abcdef0123456789abcdef01234567", "created_at": "2026-09-29 12:00:10 +0000 UTC", "is_current": True},
+    ]},
+    # Never built, or on a server Coolify can't reach: the list is empty.
+    "web-staging": {"current": None, "images": []},
+}
 FINISHED_BUILD = ["Starting deployment of benn/storefront:main to localhost.", "Building docker image completed.", "New container started."]
 
 
@@ -109,6 +128,13 @@ class Fixture(ThreadingHTTPServer):
             {"id": 1, "name": "grafana", "human_name": "Grafana", "status": "running:healthy", "fqdn": "https://grafana.fixture.example"},
             {"id": 2, "name": "postgres", "status": "running:healthy"},
         ]}
+        # The production history of the API, newest first. A rollback puts its deployment at the top.
+        self.api_history = [
+            {"deployment_uuid": "api-2", "application_id": 2, "pull_request_id": 0, "status": "finished", "commit": API_CURRENT, "commit_message": "fix: retry on 502", "created_at": "2026-09-30T16:20:00Z", "finished_at": "2026-09-30T16:21:30Z"},
+            {"deployment_uuid": "api-1", "application_id": 2, "pull_request_id": 0, "status": "finished", "commit": API_OLDER, "commit_message": "feat: rate limit headers", "created_at": "2026-09-28T09:00:00Z", "finished_at": "2026-09-28T09:00:40Z"},
+        ]
+        self.rollbacks = 0
+        self.rollback_images = copy.deepcopy(ROLLBACK_IMAGES)
         # New environments and shared variables count up from here, clear of the ids above.
         self.next_id = 100
         # Services created from templates. Each comes up a few seconds after its start request.
@@ -196,11 +222,20 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/deployments":
             return self.respond([{"deployment_uuid": "api-pr-7", "application_id": 2, "application_name": "Fixture API", "pull_request_id": 7, "status": "in_progress"}])
         if path == "/deployments/applications/api":
-            return self.respond({"count": 3, "deployments": [
+            previews = [
                 {"deployment_uuid": "api-pr-7", "application_id": 2, "pull_request_id": 7, "status": "in_progress", "commit": "9f2c1ab4", "commit_message": "feat: rate limits", "created_at": now()},
-                {"deployment_uuid": "api-2", "application_id": 2, "pull_request_id": 0, "status": "finished", "commit": "5aa01e77", "commit_message": "fix: retry on 502", "created_at": "2026-09-30T16:20:00Z", "finished_at": "2026-09-30T16:21:30Z"},
                 {"deployment_uuid": "api-pr-5", "application_id": 2, "pull_request_id": 5, "status": "failed", "commit": "77aa01e0", "commit_message": "chore: bump node to 24", "created_at": "2026-09-28T09:00:00Z", "finished_at": "2026-09-28T09:00:40Z"},
-            ]})
+            ]
+            rows = previews[:1] + self.server.api_history + previews[1:]
+            return self.respond({"count": len(rows), "deployments": rows})
+        if path.startswith("/applications/") and path.endswith("/rollback-images"):
+            images = self.server.rollback_images.get(path.split("/")[2])
+            return self.respond(images) if images is not None else self.respond({"message": "Application not found."}, 404)
+        if path.startswith("/deployments/rollback-"):
+            row = next((r for r in self.server.api_history if r["deployment_uuid"] == path.rsplit("/", 1)[1]), None)
+            if row is None:
+                return self.respond({"message": "Deployment not found."}, 404)
+            return self.respond({**row, "logs": json.dumps([{"timestamp": "2026-10-03T08:00:00Z", "output": f"Rolling back to {row['commit']}."}, {"timestamp": "2026-10-03T08:00:02Z", "output": "New container started."}])})
         if path == "/deployments/applications/web-staging":
             return self.respond({"count": 1, "deployments": [
                 {"deployment_uuid": "staging-1", "application_id": 3, "pull_request_id": 0, "status": "failed", "commit": "c0ffee12", "commit_message": "feat: new checkout", "created_at": "2026-09-30T08:00:00Z", "finished_at": "2026-09-30T08:01:10Z"},
@@ -291,9 +326,34 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     row["message"] = f"Pull request {number} not found for this resource."
                 return self.respond({"deployments": [row]})
+            if path.startswith("/applications/") and path.endswith("/rollback"):
+                return self.rollback(path.split("/")[2], body)
             if path == "/deploy" or path.endswith("/restart"):
                 return self.respond({"message": "Queued", "deployments": []})
             return self.respond({"message": "Fixture write not supported"}, 404)
+
+    def rollback(self, uuid, body):
+        """Queues a rollback the way Coolify 4.3 checks one. Only the API keeps a history the rollback joins."""
+        images = self.server.rollback_images.get(uuid)
+        if images is None:
+            return self.respond({"message": "Application not found."}, 404)
+        commit = body.get("commit")
+        extra = sorted(set(body) - {"commit"})
+        if not isinstance(commit, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._\-/]*", commit) or extra:
+            errors = {field: ["This field is not allowed."] for field in extra}
+            if not isinstance(commit, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._\-/]*", commit or ""):
+                errors["commit"] = ["Invalid rollback commit."]
+            return self.respond({"message": "Validation failed.", "errors": errors}, 422)
+        self.server.events[-1]["commit"] = commit
+        self.server.rollbacks += 1
+        deployment = f"rollback-{self.server.rollbacks}"
+        if uuid == "api":
+            message = next((r["commit_message"] for r in self.server.api_history if r["commit"] == commit), None)
+            self.server.api_history.insert(0, {"deployment_uuid": deployment, "application_id": 2, "pull_request_id": 0, "status": "finished", "commit": commit, "commit_message": message, "rollback": True, "created_at": now(), "finished_at": now()})
+            images["current"] = commit
+            for image in images["images"]:
+                image["is_current"] = image["tag"] == commit
+        return self.respond({"message": "Rollback deployment queued.", "deployment_uuid": deployment})
 
     def provision(self, path, body):
         """Creates, sets up, starts, and deletes services the way Coolify 4.3 answers. `None` passes the request on."""

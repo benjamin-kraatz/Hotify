@@ -1,6 +1,6 @@
 import Foundation
 
-/// The acknowledgement Coolify returns for start, stop, restart, cancel, preview delete, and variable delete.
+/// The acknowledgement Coolify returns for start, stop, restart, cancel, rollback, preview delete, and variable delete.
 public struct QueuedAction: Decodable, Sendable, Hashable {
     public var message: String?
     public var deploymentUUID: String?

@@ -157,6 +157,9 @@ private struct DeploymentSummary: View {
             if line.isRestart {
                 Tag(text: "Restart")
             }
+            if line.isRollback {
+                Tag(text: "Rollback")
+            }
         }
         if let commit = line.commit {
             Text(commit)

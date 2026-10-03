@@ -5,11 +5,16 @@ import Foundation
 struct DeploymentLine: Identifiable, Hashable {
     var id: String
     var status: String
+    /// The commit shortened to 7 characters, for display.
     var commit: String?
+    /// The commit as Coolify sent it, to match against the images it kept.
+    var commitSHA: String?
     var message: String?
     /// The pull request a preview deployment builds. `nil` for a production deployment.
     var pullRequest: Int?
     var isRestart = false
+    /// Ran an image Coolify kept, rather than a new build.
+    var isRollback = false
     var startedAt: Date?
     var finishedAt: Date?
     var url: URL?
@@ -39,6 +44,7 @@ extension DeploymentLine {
         status = deployment.status ?? "unknown"
         if let commit = deployment.commit, !commit.isEmpty, commit != "HEAD" {
             self.commit = String(commit.prefix(7))
+            commitSHA = commit
         }
         if let message = deployment.commitMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
             // Only the subject line. The body belongs in the git host, not a list row.
@@ -46,6 +52,7 @@ extension DeploymentLine {
         }
         pullRequest = deployment.isPreview ? deployment.pullRequestID : nil
         isRestart = deployment.restartOnly == true
+        isRollback = deployment.rollback == true
         startedAt = deployment.createdAtDate
         finishedAt = deployment.finishedAtDate
         if let raw = deployment.deploymentURL?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {

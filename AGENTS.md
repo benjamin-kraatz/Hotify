@@ -13,6 +13,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
   - `Projects/` shows one project: its resources by environment, the previews of all its applications, and the variables the project and its environments share. It opens from the project's head in the dashboard and takes the detail column. A resource opened from it offers the way back. It also holds the colors you give projects and environments: `PlaceColors` keeps them per instance, on the device and in iCloud key-value storage, since Coolify has no such field.
+  - `Rollback/` goes back to an image Coolify kept for an application: the toolbar's Roll Back menu, Roll Back to This on a deployment, and the confirmation before either.
   - `Provisioning/` creates services from Coolify's one-click templates: a gallery, then placement, setup, and the first start, in one sheet that opens from a project page's New Service button, its ⇧⌘N in the Project menu, or an empty dashboard. From a project, the sheet starts in that project, on the server that runs most of it.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
