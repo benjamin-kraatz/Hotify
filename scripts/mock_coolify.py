@@ -140,6 +140,12 @@ class Fixture(ThreadingHTTPServer):
             {"deployment_uuid": "api-1", "application_id": 2, "pull_request_id": 0, "status": "finished", "commit": API_OLDER, "commit_message": "feat: rate limit headers", "created_at": "2026-09-28T09:00:00Z", "finished_at": "2026-09-28T09:00:40Z"},
         ]
         self.rollbacks = 0
+        # Deployments that run for a few seconds, then end as `result`. GET /deployments lists them while they run.
+        self.running = {}
+        self.fail_next = False
+        self.server_reachable = True
+        # How often each path was read, to tell whether a poller is running.
+        self.hits = {}
         self.deploys = 0
         self.rollback_images = copy.deepcopy(ROLLBACK_IMAGES)
         # New environments and shared variables count up from here, clear of the ids above.
@@ -186,6 +192,9 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path.removeprefix("/api/v1")
         if path == "/__fixture/events":
             return self.respond(self.server.events)
+        if path == "/__fixture/hits":
+            return self.respond(self.server.hits)
+        self.server.hits[path] = self.server.hits.get(path, 0) + 1
         if path == "/version":
             return self.respond("4.3.23")
         if path == "/health":
@@ -206,7 +215,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/servers/server/destinations":
             return self.respond([{"uuid": "fixture-network", "name": "Fixture network", "network": "coolify", "server_uuid": "server"}])
         if path == "/servers":
-            return self.respond([{"uuid": "server", "name": "Fixture server", "is_reachable": 1}])
+            return self.respond([{"uuid": "server", "name": "Fixture server", "is_reachable": 1 if self.server.server_reachable else 0}])
         if path == "/applications":
             return self.respond(list(self.server.applications.values()))
         if path.startswith("/applications/") and path.count("/") == 2:
@@ -227,7 +236,11 @@ class Handler(BaseHTTPRequestHandler):
             uuid = path.split("/")[2]
             return self.respond(self.server.service(uuid)) if uuid in self.server.services else self.respond({"message": "Service not found."}, 404)
         if path == "/deployments":
-            return self.respond([{"deployment_uuid": "api-pr-7", "application_id": 2, "application_name": "Fixture API", "pull_request_id": 7, "status": "in_progress"}])
+            running = [self.running_row(row) for row in self.server.running.values() if time.monotonic() < row["ends_at"]]
+            return self.respond([{"deployment_uuid": "api-pr-7", "application_id": 2, "application_name": "Fixture API", "pull_request_id": 7, "status": "in_progress"}] + running)
+        if path.startswith("/deployments/") and path.rsplit("/", 1)[1] in self.server.running:
+            row = self.running_row(self.server.running[path.rsplit("/", 1)[1]])
+            return self.respond({**row, "logs": json.dumps([{"timestamp": "2026-10-03T08:00:00Z", "output": line} for line in (FAILED_BUILD if row["status"] == "failed" else FINISHED_BUILD)])})
         if path == "/deployments/applications/api":
             previews = [
                 {"deployment_uuid": "api-pr-7", "application_id": 2, "pull_request_id": 7, "status": "in_progress", "commit": "9f2c1ab4", "commit_message": "feat: rate limits", "created_at": now()},
@@ -276,6 +289,48 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond([{"uuid": "daily", "enabled": "1", "frequency": "daily", "databases_to_backup": "app", "executions": self.server.executions}])
         return self.respond({"message": "Fixture endpoint not found"}, 404)
 
+    def running_row(self, row):
+        """A running fixture deployment as Coolify lists it: building until its time is up, then its result."""
+        status = "in_progress" if time.monotonic() < row["ends_at"] else row["result"]
+        return {k: v for k, v in row.items() if k not in ("ends_at", "result")} | {"status": status}
+
+    def start_deployment(self, uuid, is_api, seconds=8):
+        """Starts a deployment of an application that builds for `seconds`, failing when the next one should."""
+        record = self.server.applications[uuid]
+        self.server.deploys += 1
+        deployment = f"deploy-{self.server.deploys}"
+        result = "failed" if self.server.fail_next else "finished"
+        self.server.fail_next = False
+        commit = record.get("git_commit_sha") or "HEAD"
+        self.server.running[deployment] = {"deployment_uuid": deployment, "application_id": record["id"], "application_name": record["name"], "pull_request_id": 0, "commit": commit, "commit_message": "feat: a fixture change" if result == "finished" else "chore: bump node to 24", "is_api": is_api, "created_at": now(), "ends_at": time.monotonic() + seconds, "result": result}
+        return deployment
+
+    def fixture_control(self, path, query):
+        """Changes fixture state the way something outside Hotify would: a push, a crash, a lost server, a failed backup."""
+        value = lambda name, default=None: query.get(name, [default])[0]
+        if path == "/__fixture/push":
+            uuid = value("uuid", "web")
+            if value("fail") == "1":
+                self.server.fail_next = True
+            return self.respond({"deployment_uuid": self.start_deployment(uuid, is_api=False, seconds=int(value("seconds", "8")))})
+        if path == "/__fixture/fail-next":
+            self.server.fail_next = True
+            return self.respond({"message": "The next deployment fails."})
+        if path == "/__fixture/status":
+            uuid, status = value("uuid"), value("status", "exited")
+            record = self.server.applications.get(uuid) or (self.server.database if uuid == "db" else None) or (self.server.standing if uuid == "metrics" else None)
+            if record is None:
+                return self.respond({"message": "Unknown resource"}, 404)
+            record["status"] = status
+            return self.respond({"uuid": uuid, "status": status})
+        if path == "/__fixture/server":
+            self.server.server_reachable = value("reachable", "1") == "1"
+            return self.respond({"is_reachable": self.server.server_reachable})
+        if path == "/__fixture/backup-fail":
+            self.server.executions.insert(0, {"uuid": f"backup-{len(self.server.executions)}", "status": "failed", "message": "Fixture storage is full", "created_at": now(), "size": "0"})
+            return self.respond({"message": "A backup failed."})
+        return self.respond({"message": "Unknown fixture control"}, 404)
+
     @staticmethod
     def scope(project, parts):
         """`[uuid, "envs"]` is the project. `[uuid, "environments", ref, "envs", ...]` is one environment."""
@@ -302,6 +357,8 @@ class Handler(BaseHTTPRequestHandler):
             path = urlsplit(self.path).path.removeprefix("/api/v1")
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
             self.server.events.append({"method": self.command, "path": path})
+            if path.startswith("/__fixture/"):
+                return self.fixture_control(path, parse_qs(urlsplit(self.path).query))
             if path == "/databases/db/backups/daily" and body == {"backup_now": True}:
                 self.server.executions.insert(0, {"uuid": f"backup-{len(self.server.executions)}", "status": "success", "message": "Fixture backup completed", "created_at": now(), "size": "1024", "filename": "fixture.sql"})
                 return self.respond({"message": "Database backup configuration updated"})
@@ -352,8 +409,7 @@ class Handler(BaseHTTPRequestHandler):
         record = self.server.applications.get(uuid)
         if record is None:
             return self.respond({"message": "Queued", "deployments": []})
-        self.server.deploys += 1
-        deployment = f"deploy-{self.server.deploys}"
+        deployment = self.start_deployment(uuid, is_api=True)
         commit = record.get("git_commit_sha") or "HEAD"
         self.server.events[-1].update({"resource_uuid": uuid, "commit": commit, "tag": record.get("docker_registry_image_tag")})
         if uuid == "api":

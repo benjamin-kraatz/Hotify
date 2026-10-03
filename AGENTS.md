@@ -12,6 +12,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
+  - `Notifications/` tells you, on the Mac, when a deploy fails or finishes, a resource stops or turns unhealthy, a backup fails or runs late, or a server drops. It checks each instance whose notifications are on every 30 seconds while Hotify runs, and a click opens the place through a `hotify://` link. `LocalActions` remembers what this device started, which tells your own deploys from a push.
   - `Projects/` shows one project: its resources by environment, the previews of all its applications, and the variables the project and its environments share. It opens from the project's head in the dashboard and takes the detail column. A resource opened from it offers the way back. It also holds the colors you give projects and environments: `PlaceColors` keeps them per instance, on the device and in iCloud key-value storage, since Coolify has no such field.
   - `Versions/` changes which version of an application runs. The toolbar's Versions menu rolls back to an image Coolify kept, and Roll Back to This does the same from a deployment. Deploy a Version deploys any commit or image tag, once or pinned, and lists a GitHub branch's recent commits to pick from.
   - `Provisioning/` creates services from Coolify's one-click templates: a gallery, then placement, setup, and the first start, in one sheet that opens from a project page's New Service button, its ⇧⌘N in the Project menu, or an empty dashboard. From a project, the sheet starts in that project, on the server that runs most of it.
@@ -28,7 +29,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Resource/` has `ResourceSummary`, its route, place, actions, and transitions, and how a deployment's status reads.
   - `Backups/` reads backup runs and schedules, including when one is overdue.
   - `Storage/` wraps the Keychain and the App Group.
-  - `Widgets/` has the `hotify://` resource link, which can point at a place inside a resource, and the call that reloads every widget.
+  - `Widgets/` has the `hotify://` resource link, which can point at a place inside a resource, such as one deployment or the rollback confirmation, and the call that reloads every widget.
 - `CoolifyAPI/` is a local Swift package the app depends on.
   - `Client/` has `CoolifyClient` and one `CoolifyClient+<Group>.swift` extension per endpoint group.
   - `HTTP/` has URL normalization and errors.

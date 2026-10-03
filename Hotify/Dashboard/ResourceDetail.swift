@@ -57,10 +57,16 @@ struct ResourceDetailScreen: View {
             _previewPlace = State(initialValue: place)
         case .backups:
             _tab = State(initialValue: .backups)
-        case nil:
+        case .deployment:
+            _tab = State(initialValue: .deployments)
+        case .rollback, nil:
             break
         }
+        opening = entry?.place
     }
+
+    /// Where a link asked the screen to open, for the detail to act on once.
+    private let opening: ResourceEntry.Place?
 
     /// The container whose logs show: the one picked, else the first running one, else the first.
     private var logContainer: ContainerSummary? {
@@ -109,6 +115,7 @@ struct ResourceDetailScreen: View {
             },
             back: back,
             onOpenProject: onOpenProject,
+            opening: opening,
             onVersionChanged: {
                 Task {
                     await model.refresh()
@@ -178,6 +185,8 @@ struct ResourceDetail: View {
     /// Where back leads from the resource's own screen. `nil` when the resource is the top of the column.
     var back: DetailBack?
     var onOpenProject: (() -> Void)?
+    /// A deployment to open, or a rollback to ask about, when the screen appears. A notification's link sets it.
+    var opening: ResourceEntry.Place?
     /// Reloads the history, the images, and the settings once a rollback or another version queued.
     var onVersionChanged: () -> Void = {}
     var onAction: (ResourceAction) -> Void
@@ -196,6 +205,11 @@ struct ResourceDetail: View {
     @State private var rollbackAfterSheet: RollbackCandidate?
     /// Something about the last version deployed that the user should know, such as a pin that stayed.
     @State private var versionNotice: String?
+    @State private var didOpen = false
+    /// The deployment a link opened to have explained.
+    @State private var explainedDeploymentID: String?
+    /// Set by a link to roll back, until the images arrive to pick from.
+    @State private var wantsRollback = false
     @State private var showsPreviewDeployment = false
     @State private var showsGitHubAccess = false
     @State private var previewGeneration = 0
@@ -378,13 +392,18 @@ struct ResourceDetail: View {
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
         }
+        .task { followOpening() }
+        .onChange(of: rollbackModel.hasLoaded) { _, _ in askRollbackIfWanted() }
         .rollbackConfirmation(for: $rollbackCandidate) { image in
             rollBack(to: image)
         }
         #if os(iOS)
         .sheet(item: $selectedDeployment) { deployment in
             NavigationStack {
-                DeploymentDetail(client: deploymentClient, initial: deployment)
+                DeploymentDetail(
+                    client: deploymentClient, initial: deployment,
+                    explainsOnLoad: explainedDeploymentID == deployment.id
+                )
                 .padding(.top, 8)
                 .navigationTitle("Deployment")
                 .navigationBarTitleDisplayMode(.inline)
@@ -458,6 +477,33 @@ struct ResourceDetail: View {
         }
         ToolbarItem(placement: .primaryAction) {
             ResourceGuideButton(kind: resource.kind)
+        }
+    }
+
+    /// Acts once on where a link asked to open: a deployment, maybe explained, or the rollback confirmation.
+    private func followOpening() {
+        guard !didOpen, let opening else { return }
+        didOpen = true
+        switch opening {
+        case .deployment(let id, let explains):
+            selectedDeployment = DeploymentLine(id: id, status: "unknown")
+            explainedDeploymentID = explains ? id : nil
+        case .rollback:
+            wantsRollback = true
+            askRollbackIfWanted()
+        case .deployments, .previews, .backups:
+            break
+        }
+    }
+
+    /// Asks to roll back to the newest image before the running one, once Coolify listed them.
+    private func askRollbackIfWanted() {
+        guard wantsRollback, rollbackModel.hasLoaded else { return }
+        wantsRollback = false
+        if let image = rollbackModel.images.first(where: { !$0.isCurrent }) {
+            rollbackCandidate = RollbackCandidate(image: image, resourceName: resource.name)
+        } else {
+            versionNotice = "Coolify kept no earlier image of \(resource.name) to roll back to."
         }
     }
 
@@ -573,8 +619,11 @@ struct ResourceDetail: View {
                     // Switching tabs inserts the container, which fades like every other tab.
                     ZStack {
                         if let openDeployment {
-                            DeploymentDetail(client: deploymentClient, initial: openDeployment)
-                                .transition(.move(edge: .trailing).combined(with: .opacity))
+                            DeploymentDetail(
+                                client: deploymentClient, initial: openDeployment,
+                                explainsOnLoad: explainedDeploymentID == openDeployment.id
+                            )
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
                         } else {
                             DeploymentTimeline(
                                 deployments: deployments,

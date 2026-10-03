@@ -52,6 +52,7 @@ final class DeployVersionModel {
         do {
             let deployed = try await client.deploy(
                 application, version: version, restoring: keepsPinned ? nil : previous)
+            LocalActions.note(.deployment, .application(application))
             error = nil
             return deployed
         } catch is CancellationError {

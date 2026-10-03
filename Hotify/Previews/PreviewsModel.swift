@@ -105,6 +105,7 @@ final class PreviewsModel {
         defer { if generation == self.generation { work[number] = nil } }
         do {
             let result = try await client.deployPreview(applicationUUID: applicationUUID, pullRequestID: number)
+            LocalActions.note(.deployment, .application(applicationUUID))
             guard generation == self.generation,
                 let queued = result.deployments.first(where: { $0.resourceUUID == applicationUUID })
             else { return nil }

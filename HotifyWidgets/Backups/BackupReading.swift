@@ -47,7 +47,7 @@ struct BackupReading: Codable, Hashable {
     func isOverdue(at date: Date) -> Bool {
         guard enabledConfigurations > 0, let interval else { return false }
         guard let lastSuccessAt else { return lastRunAt != nil }
-        return date.timeIntervalSince(lastSuccessAt) > interval * 1.5 + 1_800
+        return date.timeIntervalSince(lastSuccessAt) > DatabaseBackup.lateness(interval)
     }
 }
 

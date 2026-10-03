@@ -48,6 +48,11 @@ struct ContentView: View {
         }
         .onChange(of: menuBar.navigation) { _, _ in followMenuBarSelection() }
         .onOpenURL { url in
+            // A notification about a whole instance opens its dashboard.
+            if let link = InstanceLink(url: url), store.instances.contains(where: { $0.id == link.instanceID }) {
+                store.selectedID = link.instanceID
+                return
+            }
             // A widget's link goes through the menu bar's request, so a switch of instance reopens it the same way.
             guard let link = ResourceLink(url: url) else { return }
             menuBar.navigation = MenuBarNavigation(instanceID: link.instanceID, route: link.route, place: link.place)

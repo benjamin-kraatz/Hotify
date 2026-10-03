@@ -212,6 +212,7 @@ final class DashboardModel {
         let generation = self.generation
         let target = route.busyTarget
         transitions[target] = ResourceTransition(action: action)
+        LocalActions.note(action, route)
         do {
             try await send(action, route: route, client: client)
             guard generation == self.generation else { return }
