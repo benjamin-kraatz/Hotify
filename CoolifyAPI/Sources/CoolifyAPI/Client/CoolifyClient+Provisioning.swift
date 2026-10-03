@@ -9,6 +9,14 @@ extension CoolifyClient {
         try await post("services", body: draft)
     }
 
+    /// Creates a database, and starts it when the draft says so. Coolify generates its password and answers with
+    /// the connection strings, which hold it.
+    ///
+    /// Coolify answers 400 when a public port is taken.
+    public func createDatabase(_ draft: DatabaseDraft) async throws -> CreatedDatabase {
+        try await post("databases/\(draft.engine.rawValue)", body: draft)
+    }
+
     /// Changes a service. Coolify parses its compose file again afterwards, so new variables appear.
     public func updateService(_ uuid: String, _ update: ServiceUpdate) async throws -> CreatedService {
         try await patch("services/\(CoolifyURL.encodePathComponent(uuid))", body: update)

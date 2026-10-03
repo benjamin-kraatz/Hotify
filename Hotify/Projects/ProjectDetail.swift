@@ -18,7 +18,7 @@ struct ProjectDetailScreen: View {
     var onAction: (ResourceAction, ResourceRoute) -> Void
     /// Reloads the dashboard's projects, after a rename or a new environment.
     var onChanged: () async -> Void
-    /// Opens the New Service sheet in this project. `nil` hides the button, such as before the instance connects.
+    /// Opens the New Resource sheet in this project. `nil` hides the button, such as before the instance connects.
     var onNewService: (() -> Void)?
 
     @SwiftUI.Environment(\.placePalette) private var palette
@@ -145,7 +145,7 @@ struct ProjectDetail: View {
         _, _, _ in
     }
     var onReload: () async -> Void = {}
-    /// `nil` hides the New Service button.
+    /// `nil` hides the New Resource button.
     var onNewService: (() -> Void)?
 
     @State private var sheet: ProjectSheet?
@@ -255,7 +255,7 @@ struct ProjectDetail: View {
             // The button leaves with the page, since a resource opened from here brings a toolbar of its own.
             ToolbarItemGroup(placement: .primaryAction) {
                 if let onNewService {
-                    Button("New Service", systemImage: "plus", action: onNewService)
+                    Button("New Resource", systemImage: "plus", action: onNewService)
                         .help("Create a service in \(project.name) from one of Coolify's templates (⇧⌘N)")
                 }
                 Menu {

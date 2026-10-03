@@ -1,13 +1,17 @@
 import SwiftUI
 
-/// The new service coming up. The flame flickers while its containers start, then catches, and can be stoked.
-struct IgnitionView: View {
+/// The new service or database coming up. The flame flickers while its containers start, then catches, and can be
+/// stoked. `accessory` sits under the status, such as how to connect to a new database.
+struct IgnitionView<Accessory: View>: View {
     var name: String
     var ignition: Ignition
     /// The addresses the service answers on, offered once it runs.
     var addresses: [URL]
+    /// A database is one container and has no addresses, which changes what the screen says.
+    var isDatabase = false
     var onOpen: () -> Void
     var onClose: () -> Void
+    @ViewBuilder var accessory: Accessory
 
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -25,13 +29,19 @@ struct IgnitionView: View {
     private var detail: String {
         switch ignition.phase {
         case .starting:
-            "Coolify is pulling images and starting \(containerCount). The first start can take a few minutes."
+            isDatabase
+                ? "Coolify is pulling the image and starting the database. The first start can take a minute."
+                : "Coolify is pulling images and starting \(containerCount). The first start can take a few minutes."
         case .running:
-            "Every container is up. It's in your dashboard now, with its logs and variables."
+            isDatabase
+                ? "It's up. It's in your dashboard now, with its logs and backups."
+                : "Every container is up. It's in your dashboard now, with its logs and variables."
         case .stalled:
             "A large image may still be pulling. Hotify keeps watching, or open it to read its logs."
         case .stopped:
-            "Its containers came up, then stopped. Its logs usually say why, often a setting it needs."
+            isDatabase
+                ? "It came up, then stopped. Its logs usually say why."
+                : "Its containers came up, then stopped. Its logs usually say why, often a setting it needs."
         }
     }
 
@@ -81,7 +91,10 @@ struct IgnitionView: View {
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
 
-                if !ignition.containers.isEmpty {
+                accessory
+                    .frame(maxWidth: 480)
+
+                if !ignition.containers.isEmpty, !isDatabase {
                     containers
                 }
             }
@@ -191,6 +204,17 @@ struct IgnitionView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
         .background(.bar)
+    }
+}
+
+extension IgnitionView where Accessory == EmptyView {
+    init(
+        name: String, ignition: Ignition, addresses: [URL], onOpen: @escaping () -> Void,
+        onClose: @escaping () -> Void
+    ) {
+        self.init(
+            name: name, ignition: ignition, addresses: addresses, onOpen: onOpen, onClose: onClose,
+            accessory: { EmptyView() })
     }
 }
 

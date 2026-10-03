@@ -144,6 +144,8 @@ class Fixture(ThreadingHTTPServer):
         self.running = {}
         self.fail_next = False
         self.server_reachable = True
+        # Databases created through the API. Each comes up a few seconds after it is created.
+        self.new_databases = {}
         # How often each path was read, to tell whether a poller is running.
         self.hits = {}
         self.deploys = 0
@@ -222,9 +224,11 @@ class Handler(BaseHTTPRequestHandler):
             record = self.server.applications.get(path.split("/")[2])
             return self.respond(record) if record else self.respond({"message": "Application not found"}, 404)
         if path == "/databases":
-            return self.respond([self.server.database])
+            return self.respond([self.server.database] + [self.new_database(uuid) for uuid in self.server.new_databases])
         if path == "/databases/db":
             return self.respond(self.server.database)
+        if path.startswith("/databases/") and path.count("/") == 2 and path.split("/")[2] in self.server.new_databases:
+            return self.respond(self.new_database(path.split("/")[2]))
         if path == "/services":
             return self.respond([self.server.standing] + [self.server.service(uuid) for uuid in self.server.services])
         if path == "/services/metrics":
@@ -441,8 +445,36 @@ class Handler(BaseHTTPRequestHandler):
                 image["is_current"] = image["tag"] == commit
         return self.respond({"message": "Rollback deployment queued.", "deployment_uuid": deployment})
 
+    DATABASE_ENGINES = {"postgresql": ("postgres", 5432, "standalone-postgresql"), "mysql": ("mysql", 3306, "standalone-mysql"), "mariadb": ("mariadb", 3306, "standalone-mariadb"), "mongodb": ("mongodb", 27017, "standalone-mongodb"), "redis": ("redis", 6379, "standalone-redis"), "keydb": ("keydb", 6379, "standalone-keydb"), "dragonfly": ("dragonfly", 6379, "standalone-dragonfly"), "clickhouse": ("clickhouse", 9000, "standalone-clickhouse")}
+    DATABASE_FIELDS = {"name", "description", "image", "public_port", "public_port_timeout", "is_public", "project_uuid", "environment_name", "environment_uuid", "server_uuid", "destination_uuid", "instant_deploy"}
+
+    def new_database(self, uuid):
+        """A database created through the API: starting for 5 seconds after it was created, then running."""
+        record = self.server.new_databases[uuid]
+        status = "running:healthy" if time.monotonic() - record["created"] > 5 else "starting"
+        return {k: v for k, v in record.items() if k != "created"} | {"status": status}
+
+    def create_database(self, engine, body):
+        """Creates a database the way Coolify 4.3 answers: 422 for an unknown field, 400 for a taken public port, and
+        201 with its connection strings, which carry a password."""
+        extra = sorted(set(body) - self.DATABASE_FIELDS)
+        if extra:
+            return self.respond({"message": "Validation failed.", "errors": {field: ["This field is not allowed."] for field in extra}}, 422)
+        if body.get("is_public") and body.get("public_port") == 5432:
+            return self.respond({"message": "Public port already used by another database."}, 400)
+        user, port, kind = self.DATABASE_ENGINES[engine]
+        uuid = f"newdb-{len(self.server.new_databases) + 1}"
+        self.server.new_databases[uuid] = {"uuid": uuid, "name": body.get("name") or f"{engine}-database-{uuid}", "description": body.get("description"), "database_type": kind, "environment_id": 1, "is_public": bool(body.get("is_public")), "public_port": body.get("public_port"), "image": body.get("image"), "created": time.monotonic()}
+        payload = {"uuid": uuid, "internal_db_url": f"{engine}://{user}:fixture-password@{uuid}:{port}/{user}"}
+        if body.get("is_public") and body.get("public_port"):
+            payload["external_db_url"] = f"{engine}://{user}:fixture-password@127.0.0.1:{body['public_port']}/{user}"
+        self.server.events[-1]["engine"] = engine
+        return self.respond(payload, 201)
+
     def provision(self, path, body):
         """Creates, sets up, starts, and deletes services the way Coolify 4.3 answers. `None` passes the request on."""
+        if self.command == "POST" and path.startswith("/databases/") and path.split("/")[2] in self.DATABASE_ENGINES and path.count("/") == 2:
+            return self.create_database(path.split("/")[2], body)
         services = self.server.services
         if path == "/services" and self.command == "POST":
             uuid = f"svc-{len(services) + 1}"

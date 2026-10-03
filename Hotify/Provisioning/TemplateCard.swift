@@ -1,10 +1,11 @@
 import CoolifyAPI
 import SwiftUI
 
-/// One template in the gallery: its logo, name, and what it is for.
+/// One card in the gallery, for a template or a database engine: its logo, name, and what it is for.
 struct TemplateCard: View {
-    var template: ServiceTemplate
-    var instanceRoot: URL?
+    var name: String
+    var slogan: String
+    var logoURL: URL?
 
     @State private var isHovered = false
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -12,7 +13,7 @@ struct TemplateCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
-                TemplateLogo(name: template.displayName, url: template.logoURL(instanceRoot: instanceRoot), size: 40)
+                TemplateLogo(name: name, url: logoURL, size: 40)
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.forward")
                     .font(.caption.weight(.bold))
@@ -22,11 +23,11 @@ struct TemplateCard: View {
                     .padding(.top, 4)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text(template.displayName)
+                Text(name)
                     .font(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                Text(template.slogan)
+                Text(slogan)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
@@ -45,7 +46,14 @@ struct TemplateCard: View {
         .onHover { isHovered = $0 }
         .animation(.snappy(duration: 0.2), value: isHovered)
         .accessibilityElement(children: .combine)
-        .accessibilityHint(template.slogan)
+        .accessibilityHint(slogan)
+    }
+}
+
+extension TemplateCard {
+    init(template: ServiceTemplate, instanceRoot: URL?) {
+        self.init(
+            name: template.displayName, slogan: template.slogan, logoURL: template.logoURL(instanceRoot: instanceRoot))
     }
 }
 
@@ -53,9 +61,12 @@ struct TemplateCard: View {
     LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 14) {
         TemplateCard(
             template: ServiceTemplate(
-                slug: "ghost", slogan: "Ghost is a content management system (CMS) and blogging platform."))
-        TemplateCard(template: ServiceTemplate(slug: "uptime-kuma", slogan: "A fancy self-hosted monitoring tool."))
-        TemplateCard(template: ServiceTemplate(slug: "n8n", slogan: "Workflow automation for technical people."))
+                slug: "ghost", slogan: "Ghost is a content management system (CMS) and blogging platform."),
+            instanceRoot: nil)
+        TemplateCard(
+            template: ServiceTemplate(slug: "uptime-kuma", slogan: "A fancy self-hosted monitoring tool."),
+            instanceRoot: nil)
+        TemplateCard(name: "PostgreSQL", slogan: "The relational database most apps expect.", logoURL: nil)
     }
     .padding(24)
     .frame(width: 760)
