@@ -514,6 +514,87 @@ final class CoolifyAPITests: XCTestCase {
         XCTAssertEqual(result.deployments.first?.deploymentUUID, "dep-3")
     }
 
+    func testRollbackSendsTheTagAndReturnsTheDeployment() async throws {
+        let client = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/api/v1/applications/app%201/rollback")
+            XCTAssertTrue(queryItems(request).isEmpty)
+            let body = try JSONSerialization.jsonObject(with: Data((bodyText(request) ?? "").utf8)) as? NSDictionary
+            XCTAssertEqual(body, ["commit": "5aa01e77c3d4e5f60718293a4b5c6d7e8f901234"] as NSDictionary)
+            return (200, Data(#"{"message":"Rollback deployment queued.","deployment_uuid":"dep-9"}"#.utf8), [:])
+        }
+        let deployment = try await client.rollback("app 1", to: "5aa01e77c3d4e5f60718293a4b5c6d7e8f901234")
+        XCTAssertEqual(deployment, "dep-9")
+    }
+
+    func testRollbackWithoutADeploymentFails() async throws {
+        let client = try makeClient { _ in
+            (200, Data(#"{"message":"Deployment already queued for this commit."}"#.utf8), [:])
+        }
+        do {
+            _ = try await client.rollback("app", to: "latest")
+            XCTFail("A rollback Coolify did not queue must not count as queued")
+        } catch let error as CoolifyError {
+            XCTAssertEqual(error.message, "Deployment already queued for this commit.")
+        }
+    }
+
+    func testRollbackImagesHideHelpersAndReadDockerDates() async throws {
+        let current = "5aa01e77c3d4e5f60718293a4b5c6d7e8f901234"
+        let older = "1b2c3d4e5f60718293a4b5c6d7e8f9012345678a"
+        let fixture = """
+            {"current":"\(current)","images":[
+              {"tag":"\(older)","created_at":"2026-09-28 09:00:40 +0200 CEST","is_current":0},
+              {"tag":"\(current)-build","created_at":"2026-09-30 16:21:00 +0000 UTC","is_current":false},
+              {"tag":"pr-7-9f2c1ab4","created_at":"2026-10-01 08:00:00 +0000 UTC","is_current":false},
+              {"tag":"build","created_at":"2026-09-30 16:20:00 +0000 UTC","is_current":false},
+              {"tag":"\(current)","created_at":"2026-09-30 16:21:30 +0000 UTC","is_current":"1"}
+            ]}
+            """
+        let client = try makeClient { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.path, "/api/v1/applications/app/rollback-images")
+            return (200, Data(fixture.utf8), [:])
+        }
+        let images = try await client.rollbackImages("app")
+        XCTAssertEqual(images.images.count, 5)
+        XCTAssertEqual(images.targets.map(\.tag), [current, older])
+        XCTAssertEqual(images.targets.map(\.isCurrent), [true, false])
+        XCTAssertEqual(images.targets[0].shortTag, "5aa01e7")
+        let date = try XCTUnwrap(images.targets[1].createdAtDate)
+        // 09:00:40 at +0200 is 07:00:40 UTC.
+        XCTAssertEqual(date.timeIntervalSince1970, 1_790_578_840, accuracy: 0.5)
+
+        let empty = try CoolifyJSON.decoder().decode(
+            RollbackImages.self, from: Data(#"{"current":null,"images":[]}"#.utf8))
+        XCTAssertNil(empty.current)
+        XCTAssertTrue(empty.targets.isEmpty)
+    }
+
+    func testRollbackImagesMatchDeploymentsByCommitPrefix() {
+        let image = RollbackImage(tag: "5aa01e77c3d4e5f60718293a4b5c6d7e8f901234")
+        XCTAssertTrue(image.matches(commit: "5aa01e77"))
+        XCTAssertTrue(image.matches(commit: "5AA01E77C3D4E5F60718293A4B5C6D7E8F901234"))
+        XCTAssertFalse(image.matches(commit: "5aa01e"))
+        XCTAssertFalse(image.matches(commit: "HEAD"))
+        XCTAssertFalse(image.matches(commit: nil))
+        XCTAssertFalse(image.matches(commit: "1b2c3d4e"))
+
+        let tagged = RollbackImage(tag: "1.4.2")
+        XCTAssertFalse(tagged.isCommit)
+        XCTAssertEqual(tagged.shortTag, "1.4.2")
+        XCTAssertFalse(tagged.matches(commit: "1.4.2"))
+    }
+
+    func testDeploymentReadsTheRollbackFlag() throws {
+        let page = try CoolifyJSON.decoder().decode(
+            DeploymentPage.self,
+            from: Data(
+                #"{"count":2,"deployments":[{"deployment_uuid":"a","rollback":1},{"deployment_uuid":"b","rollback":false}]}"#
+                    .utf8))
+        XCTAssertEqual(page.deployments.map(\.rollback), [true, false])
+    }
+
     func testEnvironmentVariablesKeepHiddenValuesApartFromEmptyOnes() throws {
         let json = """
             [

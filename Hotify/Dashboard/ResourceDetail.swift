@@ -18,6 +18,7 @@ struct ResourceDetailScreen: View {
     @State private var variables: VariablesModel
     @State private var configuration: ConfigurationModel
     @State private var previews = PreviewsModel()
+    @State private var rollback = RollbackModel()
     @State private var chosenContainerID: Int?
     @State private var tab: DetailTab?
     @State private var previewPlace: PreviewPlace?
@@ -96,6 +97,7 @@ struct ResourceDetailScreen: View {
             variables: variables,
             configuration: configuration,
             previewsModel: previews,
+            rollbackModel: rollback,
             loadError: model.loadError,
             actionError: actionError,
             isLoading: model.isLoading,
@@ -107,6 +109,12 @@ struct ResourceDetailScreen: View {
             },
             back: back,
             onOpenProject: onOpenProject,
+            onRolledBack: {
+                Task {
+                    await model.refresh()
+                    await rollback.load()
+                }
+            },
             onAction: onAction
         )
         .task(id: resource.route) {
@@ -115,7 +123,9 @@ struct ResourceDetailScreen: View {
             variables.prepare(client, route: resource.route)
             configuration.prepare(client, route: resource.route)
             previews.prepare(client, route: resource.route)
+            rollback.prepare(client, route: resource.route)
             Task { await previews.load() }
+            Task { await rollback.load() }
             await model.setLogSource(logSource)
             while !Task.isCancelled {
                 await model.refresh()
@@ -129,9 +139,10 @@ struct ResourceDetailScreen: View {
         .onChange(of: logSource) { _, source in
             Task { await model.setLogSource(source) }
         }
-        // Pick up the finished deployment now rather than on the next poll.
+        // Pick up the finished deployment now rather than on the next poll. A finished build also leaves a new image.
         .onChange(of: resource.isDeploying) { _, _ in
             Task { await model.refresh() }
+            Task { await rollback.load() }
         }
         .onChange(of: resource.buildingPreviews) { _, _ in
             Task { await model.refresh() }
@@ -156,6 +167,7 @@ struct ResourceDetail: View {
     var variables: VariablesModel
     var configuration = ConfigurationModel()
     var previewsModel = PreviewsModel()
+    var rollbackModel = RollbackModel()
     var loadError: String?
     var actionError: String?
     var isLoading: Bool
@@ -165,6 +177,8 @@ struct ResourceDetail: View {
     /// Where back leads from the resource's own screen. `nil` when the resource is the top of the column.
     var back: DetailBack?
     var onOpenProject: (() -> Void)?
+    /// Reloads the history and the images once a rollback queued.
+    var onRolledBack: () -> Void = {}
     var onAction: (ResourceAction) -> Void
 
     #if os(macOS)
@@ -173,6 +187,9 @@ struct ResourceDetail: View {
     #endif
     @State private var selectedDeployment: DeploymentLine?
     @State private var stopCandidate: ResourceSummary?
+    @State private var rollbackCandidate: RollbackCandidate?
+    /// The iPhone's deployment sheet asks on its own, since a dialog on the screen under it can't show.
+    @State private var sheetRollbackCandidate: RollbackCandidate?
     @State private var showsPreviewDeployment = false
     @State private var showsGitHubAccess = false
     @State private var previewGeneration = 0
@@ -324,6 +341,26 @@ struct ResourceDetail: View {
                     )
                 }
             }
+            if resource.kind == .application, previewPlace == nil {
+                if let openDeployment, let image = rollbackTarget(for: openDeployment) {
+                    ToolbarItem(placement: .primaryAction) {
+                        rollBackToThisButton(image) { rollbackCandidate = $0 }
+                    }
+                } else {
+                    ToolbarItem(placement: .primaryAction) {
+                        RollbackMenu(
+                            images: rollbackModel.images,
+                            hasLoaded: rollbackModel.hasLoaded,
+                            loadError: rollbackModel.loadError,
+                            deployments: deployments,
+                            isBusy: rollbackModel.isRollingBack || deploymentClient == nil,
+                            onChoose: { image in
+                                rollbackCandidate = RollbackCandidate(image: image, resourceName: resource.name)
+                            }
+                        )
+                    }
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 ResourceGuideButton(kind: resource.kind)
             }
@@ -353,9 +390,14 @@ struct ResourceDetail: View {
             selectedDeployment = nil
             previewPlace = nil
             followedPreviewDeployment = nil
+            rollbackCandidate = nil
+            sheetRollbackCandidate = nil
         }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
+        }
+        .rollbackConfirmation(for: $rollbackCandidate) { image in
+            rollBack(to: image)
         }
         #if os(iOS)
         .sheet(item: $selectedDeployment) { deployment in
@@ -370,11 +412,54 @@ struct ResourceDetail: View {
                             selectedDeployment = nil
                         }
                     }
+                    if let image = rollbackTarget(for: deployment) {
+                        ToolbarItem(placement: .primaryAction) {
+                            rollBackToThisButton(image) { sheetRollbackCandidate = $0 }
+                        }
+                    }
                 }
+            }
+            .rollbackConfirmation(for: $sheetRollbackCandidate) { image in
+                rollBack(to: image)
             }
             .presentationDetents([.large])
         }
         #endif
+    }
+
+    /// The kept image a production deployment built, unless it is the one running.
+    private func rollbackTarget(for line: DeploymentLine) -> RollbackImage? {
+        guard deploymentClient != nil, let image = rollbackModel.image(for: line), !image.isCurrent else { return nil }
+        return image
+    }
+
+    private func rollBackToThisButton(_ image: RollbackImage, ask: @escaping (RollbackCandidate) -> Void)
+        -> some View
+    {
+        Button("Roll Back to This…", systemImage: "arrow.uturn.backward") {
+            ask(RollbackCandidate(image: image, resourceName: resource.name))
+        }
+        .help("Run the image Coolify kept from this deployment")
+        .disabled(rollbackModel.isRollingBack)
+    }
+
+    /// Queues the rollback, then opens the deployment it started in place of the one on screen.
+    private func rollBack(to image: RollbackImage) {
+        Task {
+            guard let deployment = await rollbackModel.rollBack(to: image) else { return }
+            let built = deployments.first { !$0.isPreview && image.matches(commit: $0.commitSHA ?? $0.commit) }
+            tab = .deployments
+            selectedDeployment = DeploymentLine(
+                id: deployment,
+                status: "queued",
+                commit: image.isCommit ? image.shortTag : nil,
+                commitSHA: image.isCommit ? image.tag : nil,
+                message: built?.message,
+                isRollback: true,
+                startedAt: .now
+            )
+            onRolledBack()
+        }
     }
 
     /// The resource itself: its header, actions, and tabs.
@@ -404,9 +489,12 @@ struct ResourceDetail: View {
                 if let actionError {
                     NoticeBanner(message: actionError)
                 }
+                if let rollbackError = rollbackModel.error {
+                    NoticeBanner(message: rollbackError)
+                }
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, loadError == nil && actionError == nil ? 0 : 12)
+            .padding(.bottom, loadError == nil && actionError == nil && rollbackModel.error == nil ? 0 : 12)
 
             if tabs.count > 1 {
                 Picker("Show", selection: Binding(get: { currentTab }, set: { tab = $0 })) {
@@ -436,7 +524,11 @@ struct ResourceDetail: View {
                                 onSelect: { selectedDeployment = $0 },
                                 canLoadMore: canLoadMoreDeployments,
                                 onLoadMore: onLoadMoreDeployments,
-                                onShowPreviews: { previewPlace = .board }
+                                onShowPreviews: { previewPlace = .board },
+                                rollbackImages: deploymentClient == nil ? [] : rollbackModel.images,
+                                onRollBack: { image in
+                                    rollbackCandidate = RollbackCandidate(image: image, resourceName: resource.name)
+                                }
                             )
                             .transition(.move(edge: .leading).combined(with: .opacity))
                         }
@@ -480,6 +572,7 @@ struct ResourceDetail: View {
         .animation(reduceMotion ? nil : .snappy, value: selectedDeployment)
         .animation(.snappy, value: loadError)
         .animation(.snappy, value: actionError)
+        .animation(.snappy, value: rollbackModel.error)
     }
 }
 

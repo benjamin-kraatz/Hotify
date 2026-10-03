@@ -47,6 +47,24 @@ extension CoolifyClient {
         try await post("\(applicationPath(uuid))/restart")
     }
 
+    public func rollbackImages(_ uuid: String) async throws -> RollbackImages {
+        try await get("\(applicationPath(uuid))/rollback-images")
+    }
+
+    /// Queues a deployment that runs an image Coolify kept, and returns its UUID. The application's settings stay as
+    /// they are, so the next deploy builds the branch head again.
+    ///
+    /// `tag` is a tag from `rollbackImages`. Coolify answers 422 for one outside `[a-zA-Z0-9._-/]`, and 400 when its
+    /// deployment queue is full.
+    public func rollback(_ uuid: String, to tag: String) async throws -> String {
+        let queued: QueuedAction = try await post(
+            "\(applicationPath(uuid))/rollback", body: RollbackRequest(commit: tag))
+        guard let deployment = queued.deploymentUUID, !deployment.isEmpty else {
+            throw CoolifyError(message: queued.message ?? "Coolify did not queue the rollback.")
+        }
+        return deployment
+    }
+
     public func applicationLogs(
         _ uuid: String,
         window: LogWindow = .lines(100),
@@ -128,3 +146,5 @@ extension CoolifyClient {
         )
     }
 }
+
+private struct RollbackRequest: Encodable { let commit: String }

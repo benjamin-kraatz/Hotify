@@ -20,7 +20,7 @@ A Mac and iPhone app for your self-hosted [Coolify](https://coolify.io).
 
 - **Instances.** Connect as many Coolify instances as you like, over `https` or plain `http` on your LAN. Tokens live in the Keychain. Instances sync between your devices through iCloud.
 - **Dashboard.** Your team, Coolify version, and servers, then every application, database, and service by project and environment. Filter by name, state, or kind.
-- **Actions.** Start, stop, restart, and deploy, or cancel a deployment that is running.
+- **Actions.** Start, stop, restart, and deploy, or cancel a deployment that is running. Roll an application back to an image Coolify kept from an earlier deployment.
 - **Resources.** Logs per container, deployment history, and a database's backups, with Back Up Now. Edit the name, domains, health check, and a database's public port.
 - **Projects.** A page per project with its resources, recent deployments, previews, and shared variables. Add environments, rename things, and give projects and environments a color.
 - **New services.** Pick one of Coolify's one-click templates, place it, set its domains, and watch its first start.

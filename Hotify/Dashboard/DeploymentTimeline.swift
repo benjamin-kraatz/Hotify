@@ -1,3 +1,4 @@
+import CoolifyAPI
 import SwiftUI
 
 /// An application's deployments, newest first, on a timeline. Previews get their own run below production, in blue,
@@ -10,6 +11,10 @@ struct DeploymentTimeline: View {
     var onLoadMore: () -> Void = {}
     /// Opens the previews space. `nil` leaves the link out, as inside a preview.
     var onShowPreviews: (() -> Void)?
+    /// The images Coolify kept. A production row that built one of them offers to roll back to it.
+    var rollbackImages: [RollbackImage] = []
+    /// `nil` leaves Roll Back to This out of the rows' menus.
+    var onRollBack: ((RollbackImage) -> Void)?
 
     @State private var filter = TimelineFilter.all
 
@@ -92,10 +97,23 @@ struct DeploymentTimeline: View {
                     DeploymentRow(line: row, isLast: index == rows.count - 1) {
                         onSelect(row)
                     }
+                    .contextMenu {
+                        if let onRollBack, let image = rollbackTarget(for: row) {
+                            Button("Roll Back to This…", systemImage: "arrow.uturn.backward") {
+                                onRollBack(image)
+                            }
+                        }
+                    }
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
         }
+    }
+
+    /// The image a row built, unless it is the one running.
+    private func rollbackTarget(for line: DeploymentLine) -> RollbackImage? {
+        guard let image = RollbackModel.image(for: line, in: rollbackImages), !image.isCurrent else { return nil }
+        return image
     }
 }
 
@@ -148,6 +166,9 @@ private struct DeploymentRow: View {
                     }
                     if line.isRestart {
                         Tag(text: "Restart")
+                    }
+                    if line.isRollback {
+                        Tag(text: "Rollback")
                     }
                     Spacer(minLength: 8)
                     if let startedAt = line.startedAt {
@@ -235,6 +256,15 @@ private struct DeploymentRow: View {
                 message: "chore: bump node to 24",
                 startedAt: now.addingTimeInterval(-86_400),
                 finishedAt: now.addingTimeInterval(-86_380)
+            ),
+            DeploymentLine(
+                id: "0",
+                status: "finished",
+                commit: "5aa01e7",
+                message: "fix: retry on 502",
+                isRollback: true,
+                startedAt: now.addingTimeInterval(-172_800),
+                finishedAt: now.addingTimeInterval(-172_790)
             ),
             DeploymentLine(
                 id: "p1",

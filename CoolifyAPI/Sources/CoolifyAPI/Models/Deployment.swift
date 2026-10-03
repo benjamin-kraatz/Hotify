@@ -9,6 +9,8 @@ public struct Deployment: Decodable, Sendable, Identifiable, Hashable {
     public var status: String?
     public var applicationName: String?
     public var restartOnly: Bool?
+    /// Set when the deployment ran an image Coolify kept, through `rollback(_:to:)` or Coolify's own Rollback page.
+    public var rollback: Bool?
     public var commit: String?
     public var commitMessage: String?
     public var isAPI: Bool?
@@ -32,6 +34,7 @@ public struct Deployment: Decodable, Sendable, Identifiable, Hashable {
         case logs
         case applicationName
         case restartOnly
+        case rollback
         case commit
         case commitMessage
         case isAPI = "isApi"
@@ -51,6 +54,7 @@ public struct Deployment: Decodable, Sendable, Identifiable, Hashable {
         status = container.flexString(.status)
         applicationName = container.flexString(.applicationName)
         restartOnly = container.flexBool(.restartOnly)
+        rollback = container.flexBool(.rollback)
         commit = container.flexString(.commit)
         commitMessage = container.flexString(.commitMessage)
         isAPI = container.flexBool(.isAPI)
