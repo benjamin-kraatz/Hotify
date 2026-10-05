@@ -656,7 +656,11 @@ struct ResourceDetail: View {
                 case .storage:
                     StorageList(client: deploymentClient, route: resource.route, resourceName: resource.name)
                 case .containers:
-                    ContainerList(containers: resource.containers)
+                    ContainerList(
+                        containers: resource.containers,
+                        client: deploymentClient,
+                        serviceUUID: resource.kind == .service ? resource.route.uuid : nil
+                    )
                 case .variables:
                     VariableList(
                         model: variables,

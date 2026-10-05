@@ -1,8 +1,10 @@
 import Foundation
 
-/// One container inside a service. This is not an `Application`: the id is numeric and there is no uuid.
+/// One container inside a service. This is not an `Application`: the id is numeric, and `uuid` is often absent.
 public struct ServiceApplication: Decodable, Sendable, Identifiable, Hashable, HasResourceStatus {
     public var id: Int
+    /// Empty when the payload omits it. Start, stop, and restart are keyed by this, never by `id`.
+    public var uuid: String
     public var name: String
     public var humanName: String?
     public var status: String?
@@ -12,6 +14,7 @@ public struct ServiceApplication: Decodable, Sendable, Identifiable, Hashable, H
 
     enum CodingKeys: String, CodingKey {
         case id
+        case uuid
         case name
         case humanName
         case status
@@ -23,6 +26,8 @@ public struct ServiceApplication: Decodable, Sendable, Identifiable, Hashable, H
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = container.flexInt(.id) ?? 0
+        // `GET /services/{uuid}` nests containers without a uuid. The application and database lists include one.
+        uuid = container.flexString(.uuid) ?? ""
         name = container.flexString(.name) ?? ""
         humanName = container.flexString(.humanName)
         status = container.flexString(.status)

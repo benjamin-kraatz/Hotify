@@ -1,21 +1,53 @@
+import CoolifyAPI
 import SwiftUI
 
-/// The containers inside a service, each with its own status.
+/// The containers inside a service, each with its own status, and start, stop, and restart when it has a uuid.
 struct ContainerList: View {
     var containers: [ContainerSummary]
+    var client: CoolifyClient?
+    var serviceUUID: String?
+
+    @State private var actions = ContainerActions()
+    @State private var stopTarget: ContainerSummary?
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var rows: [ContainerSummary] {
+        actions.resolved(containers)
+    }
+
+    private var loadID: String {
+        guard client != nil, let serviceUUID, !serviceUUID.isEmpty else { return "" }
+        return serviceUUID
+    }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                ForEach(Array(containers.enumerated()), id: \.element.id) { index, container in
-                    if index > 0 {
-                        Divider()
-                            .padding(.leading, 46)
-                    }
-                    ContainerRow(container: container)
+            VStack(spacing: 12) {
+                if let lookupError = actions.lookupError {
+                    NoticeBanner(message: lookupError)
                 }
+                if let actionError = actions.actionError {
+                    NoticeBanner(message: actionError)
+                }
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.element.listKey) { index, container in
+                        if index > 0 {
+                            Divider()
+                                .padding(.leading, 46)
+                        }
+                        ContainerRow(
+                            container: container,
+                            showsActions: !container.uuid.isEmpty,
+                            isBusy: actions.isBusy(container.uuid),
+                            canAct: client != nil && !actions.isBusy,
+                            onStart: { run(.start, container) },
+                            onRestart: { run(.restart, container) },
+                            onStop: { stopTarget = container }
+                        )
+                    }
+                }
+                .background(Color.primary.opacity(0.045), in: .rect(cornerRadius: 14))
             }
-            .background(Color.primary.opacity(0.045), in: .rect(cornerRadius: 14))
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }
@@ -28,12 +60,56 @@ struct ContainerList: View {
                 )
             }
         }
-        .animation(.snappy, value: containers)
+        .animation(reduceMotion ? nil : .snappy, value: rows.map(\.uuid))
+        .animation(.snappy, value: actions.lookupError)
+        .animation(.snappy, value: actions.actionError)
+        .animation(reduceMotion ? nil : .snappy, value: actions.busyUUID)
+        .task(id: loadID) {
+            actions.reset()
+            guard let client, let serviceUUID, !serviceUUID.isEmpty else { return }
+            await actions.load(client: client, service: serviceUUID)
+        }
+        .confirmationDialog(
+            stopTarget.map { "Stop \($0.name)?" } ?? "",
+            isPresented: Binding(
+                get: { stopTarget != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        stopTarget = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible,
+            presenting: stopTarget
+        ) { container in
+            Button("Stop", role: .destructive) {
+                run(.stop, container)
+            }
+        } message: { container in
+            Text(
+                "Coolify stops \(container.name). The rest of the service keeps running. "
+                    + "Volumes and data stay, and you can start it again."
+            )
+        }
+    }
+
+    /// Skips the call when there is no client or no uuid, so a numeric id never reaches the path.
+    private func run(_ command: ContainerCommand, _ container: ContainerSummary) {
+        guard let client, let serviceUUID, !serviceUUID.isEmpty, !container.uuid.isEmpty else { return }
+        Task {
+            await actions.run(command, container: container, client: client, service: serviceUUID)
+        }
     }
 }
 
 private struct ContainerRow: View {
     var container: ContainerSummary
+    var showsActions: Bool
+    var isBusy: Bool
+    var canAct: Bool
+    var onStart: () -> Void
+    var onRestart: () -> Void
+    var onStop: () -> Void
 
     var body: some View {
         HStack(spacing: 14) {
@@ -62,10 +138,53 @@ private struct ContainerRow: View {
             Text(StatusLabel.text(for: container.status))
                 .font(.subheadline)
                 .foregroundStyle(container.heat.needsAttention ? AnyShapeStyle(.glow) : AnyShapeStyle(.secondary))
+            if isBusy {
+                ProgressView()
+                    .controlSize(.small)
+            } else if showsActions {
+                actionButtons
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: showsActions || isBusy ? .contain : .combine)
+    }
+
+    private var actionButtons: some View {
+        HStack(spacing: 0) {
+            commandButton("Start", systemImage: "play.fill", help: "Start this container", action: onStart)
+            commandButton(
+                "Restart", systemImage: "arrow.clockwise", help: "Restart this container", action: onRestart)
+            commandButton(
+                "Stop",
+                systemImage: "stop.fill",
+                help: "Stop this container. Volumes and data stay.",
+                action: onStop
+            )
+        }
+        .disabled(!canAct)
+        .controlSize(.small)
+    }
+
+    private func commandButton(
+        _ title: String,
+        systemImage: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(title, systemImage: systemImage, action: action)
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .help(help)
+    }
+}
+
+extension ContainerSummary {
+    /// Stable across a status change, and distinct when an application and a database share a numeric id.
+    fileprivate var listKey: String {
+        let role = isDatabase ? "database" : "application"
+        let name = serviceName.isEmpty ? self.name : serviceName
+        return "\(role)-\(id)-\(name)"
     }
 }
 
@@ -83,4 +202,18 @@ private struct ContainerRow: View {
         ContainerSummary(id: 3, name: "token-generator", status: "exited"),
     ])
     .frame(width: 480, height: 320)
+}
+
+#Preview("No client") {
+    ContainerList(containers: [
+        ContainerSummary(
+            id: 1,
+            name: "dashboard",
+            serviceName: "dashboard",
+            status: "running:healthy",
+            uuid: "app-1"
+        ),
+        ContainerSummary(id: 2, name: "postgres", status: "exited", isDatabase: true),
+    ])
+    .frame(width: 520, height: 240)
 }
