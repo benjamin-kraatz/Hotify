@@ -38,6 +38,10 @@ struct ContainerSummary: Identifiable, Hashable {
     var status: String?
     var image: String?
     var link: URL?
+    /// The uuid start, stop, and restart use. Empty when the payload left it off.
+    var uuid: String = ""
+    /// A database container of the service. Application containers are false.
+    var isDatabase: Bool = false
 
     var heat: Heat { Heat(status: status) }
 }
@@ -75,16 +79,32 @@ extension ResourceSummary {
     }
 
     init(service: Service, place: ResourcePlace? = nil) {
-        let containers = (service.applications ?? []).map { container in
+        let applications = (service.applications ?? []).map { container in
             ContainerSummary(
                 id: container.id,
                 name: container.humanName ?? container.name,
                 serviceName: container.name,
                 status: container.status,
                 image: container.image,
-                link: Self.firstURL(in: container.fqdn)
+                link: Self.firstURL(in: container.fqdn),
+                uuid: container.uuid,
+                isDatabase: false
             )
         }
+        let databases = (service.databases ?? []).map { container in
+            ContainerSummary(
+                // Applications and databases are numbered in separate tables, so their ids can collide.
+                id: -container.id - 1,
+                name: container.humanName ?? container.name,
+                serviceName: container.name,
+                status: container.status,
+                image: container.image,
+                link: Self.firstURL(in: container.fqdn),
+                uuid: container.uuid,
+                isDatabase: true
+            )
+        }
+        let containers = applications + databases
         let count = containers.count
         self.init(
             route: .service(service.uuid),
