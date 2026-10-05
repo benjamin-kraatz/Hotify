@@ -2,12 +2,28 @@ import CoolifyAPI
 import SwiftUI
 
 /// The Settings tab of a resource: its name and description, an application's source, its domains, a database's public
-/// port, and its health check, in one form with one Save. Nothing restarts or deploys on save. A bar offers that afterwards.
+/// port, its health check, and its tags, in one form with one Save. Nothing restarts or deploys on save. A bar offers
+/// that afterwards. Tags are saved on their own, as they are added or removed.
 struct ConfigurationView: View {
     var model: ConfigurationModel
     var resource: ResourceSummary
     var pendingAction: ResourceAction?
     var onAction: (ResourceAction) -> Void
+    @State private var tags: ResourceTagsModel
+
+    init(
+        model: ConfigurationModel,
+        resource: ResourceSummary,
+        pendingAction: ResourceAction? = nil,
+        onAction: @escaping (ResourceAction) -> Void,
+        tags: ResourceTagsModel = ResourceTagsModel()
+    ) {
+        self.model = model
+        self.resource = resource
+        self.pendingAction = pendingAction
+        self.onAction = onAction
+        _tags = State(initialValue: tags)
+    }
 
     private var draft: Binding<ResourceConfiguration> {
         Binding(
@@ -57,7 +73,9 @@ struct ConfigurationView: View {
             }
         }
         .task(id: model.route) {
+            model.openTags(tags)
             await model.load()
+            await tags.load()
         }
         .animation(.snappy, value: model.hasChanges)
         .animation(.snappy, value: model.hasUnappliedChanges)
@@ -165,6 +183,8 @@ struct ConfigurationView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            TagsSection(model: tags)
         }
         .formStyle(.grouped)
         .disabled(model.isSaving)
@@ -295,8 +315,17 @@ struct ConfigurationView: View {
                     isEnabled: true, kind: .http, method: "GET", path: "/health", returnCode: 200, interval: 30)
             )
         ),
-        resource: ResourceSummary(route: .application("web"), name: "marketing-site", status: "running:healthy"),
-        onAction: { _ in }
+        resource: ResourceSummary(
+            route: .application("web"), name: "marketing-site", status: "running:healthy", tags: ["prod", "web"]),
+        onAction: { _ in },
+        tags: ResourceTagsModel(
+            assigned: [Tag(uuid: "1", name: "prod"), Tag(uuid: "2", name: "web")],
+            team: [
+                Tag(uuid: "1", name: "prod"),
+                Tag(uuid: "2", name: "web"),
+                Tag(uuid: "3", name: "staging"),
+            ]
+        )
     )
     .frame(width: 560, height: 820)
 }

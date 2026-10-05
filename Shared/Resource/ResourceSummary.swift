@@ -18,6 +18,8 @@ struct ResourceSummary: Identifiable, Hashable {
     var buildingPreviews: [Int] = []
     /// The commit an application's manual deploys are pinned to, shortened. `nil` when they build the latest.
     var pinnedCommit: String?
+    /// Team tag names loaded with the resource. Empty when the list left them off, which does not match a tag filter.
+    var tags: [String] = []
 
     var id: ResourceRoute { route }
     var kind: ResourceKind { route.kind }
@@ -59,7 +61,8 @@ extension ResourceSummary {
             activeDeploymentID: activeDeployment.flatMap { $0.deploymentUUID.isEmpty ? nil : $0.deploymentUUID },
             buildingPreviews: Set(activePreviews.map(\.pullRequestID)).sorted(),
             // A Docker image application always runs the tag in its settings, which is no pin to point out.
-            pinnedCommit: application.isDockerImage ? nil : application.pinnedCommit.map { String($0.prefix(7)) }
+            pinnedCommit: application.isDockerImage ? nil : application.pinnedCommit.map { String($0.prefix(7)) },
+            tags: application.tags
         )
     }
 
@@ -70,7 +73,8 @@ extension ResourceSummary {
             name: name.isEmpty ? database.uuid : name,
             status: database.status,
             subtitle: Self.engineName(database.databaseType),
-            place: place
+            place: place,
+            tags: database.tags
         )
     }
 
@@ -93,7 +97,8 @@ extension ResourceSummary {
             subtitle: count == 1 ? "1 container" : "\(count) containers",
             link: containers.lazy.compactMap(\.link).first,
             containers: containers,
-            place: place
+            place: place,
+            tags: service.tags
         )
     }
 

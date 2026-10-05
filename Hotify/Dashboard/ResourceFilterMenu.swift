@@ -1,11 +1,18 @@
 import SwiftUI
 
-/// What the dashboard's filter menu holds: a tick per state and per kind, and a way to clear them.
+/// What the dashboard's filter menu holds: a tick per state, per kind, and per team tag, and a way to clear them.
 struct ResourceFilterMenu: View {
     @Binding var filter: ResourceFilter
+    /// The team's tag names. The menu lists these and nothing else.
+    var tags: [String] = []
 
     /// The order the list itself puts kinds in.
     private static let kinds: [ResourceKind] = [.application, .service, .database]
+
+    private var tagNames: [String] {
+        var seen: Set<String> = []
+        return tags.filter { seen.insert($0).inserted }
+    }
 
     var body: some View {
         Section("State") {
@@ -19,6 +26,15 @@ struct ResourceFilterMenu: View {
             ForEach(Self.kinds, id: \.self) { kind in
                 Toggle(isOn: isOn(kind, in: \.kinds)) {
                     Label(kind.pluralTitle, systemImage: kind.systemImage)
+                }
+            }
+        }
+        if !tagNames.isEmpty {
+            Section("Tags") {
+                ForEach(tagNames, id: \.self) { tag in
+                    Toggle(isOn: isOn(tag, in: \.tags)) {
+                        Label(tag, systemImage: "tag")
+                    }
                 }
             }
         }
@@ -46,10 +62,22 @@ struct ResourceFilterMenu: View {
     }
 }
 
-#Preview {
-    @Previewable @State var filter = ResourceFilter(states: [.needsLook])
-    Menu("Filters") {
-        ResourceFilterMenu(filter: $filter)
+#Preview("Filters off") {
+    @Previewable @State var filter = ResourceFilter()
+    @Previewable @State var query = ""
+    FilterField("Filter resources", text: $query, isFiltered: filter.isActive) {
+        ResourceFilterMenu(filter: $filter, tags: ["prod", "staging", "web"])
     }
-    .padding(40)
+    .padding()
+    .frame(width: 360)
+}
+
+#Preview("Tag selected") {
+    @Previewable @State var filter = ResourceFilter(tags: ["prod"])
+    @Previewable @State var query = ""
+    FilterField("Filter resources", text: $query, isFiltered: filter.isActive) {
+        ResourceFilterMenu(filter: $filter, tags: ["prod", "staging", "web"])
+    }
+    .padding()
+    .frame(width: 360)
 }

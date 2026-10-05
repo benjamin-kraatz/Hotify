@@ -124,7 +124,8 @@ extension CoolifyClient {
         if basePath.hasSuffix("/") {
             basePath.removeLast()
         }
-        components.path = basePath + "/" + trimmedPath
+        // `.path` encodes `%` again, so a component already passed through `encodePathComponent` would be sent twice.
+        components.percentEncodedPath = basePath + "/" + trimmedPath
         let items = query.filter { $0.value != nil }
         components.queryItems = items.isEmpty ? nil : items
         guard let url = components.url else {

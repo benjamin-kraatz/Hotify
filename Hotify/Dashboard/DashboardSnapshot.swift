@@ -7,6 +7,8 @@ struct DashboardSnapshot: Hashable {
     var servers: [ServerLine] = []
     var projects: [ProjectSummary] = []
     var resources: [ResourceSummary] = []
+    /// Team tag names for the filter menu. Empty until a tags request succeeds.
+    var tags: [String] = []
     var pending: [BusyTarget: ResourceAction] = [:]
     var loadError: String?
     var actionError: String?

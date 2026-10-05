@@ -33,6 +33,11 @@ final class ConfigurationModel {
         draft != nil && draft != saved
     }
 
+    /// Points the tags editor at the same resource. A nil client leaves preview tags in place.
+    func openTags(_ tags: ResourceTagsModel) {
+        tags.open(client, route: route)
+    }
+
     /// Clears the previous resource and points later loads and saves at this one.
     func prepare(_ client: CoolifyClient, route: ResourceRoute) {
         generation += 1

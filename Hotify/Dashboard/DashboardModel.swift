@@ -11,6 +11,8 @@ final class DashboardModel {
     var applications: [Application] = []
     var databases: [Database] = []
     var services: [Service] = []
+    /// The team's tags, for the dashboard filter. A failed request leaves the previous list.
+    var tags: [Tag] = []
     /// Production deployments that are queued or building, across every application.
     var activeDeployments: [Deployment] = []
     /// Preview deployments that are queued or building. Kept apart so a preview never marks production busy.
@@ -67,6 +69,9 @@ final class DashboardModel {
             isLoading = true
         }
         defer { isLoading = false }
+        // Started with the rest. A failure must not blank the dashboard, so it stays off the throwing path.
+        let tagTask = Task { try? await client.tags() }
+        defer { tagTask.cancel() }
         do {
             async let version = client.version()
             async let team = client.currentTeam()
@@ -99,6 +104,9 @@ final class DashboardModel {
             }
             loadError = nil
             lastUpdated = .now
+            if generation == self.generation, let loadedTags = await tagTask.value {
+                tags = loadedTags
+            }
             await loadPlacesIfNeeded(client, generation: generation)
             guard generation == self.generation else { return }
             freshenPlaceNames()
@@ -189,10 +197,17 @@ final class DashboardModel {
                 + services.map { ResourceSummary(service: $0, place: $0.environmentID.flatMap { places[$0] }) },
             pending: transitions.mapValues(\.action),
             loadError: loadError,
+            tags: Self.tagNames(tags),
             actionError: actionError,
             isLoading: isLoading,
             hasLoaded: lastUpdated != nil
         )
+    }
+
+    private static func tagNames(_ tags: [Tag]) -> [String] {
+        var seen: Set<String> = []
+        return tags.map(\.name).filter { !$0.isEmpty && seen.insert($0).inserted }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
     private func activeDeployment(for application: Application) -> Deployment? {
