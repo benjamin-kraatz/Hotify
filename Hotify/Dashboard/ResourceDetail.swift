@@ -218,9 +218,9 @@ struct ResourceDetail: View {
 
     private var tabs: [DetailTab] {
         switch resource.kind {
-        case .application: [.logs, .deployments, .variables, .settings]
-        case .service: [.logs, .containers, .variables, .settings]
-        case .database: [.logs, .backups, .variables, .settings]
+        case .application: [.logs, .deployments, .storage, .variables, .settings]
+        case .service: [.logs, .containers, .storage, .variables, .settings]
+        case .database: [.logs, .backups, .storage, .variables, .settings]
         }
     }
 
@@ -644,6 +644,8 @@ struct ResourceDetail: View {
                     if case .database(let uuid) = resource.route {
                         BackupsView(client: deploymentClient, database: uuid, resourceName: resource.name)
                     }
+                case .storage:
+                    StorageList(client: deploymentClient, route: resource.route, resourceName: resource.name)
                 case .containers:
                     ContainerList(containers: resource.containers)
                 case .variables:
@@ -691,6 +693,7 @@ struct ResourceDetail: View {
 /// The views under the detail header.
 enum DetailTab: Identifiable, Hashable {
     case backups
+    case storage
     case deployments
     case containers
     case logs
@@ -702,6 +705,7 @@ enum DetailTab: Identifiable, Hashable {
     var title: String {
         switch self {
         case .backups: "Backups"
+        case .storage: "Storage"
         case .deployments: "Deployments"
         case .containers: "Containers"
         case .logs: "Logs"
