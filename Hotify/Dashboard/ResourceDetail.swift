@@ -13,6 +13,8 @@ struct ResourceDetailScreen: View {
     var back: DetailBack?
     var onOpenProject: (() -> Void)?
     var onAction: (ResourceAction) -> Void
+    /// Leaves the detail column after Coolify deletes the resource.
+    var onDeleted: () -> Void
 
     @State private var model: ResourceDetailModel
     @State private var variables: VariablesModel
@@ -35,7 +37,8 @@ struct ResourceDetailScreen: View {
         configuration: ConfigurationModel = ConfigurationModel(),
         back: DetailBack? = nil,
         onOpenProject: (() -> Void)? = nil,
-        onAction: @escaping (ResourceAction) -> Void
+        onAction: @escaping (ResourceAction) -> Void,
+        onDeleted: @escaping () -> Void = {}
     ) {
         self.client = client
         self.resource = resource
@@ -44,6 +47,7 @@ struct ResourceDetailScreen: View {
         self.back = back
         self.onOpenProject = onOpenProject
         self.onAction = onAction
+        self.onDeleted = onDeleted
         if let entry, !entry.history.isEmpty {
             model.seed(entry.history, for: resource.route)
         }
@@ -123,7 +127,8 @@ struct ResourceDetailScreen: View {
                     await configuration.load()
                 }
             },
-            onAction: onAction
+            onAction: onAction,
+            onDeleted: onDeleted
         )
         .task(id: resource.route) {
             guard let client else { return }
@@ -190,6 +195,8 @@ struct ResourceDetail: View {
     /// Reloads the history, the images, and the settings once a rollback or another version queued.
     var onVersionChanged: () -> Void = {}
     var onAction: (ResourceAction) -> Void
+    /// Leaves the detail column after Coolify deletes the resource.
+    var onDeleted: () -> Void = {}
 
     #if os(macOS)
     /// Missing in previews, which leaves the menu bar button out.
@@ -212,6 +219,11 @@ struct ResourceDetail: View {
     @State private var wantsRollback = false
     @State private var showsPreviewDeployment = false
     @State private var showsGitHubAccess = false
+    @State private var showsRemoval = false
+    @State private var isRemoving = false
+    @State private var removalError: String?
+    /// A new value gives the confirmation fresh switches, so volumes start off every time it opens.
+    @State private var removalPresentation = 0
     @State private var previewGeneration = 0
     @State private var followedPreviewDeployment: DeploymentLine?
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -388,6 +400,8 @@ struct ResourceDetail: View {
             showsDeployVersion = false
             rollbackAfterSheet = nil
             versionNotice = nil
+            showsRemoval = false
+            removalError = nil
         }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
@@ -476,7 +490,54 @@ struct ResourceDetail: View {
             }
         }
         ToolbarItem(placement: .primaryAction) {
+            Button("Delete", systemImage: "trash") {
+                removalError = nil
+                removalPresentation += 1
+                showsRemoval = true
+            }
+            .disabled(deploymentClient == nil)
+            .help("Delete \(resource.name)")
+            .popover(isPresented: $showsRemoval, arrowEdge: .bottom) {
+                ResourceRemovalDialog(
+                    name: resource.name,
+                    isDeleting: isRemoving,
+                    error: removalError,
+                    onDelete: { options in
+                        Task { await remove(options) }
+                    },
+                    onCancel: {
+                        removalError = nil
+                        showsRemoval = false
+                    }
+                )
+                .id(removalPresentation)
+            }
+        }
+        ToolbarItem(placement: .primaryAction) {
             ResourceGuideButton(kind: resource.kind)
+        }
+    }
+
+    /// Asks Coolify to delete the resource, then leaves the detail column.
+    private func remove(_ options: RemovalOptions) async {
+        guard let deploymentClient, !isRemoving else { return }
+        isRemoving = true
+        removalError = nil
+        defer { isRemoving = false }
+        do {
+            _ = try await deploymentClient.deleteResource(resource.route.uuid, kind: removalKind, options: options)
+            showsRemoval = false
+            onDeleted()
+        } catch {
+            removalError = (error as? CoolifyError)?.summary ?? error.localizedDescription
+        }
+    }
+
+    private var removalKind: RemovalKind {
+        switch resource.kind {
+        case .application: .application
+        case .database: .database
+        case .service: .service
         }
     }
 
