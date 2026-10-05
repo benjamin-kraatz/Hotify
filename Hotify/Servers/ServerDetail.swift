@@ -1,7 +1,7 @@
 import CoolifyAPI
 import SwiftUI
 
-/// One server in the detail column: validate it, prune Docker, restart the proxy, and read its domains.
+/// One server in the detail column: validate it, prune Docker, restart the proxy, read its domains, and edit it.
 struct ServerDetailScreen: View {
     var client: CoolifyClient?
     var server: ServerLine
@@ -10,6 +10,7 @@ struct ServerDetailScreen: View {
     @State private var model = ServerPageModel()
     @State private var prompt: ServerPrompt?
     @State private var refreshes = 0
+    @State private var showsEditor = false
     /// Shared variables replace the overview in this column. Back returns here, without a new route.
     @State private var showsVariables = false
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -66,6 +67,18 @@ struct ServerDetailScreen: View {
                 .disabled(client == nil)
                 .help("Refresh this server")
             }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showsEditor = true
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+                .disabled(client == nil)
+                .help("Edit this server")
+            }
+        }
+        .sheet(isPresented: $showsEditor) {
+            ServerEditor(client: client, serverID: server.id, onDeleted: { back.action() })
         }
         .task(id: server.id) { await follow() }
         .refreshable { await reload() }
