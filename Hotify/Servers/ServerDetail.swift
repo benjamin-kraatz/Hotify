@@ -42,6 +42,8 @@ struct ServerDetailScreen: View {
             onInstall: { prompt = .install },
             onSaveCleanup: { Task { await saveCleanup() } },
             onRunCleanup: askToCleanUp,
+            onSaveProxy: { Task { await saveProxy() } },
+            onSaveProxyConfiguration: { Task { await saveProxyConfiguration() } },
             onRestartProxy: { prompt = .restartProxy },
             onRetry: { Task { await reload() } },
             onShowVariables: { showsVariables = true }
@@ -127,6 +129,16 @@ struct ServerDetailScreen: View {
         await model.runCleanup(client: client, server: server.id)
     }
 
+    private func saveProxy() async {
+        guard let client else { return }
+        await model.saveProxy(client: client, server: server.id)
+    }
+
+    private func saveProxyConfiguration() async {
+        guard let client else { return }
+        await model.saveProxyConfiguration(client: client, server: server.id)
+    }
+
     private func confirm(_ prompt: ServerPrompt) async {
         switch prompt {
         case .install:
@@ -151,6 +163,8 @@ struct ServerDetail: View {
     var onInstall: () -> Void = {}
     var onSaveCleanup: () -> Void = {}
     var onRunCleanup: () -> Void = {}
+    var onSaveProxy: () -> Void = {}
+    var onSaveProxyConfiguration: () -> Void = {}
     var onRestartProxy: () -> Void = {}
     var onRetry: () -> Void = {}
     /// Swaps this page for the server's shared variables.
@@ -179,10 +193,10 @@ struct ServerDetail: View {
                     )
                     DestinationSection(serverID: server.id, client: client)
                     ServerProxySection(
-                        proxy: model.proxy,
+                        model: model,
                         canAct: canAct,
-                        isBusy: model.isBusy,
-                        isRestarting: model.write == .restartProxy,
+                        onSave: onSaveProxy,
+                        onSaveConfiguration: onSaveProxyConfiguration,
                         onRestart: onRestartProxy
                     )
                     CloudflareTunnelSection(client: client, serverUUID: server.id, canAct: canAct)
