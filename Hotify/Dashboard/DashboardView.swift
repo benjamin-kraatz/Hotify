@@ -146,7 +146,13 @@ struct DashboardView: View {
     /// The instance's own facts, above the projects: its name on the Mac, the team, how much runs, the servers.
     @ViewBuilder
     private var summary: some View {
-        DashboardTitle(instanceName: instanceName, teamName: snapshot.teamName, version: snapshot.version)
+        DashboardTitle(
+            instanceName: instanceName,
+            teamName: snapshot.teamName,
+            version: snapshot.version,
+            isTeamSelected: selection == .teamVariables,
+            onOpenTeam: { selection = .teamVariables }
+        )
         if !heats.isEmpty {
             HeatSummary(heats: heats)
         }

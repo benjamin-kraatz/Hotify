@@ -231,6 +231,16 @@ struct ContentView: View {
                     nothingOpen(
                         "This server is gone", detail: "Coolify no longer lists it. It may have been deleted.")
                 }
+            case .teamVariables:
+                SharedVariableScreen(
+                    client: client,
+                    scope: .team,
+                    sectionTitle: snapshot.teamName.isEmpty ? "Team" : snapshot.teamName,
+                    navigationTitle: "Team Variables",
+                    back: DetailBack(title: "Dashboard") { selection = nil }
+                )
+                .id(store.selectedID)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
             case nil:
                 nothingOpen(
                     "Nothing open",

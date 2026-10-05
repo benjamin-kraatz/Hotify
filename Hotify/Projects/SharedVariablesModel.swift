@@ -1,25 +1,28 @@
 import CoolifyAPI
 import Foundation
 
-/// The shared variables of one scope: the project itself, or one of its environments.
+/// The shared variables of one scope: a project, an environment, the team, or a server.
 struct SharedVariableSection: Identifiable, Hashable {
     var scope: SharedVariableScope
-    /// `Project`, or the environment's name.
+    /// `Project`, an environment's name, the team, or the server.
     var title: String
     var lines: [VariableLine] = []
 
     var id: SharedVariableScope { scope }
 
     /// How a resource's variable points at one of these, such as `{{project.API_URL}}`.
+    /// The scope word is fixed. Coolify does not take the project's or the server's name there.
     func reference(to key: String) -> String {
         switch scope {
         case .project: "{{project.\(key)}}"
         case .environment: "{{environment.\(key)}}"
+        case .team: "{{team.\(key)}}"
+        case .server: "{{server.\(key)}}"
         }
     }
 }
 
-/// Loads and changes the variables a project and its environments share with their resources.
+/// Loads and changes the variables a scope shares with its resources.
 @Observable
 final class SharedVariablesModel {
     private(set) var sections: [SharedVariableSection] = []
@@ -68,6 +71,12 @@ final class SharedVariablesModel {
         sections = scopes.map { scope, title in
             SharedVariableSection(scope: scope, title: title, lines: known[scope] ?? [])
         }
+    }
+
+    /// Lays out one section, for the team or for a server. A scope that was already there keeps its variables.
+    func track(scope: SharedVariableScope, title: String) {
+        let lines = sections.first { $0.scope == scope }?.lines ?? []
+        sections = [SharedVariableSection(scope: scope, title: title, lines: lines)]
     }
 
     /// Loads every scope side by side. One that fails keeps what the last load found.
