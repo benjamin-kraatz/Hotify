@@ -34,6 +34,7 @@ struct ServerDetailScreen: View {
     private var overview: some View {
         ServerDetail(
             server: server,
+            client: client,
             model: model,
             canAct: client != nil,
             client: client,
@@ -142,6 +143,7 @@ struct ServerDetailScreen: View {
 /// The server page's layout. Takes the loaded model, so a preview does not need a connection.
 struct ServerDetail: View {
     var server: ServerLine
+    var client: CoolifyClient? = nil
     var model: ServerPageModel
     var canAct: Bool
     var client: CoolifyClient? = nil
@@ -175,6 +177,7 @@ struct ServerDetail: View {
                         onSave: onSaveCleanup,
                         onRun: onRunCleanup
                     )
+                    DestinationSection(serverID: server.id, client: client)
                     ServerProxySection(
                         proxy: model.proxy,
                         canAct: canAct,

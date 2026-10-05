@@ -9,7 +9,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Design/` has the app's look: the stokable flame and its fire, heat edges, wells, and the filter field.
   - `Configuration/` is a resource's Settings tab: its name and description, an application's source (branch, pinned commit, deploy on push, or image tag), its domains, a database's public port, its health check, and an application's proxy labels, in one form with one Save.
   - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource. A service's Containers tab can start, stop, or restart one container. A server opens its own page.
-  - `Servers/` validates a server, runs its Docker cleanup, restarts its proxy, records a Cloudflare Tunnel, and opens its shared variables. It takes the detail column.
+  - `Servers/` validates a server, runs its Docker cleanup, restarts its proxy, records a Cloudflare Tunnel, opens its shared variables, and adds, renames, and deletes a Docker network destination. It takes the detail column.
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
