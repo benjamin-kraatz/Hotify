@@ -1,10 +1,12 @@
 import Foundation
 
-/// What the detail column shows: one resource, or the project a group of them belongs to.
+/// What the detail column shows: one resource, the project a group of them belongs to, or a server.
 enum DetailRoute: Hashable {
     case resource(ResourceRoute)
     /// A project, by its uuid.
     case project(String)
+    /// A server, by its uuid.
+    case server(String)
 }
 
 /// Where a resource opens when something other than its list row leads there, such as a card on the project page.

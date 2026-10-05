@@ -151,7 +151,18 @@ struct DashboardView: View {
             HeatSummary(heats: heats)
         }
         ForEach(snapshot.servers) { server in
-            ServerStatusLine(server: server)
+            Button {
+                selection = .server(server.id)
+            } label: {
+                ServerStatusLine(server: server, isSelected: selection == .server(server.id))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            #if os(iOS)
+            .tag(DetailRoute.server(server.id))
+            #endif
+            .help("Show the \(server.name) server")
+            .accessibilityHint("Shows the server")
         }
         if let loadError = snapshot.loadError {
             NoticeBanner(message: loadError)

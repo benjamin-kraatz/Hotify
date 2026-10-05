@@ -71,9 +71,10 @@ struct HeatSummary: View {
     }
 }
 
-/// A server name with whether Coolify can reach it.
+/// A server name with whether Coolify can reach it. The chevron is the way into its page.
 struct ServerStatusLine: View {
     var server: ServerLine
+    var isSelected = false
 
     private var heat: Heat {
         switch server.isReachable {
@@ -102,9 +103,17 @@ struct ServerStatusLine: View {
             FlameGlyph(heat: heat, height: 12)
             Text(label)
                 .foregroundStyle(heat == .troubled ? AnyShapeStyle(.glow) : AnyShapeStyle(.secondary))
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
         .font(.subheadline)
+        .padding(.vertical, 4)
+        .background(isSelected ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 8))
+        .contentShape(.rect)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -112,7 +121,9 @@ struct ServerStatusLine: View {
     List {
         DashboardTitle(instanceName: "Home lab", teamName: "Root Team", version: "4.3.23")
         HeatSummary(heats: [.lit, .lit, .cold, .troubled, .warming])
-        ServerStatusLine(server: ServerLine(id: "1", name: "localhost", isReachable: true))
+        ServerStatusLine(server: ServerLine(id: "1", name: "localhost", isReachable: true), isSelected: true)
+        ServerStatusLine(server: ServerLine(id: "2", name: "build-1", isReachable: false))
+        ServerStatusLine(server: ServerLine(id: "3", name: "spare", isReachable: nil))
     }
     .frame(width: 380, height: 300)
 }

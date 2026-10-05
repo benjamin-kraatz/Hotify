@@ -218,6 +218,19 @@ struct ContentView: View {
                     nothingOpen(
                         "This project is gone", detail: "Coolify no longer lists it. It may have been deleted.")
                 }
+            case .server(let id):
+                if let server = snapshot.servers.first(where: { $0.id == id }) {
+                    ServerDetailScreen(
+                        client: client,
+                        server: server,
+                        back: DetailBack(title: "Dashboard") { selection = nil }
+                    )
+                    .id(DetailIdentity(instanceID: store.selectedID, route: .server(id)))
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                } else {
+                    nothingOpen(
+                        "This server is gone", detail: "Coolify no longer lists it. It may have been deleted.")
+                }
             case nil:
                 nothingOpen(
                     "Nothing open",
