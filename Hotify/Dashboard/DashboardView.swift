@@ -1,3 +1,4 @@
+import CoolifyAPI
 import SwiftUI
 
 /// The middle column: one instance's projects, each with its resources by environment and actions on every row.
@@ -17,7 +18,10 @@ struct DashboardView: View {
     @State private var filter = ResourceFilter()
     @State private var stopCandidate: ResourceSummary?
     @State private var refreshes = 0
+    @State private var showsAddServer = false
     @SwiftUI.Environment(\.placePalette) private var palette
+    /// Missing in previews, which leaves Add Server disabled.
+    @SwiftUI.Environment(InstanceStore.self) private var store: InstanceStore?
     #if os(iOS)
     @Environment(\.openURL) private var openURL
     #endif
@@ -134,6 +138,18 @@ struct DashboardView: View {
         .stopConfirmation(for: $stopCandidate) { resource in
             onRun(.stop, resource.route)
         }
+        .sheet(isPresented: $showsAddServer) {
+            ServerEditor(
+                client: serverClient,
+                onCreated: { uuid in
+                    Task {
+                        await onRefresh()
+                        selection = .server(uuid)
+                    }
+                }
+            )
+            .id(serverClient?.apiBaseURL)
+        }
         .sensoryFeedback(trigger: snapshot.pending) { old, new in
             new.count > old.count ? .impact(weight: .light) : nil
         }
@@ -141,6 +157,12 @@ struct DashboardView: View {
         .animation(.snappy, value: visible.map(\.id))
         .animation(.snappy, value: snapshot.loadError)
         .animation(.snappy, value: snapshot.actionError)
+    }
+
+    /// The client for the selected instance. Previews have no store, so Add Server stays disabled.
+    private var serverClient: CoolifyClient? {
+        guard let store, let instance = store.selected else { return nil }
+        return store.client(for: instance)
     }
 
     /// The instance's own facts, above the projects: its name on the Mac, the team, how much runs, the servers.
@@ -169,6 +191,22 @@ struct DashboardView: View {
             #endif
             .help("Show the \(server.name) server")
             .accessibilityHint("Shows the server")
+        }
+        if snapshot.hasLoaded {
+            Button {
+                showsAddServer = true
+            } label: {
+                Label("Add Server", systemImage: "plus")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.ember)
+            .disabled(serverClient == nil)
+            .help("Add a server Coolify can deploy to")
+            .accessibilityHint("Opens a form to add a server")
+            .padding(.vertical, 4)
         }
         if let loadError = snapshot.loadError {
             NoticeBanner(message: loadError)
