@@ -36,6 +36,7 @@ struct ServerDetailScreen: View {
             server: server,
             model: model,
             canAct: client != nil,
+            client: client,
             onValidate: { Task { await validate(install: false) } },
             onInstall: { prompt = .install },
             onSaveCleanup: { Task { await saveCleanup() } },
@@ -143,6 +144,7 @@ struct ServerDetail: View {
     var server: ServerLine
     var model: ServerPageModel
     var canAct: Bool
+    var client: CoolifyClient? = nil
     var onValidate: () -> Void = {}
     var onInstall: () -> Void = {}
     var onSaveCleanup: () -> Void = {}
@@ -180,6 +182,7 @@ struct ServerDetail: View {
                         isRestarting: model.write == .restartProxy,
                         onRestart: onRestartProxy
                     )
+                    CloudflareTunnelSection(client: client, serverUUID: server.id, canAct: canAct)
                     ServerDomainList(groups: model.domains)
                 } else if model.error != nil {
                     Section {
