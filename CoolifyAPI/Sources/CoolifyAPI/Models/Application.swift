@@ -49,6 +49,8 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
     /// that never had a domain are missing.
     public var dockerComposeDomains: [String: String]?
     public var healthCheck: HealthCheck?
+    /// Tag names when the payload includes them. The OpenAPI schema omits this field; an absent one is empty.
+    public var tags: [String] = []
 
     /// Whether the application builds from a Docker Compose file, whose domains are set per service.
     public var isDockerCompose: Bool { buildPack == "dockercompose" }
@@ -84,6 +86,7 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         case environmentID = "environmentId"
         case redirect
         case dockerComposeDomains
+        case tags
     }
 
     public init(from decoder: Decoder) throws {
@@ -107,6 +110,8 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         redirect = container.flexString(.redirect).flatMap(DomainRedirect.init(rawValue:))
         dockerComposeDomains = container.flexString(.dockerComposeDomains).flatMap(Self.composeDomains(from:))
         healthCheck = try? HealthCheck(from: decoder)
+        // The OpenAPI Application schema has no tags field. Decode them when a payload sends them anyway.
+        tags = container.flexTagNames(.tags)
     }
 
     /// Coolify stores `docker_compose_domains` as a JSON string, `{"web": {"domain": "https://…"}}`, and sends it

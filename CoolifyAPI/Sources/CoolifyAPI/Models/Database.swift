@@ -14,6 +14,8 @@ public struct Database: Decodable, Sendable, Identifiable, Hashable, HasResource
     public var publicPort: Int?
     /// Only `isEnabled` and the timings apply to a database.
     public var healthCheck: HealthCheck?
+    /// Tag names when the payload includes them. Absent means none were loaded.
+    public var tags: [String] = []
 
     public var id: String { uuid }
 
@@ -26,6 +28,7 @@ public struct Database: Decodable, Sendable, Identifiable, Hashable, HasResource
         case description
         case isPublic
         case publicPort
+        case tags
     }
 
     public init(from decoder: Decoder) throws {
@@ -39,5 +42,6 @@ public struct Database: Decodable, Sendable, Identifiable, Hashable, HasResource
         isPublic = container.flexBool(.isPublic)
         publicPort = container.flexInt(.publicPort)
         healthCheck = try? HealthCheck(from: decoder)
+        tags = container.flexTagNames(.tags)
     }
 }

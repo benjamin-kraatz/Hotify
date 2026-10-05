@@ -48,6 +48,8 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
     /// The service's database containers. Only `GET /services/{uuid}` includes them. They share the container shape.
     public var databases: [ServiceApplication]?
     public var environmentID: Int?
+    /// Tag names when the payload includes them. Absent means none were loaded.
+    public var tags: [String] = []
 
     public var id: String { uuid }
 
@@ -60,6 +62,7 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
         case applications
         case databases
         case environmentID = "environmentId"
+        case tags
     }
 
     public init(from decoder: Decoder) throws {
@@ -72,5 +75,6 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
         applications = try container.decodeIfPresent([ServiceApplication].self, forKey: .applications)
         databases = try? container.decodeIfPresent([ServiceApplication].self, forKey: .databases)
         environmentID = container.flexInt(.environmentID)
+        tags = container.flexTagNames(.tags)
     }
 }

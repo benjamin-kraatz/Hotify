@@ -75,7 +75,7 @@ struct DashboardView: View {
         .safeAreaBar(edge: .top) {
             if snapshot.hasLoaded, !snapshot.resources.isEmpty {
                 FilterField("Filter resources", text: $query, isFiltered: filter.isActive) {
-                    ResourceFilterMenu(filter: $filter)
+                    ResourceFilterMenu(filter: $filter, tags: snapshot.tags)
                 }
                 .focused($isFiltering)
                 .padding(.horizontal, 16)
@@ -108,7 +108,7 @@ struct DashboardView: View {
             if snapshot.hasLoaded, !snapshot.resources.isEmpty {
                 ToolbarItem {
                     Menu {
-                        ResourceFilterMenu(filter: $filter)
+                        ResourceFilterMenu(filter: $filter, tags: snapshot.tags)
                     } label: {
                         Label(
                             "Filters",
@@ -390,7 +390,8 @@ struct DashboardView: View {
                         name: "marketing-site",
                         status: "running:healthy",
                         subtitle: "hotify.example.com",
-                        place: website
+                        place: website,
+                        tags: ["prod", "web"]
                     ),
                     ResourceSummary(
                         route: .application("api"),
@@ -398,7 +399,8 @@ struct DashboardView: View {
                         status: "exited",
                         subtitle: "example/api",
                         place: website,
-                        isDeploying: true
+                        isDeploying: true,
+                        tags: ["staging"]
                     ),
                     ResourceSummary(
                         route: .database("pg"),
@@ -419,9 +421,11 @@ struct DashboardView: View {
                         ],
                         place: ResourcePlace(
                             projectID: "observability", projectName: "Observability", environmentName: "staging",
-                            environmentID: 3)
+                            environmentID: 3),
+                        tags: ["prod"]
                     ),
                 ],
+                tags: ["prod", "staging", "web"],
                 pending: [.database("pg"): .restart],
                 hasLoaded: true
             ),
