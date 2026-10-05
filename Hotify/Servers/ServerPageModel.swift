@@ -8,6 +8,15 @@ final class ServerPageModel {
     var draft: DockerCleanupSettings?
     var executions: [DockerCleanupExecution] = []
     var proxy: ServerProxy?
+    var proxyTypeDraft = ""
+    var redirectEnabledDraft = false
+    var redirectURLDraft = ""
+    /// Compose YAML from the last GET, when Coolify included it. Nil means the file was not returned.
+    var returnedConfiguration: String?
+    var configurationDraft = ""
+    var configurationBaseline = ""
+    /// True when this server is the one Coolify itself runs on. The proxy in front of the instance is that server's.
+    var isCoolifyHost = false
     var domains: [ServerDomainGroup] = []
     var error: String?
     var notice: String?
@@ -22,6 +31,20 @@ final class ServerPageModel {
         return draft != settings
     }
 
+    var hasProxySettingChanges: Bool {
+        guard let proxy else { return false }
+        let type = trimmed(proxyTypeDraft)
+        let typeChanged = !type.isEmpty && type.lowercased() != trimmed(proxy.proxyType).lowercased()
+        let redirectChanged = redirectEnabledDraft != (proxy.redirectEnabled ?? false)
+        let urlChanged = trimmed(redirectURLDraft) != trimmed(proxy.redirectUrl)
+        return typeChanged || redirectChanged || urlChanged
+    }
+
+    var hasConfigurationChanges: Bool {
+        configurationDraft != configurationBaseline
+            && !configurationDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// Drops what the last server loaded, so a new one does not flash it.
     func prepare(for uuid: String) {
         guard loadedUUID != uuid else { return }
@@ -30,6 +53,13 @@ final class ServerPageModel {
         draft = nil
         executions = []
         proxy = nil
+        proxyTypeDraft = ""
+        redirectEnabledDraft = false
+        redirectURLDraft = ""
+        returnedConfiguration = nil
+        configurationDraft = ""
+        configurationBaseline = ""
+        isCoolifyHost = false
         domains = []
         error = nil
         notice = nil
@@ -47,12 +77,22 @@ final class ServerPageModel {
         do {
             async let settings = client.dockerCleanup(uuid: uuid)
             async let executions = client.dockerCleanupExecutions(uuid: uuid)
-            async let proxy = client.serverProxy(uuid: uuid)
+            async let proxy = client.serverProxyReading(uuid: uuid)
             async let domains = client.serverDomains(uuid: uuid)
+            async let host = client.server(uuid)
             let loadedSettings = try await settings
             let loadedExecutions = try await executions
             let loadedProxy = try await proxy
             let loadedDomains = try await domains
+            let loadedHost: Server?
+            do {
+                loadedHost = try await host
+            } catch is CancellationError {
+                return
+            } catch {
+                // The host flag is a sentence on the proxy section. The page still loads without it.
+                loadedHost = nil
+            }
             try Task.checkCancellation()
             guard generation == loadGeneration else { return }
             let keepDraft = draft != nil && draft != self.settings
@@ -61,7 +101,8 @@ final class ServerPageModel {
                 draft = loadedSettings
             }
             self.executions = loadedExecutions
-            self.proxy = loadedProxy
+            store(loadedProxy)
+            isCoolifyHost = loadedHost?.isCoolifyHost == true
             self.domains = loadedDomains
             hasLoaded = true
             error = nil
@@ -110,6 +151,51 @@ final class ServerPageModel {
         await refresh(client: client, server: uuid)
     }
 
+    func saveProxy(client: CoolifyClient, server uuid: String) async {
+        guard hasProxySettingChanges, let proxy else { return }
+        let type = trimmed(proxyTypeDraft)
+        let url = trimmed(redirectURLDraft)
+        let enabled = redirectEnabledDraft
+        let typeChanged = !type.isEmpty && type.lowercased() != trimmed(proxy.proxyType).lowercased()
+        let enabledChanged = enabled != (proxy.redirectEnabled ?? false)
+        let urlChanged = url != trimmed(proxy.redirectUrl)
+        await perform(.saveProxy) {
+            let updated = try await client.updateServerProxy(
+                uuid: uuid,
+                redirectEnabled: enabledChanged ? enabled : nil,
+                redirectURL: urlChanged && !url.isEmpty ? url : nil,
+                clearRedirectURL: urlChanged && url.isEmpty,
+                proxyType: typeChanged ? type : nil
+            )
+            let saved = ServerProxy(
+                status: updated.status ?? proxy.status,
+                proxyType: updated.proxyType ?? (typeChanged ? type : proxy.proxyType),
+                redirectEnabled: updated.redirectEnabled ?? enabled,
+                redirectUrl: urlChanged ? (url.isEmpty ? nil : url) : (updated.redirectUrl ?? proxy.redirectUrl)
+            )
+            self.proxy = saved
+            proxyTypeDraft = saved.proxyType ?? ""
+            redirectEnabledDraft = saved.redirectEnabled ?? false
+            redirectURLDraft = saved.redirectUrl ?? ""
+            return "Proxy settings saved."
+        }
+        guard error == nil else { return }
+        await refresh(client: client, server: uuid)
+    }
+
+    func saveProxyConfiguration(client: CoolifyClient, server uuid: String) async {
+        let yaml = configurationDraft
+        guard yaml != configurationBaseline else { return }
+        guard !yaml.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        await perform(.saveProxyConfiguration) {
+            _ = try await client.saveServerProxyConfiguration(uuid: uuid, configuration: yaml)
+            configurationBaseline = yaml
+            return "Proxy configuration saved."
+        }
+        guard error == nil else { return }
+        await refresh(client: client, server: uuid)
+    }
+
     func restartProxy(client: CoolifyClient, server uuid: String) async {
         await perform(.restartProxy) {
             let action = try await client.restartServerProxy(uuid: uuid)
@@ -121,6 +207,43 @@ final class ServerPageModel {
 
     private var loadedUUID: String?
     private var loadGeneration = 0
+
+    private func trimmed(_ value: String?) -> String {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    /// Keeps a draft the user has changed. A file the GET omitted is not shown.
+    private func store(_ reading: ServerProxyReading) {
+        let proxy = reading.proxy
+        let typeEdited =
+            self.proxy != nil && trimmed(proxyTypeDraft).lowercased() != trimmed(self.proxy?.proxyType).lowercased()
+        let redirectEdited = self.proxy != nil && redirectEnabledDraft != (self.proxy?.redirectEnabled ?? false)
+        let urlEdited = self.proxy != nil && trimmed(redirectURLDraft) != trimmed(self.proxy?.redirectUrl)
+        let configurationEdited = configurationDraft != configurationBaseline
+        self.proxy = proxy
+        if !typeEdited {
+            proxyTypeDraft = proxy.proxyType ?? ""
+        }
+        if !redirectEdited {
+            redirectEnabledDraft = proxy.redirectEnabled ?? false
+        }
+        if !urlEdited {
+            redirectURLDraft = proxy.redirectUrl ?? ""
+        }
+        if let configuration = reading.configuration {
+            returnedConfiguration = configuration
+            if !configurationEdited {
+                configurationBaseline = configuration
+                configurationDraft = configuration
+            }
+        } else {
+            returnedConfiguration = nil
+            if !configurationEdited {
+                configurationBaseline = ""
+                configurationDraft = ""
+            }
+        }
+    }
 
     private func beginLoad() -> Int {
         loadGeneration += 1
@@ -184,10 +307,33 @@ extension ServerPageModel {
             redirectEnabled: true,
             redirectUrl: "https://example.com"
         )
+        model.proxyTypeDraft = "TRAEFIK"
+        model.redirectEnabledDraft = true
+        model.redirectURLDraft = "https://example.com"
+        let compose = "services:\n  proxy:\n    image: example\n"
+        model.returnedConfiguration = compose
+        model.configurationDraft = compose
+        model.configurationBaseline = compose
         model.domains = [
             ServerDomainGroup(ip: "10.0.0.8", domains: ["app.example.com", "api.example.com"]),
             ServerDomainGroup(ip: "10.0.0.9", domains: ["db.example.com"]),
         ]
+        model.hasLoaded = true
+        return model
+    }
+
+    /// The sample proxy, on the server Coolify itself runs on.
+    static var proxyOnCoolifyHost: ServerPageModel {
+        let model = sample
+        model.isCoolifyHost = true
+        return model
+    }
+
+    /// A loaded proxy whose compose file the token could not read.
+    static var proxyFileOmitted: ServerPageModel {
+        let model = ServerPageModel()
+        model.proxy = ServerProxy(status: "running", proxyType: "nginx", redirectEnabled: false)
+        model.proxyTypeDraft = "nginx"
         model.hasLoaded = true
         return model
     }
@@ -199,5 +345,7 @@ enum ServerWrite: Equatable {
     case install
     case saveCleanup
     case runCleanup
+    case saveProxy
+    case saveProxyConfiguration
     case restartProxy
 }

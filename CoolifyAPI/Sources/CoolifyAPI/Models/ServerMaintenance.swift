@@ -106,7 +106,8 @@ public struct DockerCleanupExecution: Decodable, Sendable, Hashable, Identifiabl
 
 /// The proxy Coolify runs on a server.
 ///
-/// The raw compose `configuration` is not decoded. It needs `read:sensitive` and is a credential-adjacent file.
+/// The raw compose file is not stored here. It needs `read:sensitive` and can hold secrets. `ServerProxyReading`
+/// carries it only when a response includes it.
 public struct ServerProxy: Decodable, Sendable, Hashable {
     public var status: String?
     public var proxyType: String?
@@ -138,6 +139,19 @@ public struct ServerProxy: Decodable, Sendable, Hashable {
         proxyType = container.flexString(.proxyType)
         redirectEnabled = container.flexBool(.redirectEnabled)
         redirectUrl = container.flexString(.redirectUrl)
+    }
+}
+
+/// A server proxy and the compose file when Coolify returned one.
+///
+/// `configuration` is nil when the response omitted the file or sent null. Do not log it.
+public struct ServerProxyReading: Sendable, Hashable {
+    public var proxy: ServerProxy
+    public var configuration: String?
+
+    public init(proxy: ServerProxy, configuration: String? = nil) {
+        self.proxy = proxy
+        self.configuration = configuration
     }
 }
 
