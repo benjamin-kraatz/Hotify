@@ -20,6 +20,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Volumes/` lists a resource's persistent volumes and file mounts, and schedules a backup of a volume or a directory mount.
   - `Tasks/` lists the commands an application or a service runs on a schedule, and the history of each run. Run Now starts one immediately.
+  - `Removal/` confirms before deleting an application, database, service, project, or environment. Volume deletion stays off until you turn it on.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS, including the team's S3 backup stores.
   - `Storage/` holds the GitHub token.
 - `HotifyWidgets/` is the WidgetKit extension: the Pinned Resources, Instance, Needs Attention, Recent Deployments, and Backups widgets, two Control Center controls, and on iPhone the deploy Live Activity.

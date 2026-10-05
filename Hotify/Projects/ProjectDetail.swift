@@ -18,6 +18,8 @@ struct ProjectDetailScreen: View {
     var onAction: (ResourceAction, ResourceRoute) -> Void
     /// Reloads the dashboard's projects, after a rename or a new environment.
     var onChanged: () async -> Void
+    /// Leaves the project page after Coolify deletes it. The dashboard selection is the way back.
+    var onDeleted: () -> Void = {}
     /// Opens the New Resource sheet in this project. `nil` hides the button, such as before the instance connects.
     var onNewService: (() -> Void)?
 
@@ -50,6 +52,8 @@ struct ProjectDetailScreen: View {
             onAddEnvironment: addEnvironment,
             onSaveEnvironment: saveEnvironment,
             onReload: reload,
+            onDeleteProject: deleteProject,
+            onDeleteEnvironment: client == nil ? nil : { try await deleteEnvironment($0) },
             onNewService: onNewService
         )
         // Before the first frame, so a page left on another project never shows that project's tab or history.
@@ -120,6 +124,19 @@ struct ProjectDetailScreen: View {
         async let shared: Void = page.variables.load()
         _ = await (dashboard, history, shared)
     }
+
+    private func deleteProject() async throws {
+        try await write { client in
+            _ = try await client.deleteProject(project.id)
+        }
+        onDeleted()
+    }
+
+    private func deleteEnvironment(_ environment: EnvironmentSummary) async throws {
+        try await write { client in
+            _ = try await client.deleteEnvironment(environment.reference, inProject: project.id)
+        }
+    }
 }
 
 /// What one resource is building right now.
@@ -145,14 +162,22 @@ struct ProjectDetail: View {
         _, _, _ in
     }
     var onReload: () async -> Void = {}
+    /// Deletes the project after the page has confirmed it.
+    var onDeleteProject: () async throws -> Void = {}
+    /// Deletes one environment. `nil` leaves the control out, as without a connection.
+    var onDeleteEnvironment: ((EnvironmentSummary) async throws -> Void)? = nil
     /// `nil` hides the New Resource button.
     var onNewService: (() -> Void)?
 
     @State private var sheet: ProjectSheet?
     /// The popover at the toolbar menu. The overview has one of its own at its button.
     @State private var isAddingEnvironment = false
+    @State private var showsProjectRemoval = false
+    @State private var isRemovingProject = false
+    @State private var removalError: String?
     @State private var reloads = 0
     @SwiftUI.Environment(\.placePalette) private var palette
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var activity: ProjectActivityModel { page.activity }
 
@@ -192,9 +217,12 @@ struct ProjectDetail: View {
                 if let loadError = activity.loadError {
                     NoticeBanner(message: loadError)
                 }
+                if let removalError {
+                    NoticeBanner(message: removalError)
+                }
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, actionError == nil && activity.loadError == nil ? 0 : 12)
+            .padding(.bottom, actionError == nil && activity.loadError == nil && removalError == nil ? 0 : 12)
 
             Picker("Show", selection: Binding(get: { currentTab }, set: { page.tab = $0 })) {
                 ForEach(tabs) { tab in
@@ -222,7 +250,8 @@ struct ProjectDetail: View {
                         },
                         onAction: { action, resource in onAction(action, resource.route) },
                         onEditEnvironment: canEdit ? { sheet = .editEnvironment($0) } : nil,
-                        onAddEnvironment: canEdit ? onAddEnvironment : nil
+                        onAddEnvironment: canEdit ? onAddEnvironment : nil,
+                        onDeleteEnvironment: canEdit ? onDeleteEnvironment : nil
                     )
                 case .previews:
                     ProjectPreviews(
@@ -244,6 +273,7 @@ struct ProjectDetail: View {
         .animation(.snappy, value: currentTab)
         .animation(.snappy, value: actionError)
         .animation(.snappy, value: activity.loadError)
+        .animation(reduceMotion ? nil : .snappy, value: removalError)
         // The project's own name heads the screen below, so the toolbar only says what kind of screen this is.
         .navigationTitle("Project")
         #if os(iOS)
@@ -284,10 +314,39 @@ struct ProjectDetail: View {
                         onAdd: onAddEnvironment
                     )
                 }
+                Button("Delete Project", systemImage: "trash") {
+                    removalError = nil
+                    showsProjectRemoval = true
+                }
+                .disabled(!canEdit || isRemovingProject)
+                .help("Delete \(project.name)")
             }
         }
         .sheet(item: $sheet) { sheet in
             editor(for: sheet)
+        }
+        .confirmationDialog(
+            "Delete \(project.name)?",
+            isPresented: $showsProjectRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                Task { await removeProject() }
+            }
+        } message: {
+            Text("Coolify deletes \(project.name).")
+        }
+    }
+
+    private func removeProject() async {
+        guard !isRemovingProject else { return }
+        isRemovingProject = true
+        defer { isRemovingProject = false }
+        removalError = nil
+        do {
+            try await onDeleteProject()
+        } catch {
+            removalError = error.localizedDescription
         }
     }
 
@@ -424,6 +483,7 @@ private enum ProjectSheet: Identifiable, Hashable {
                     hasLoaded: true
                 )),
             canEdit: true,
+            onDeleteEnvironment: { _ in },
             onNewService: {}
         )
     }

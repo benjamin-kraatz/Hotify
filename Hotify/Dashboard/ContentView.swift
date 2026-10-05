@@ -277,6 +277,7 @@ struct ContentView: View {
             },
             onAction: run,
             onChanged: { await dashboard.reloadProjects() },
+            onDeleted: { selection = nil },
             onNewService: newService
         )
         // Only the project's own page sets this, so the menu's New Resource goes dim on a resource it opened.
@@ -304,7 +305,8 @@ struct ContentView: View {
                 onOpenProject: resource.place.map { place in
                     { show(.project(place.projectID)) }
                 },
-                onAction: { action in run(action, route) }
+                onAction: { action in run(action, route) },
+                onDeleted: { selection = nil }
             )
             .id(DetailIdentity(instanceID: store.selectedID, route: .resource(route), visit: request?.visit))
         } else {

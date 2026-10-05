@@ -16,10 +16,16 @@ struct ProjectOverview: View {
     var onEditEnvironment: ((EnvironmentSummary) -> Void)?
     /// Creates an environment by name, with its color. `nil` leaves the button out, as without a connection.
     var onAddEnvironment: ((_ name: String, _ tint: PlaceTint?) async throws -> Void)?
+    /// Deletes one environment. `nil` leaves the control out, as without a connection.
+    var onDeleteEnvironment: ((EnvironmentSummary) async throws -> Void)? = nil
 
     @State private var stopCandidate: ResourceSummary?
     @State private var isAddingEnvironment = false
+    @State private var environmentToDelete: EnvironmentSummary?
+    @State private var isRemovingEnvironment = false
+    @State private var removalError: String?
     @SwiftUI.Environment(\.placePalette) private var palette
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var groups: [EnvironmentGroup] {
         let members = Dictionary(grouping: resources) { $0.place?.environmentID ?? -1 }
@@ -57,6 +63,9 @@ struct ProjectOverview: View {
         let groups = groups
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
+                if let removalError {
+                    NoticeBanner(message: removalError)
+                }
                 ForEach(groups) { group in
                     environmentPanel(group)
                 }
@@ -113,10 +122,58 @@ struct ProjectOverview: View {
         .stopConfirmation(for: $stopCandidate) { resource in
             onAction(.stop, resource)
         }
+        .confirmationDialog(
+            environmentToDelete.map { environmentRemovalTitle($0) } ?? "",
+            isPresented: Binding(
+                get: { environmentToDelete != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        environmentToDelete = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible,
+            presenting: environmentToDelete
+        ) { environment in
+            Button("Delete", role: .destructive) {
+                Task { await remove(environment) }
+            }
+        } message: { environment in
+            Text(environmentRemovalMessage(environment))
+        }
         .animation(.snappy, value: groups.map(\.id))
         .animation(.snappy, value: resources.map(\.id))
         .animation(.snappy, value: deployments.map(\.id))
         .animation(.snappy, value: isLoadingDeployments)
+        .animation(reduceMotion ? nil : .snappy, value: removalError)
+    }
+
+    /// The last environment is the project's only place, so the delete stays hidden until another exists.
+    private var canDeleteEnvironments: Bool {
+        onDeleteEnvironment != nil && project.environments.count > 1
+    }
+
+    private func environmentRemovalTitle(_ environment: EnvironmentSummary) -> String {
+        let name = environment.name.isEmpty ? "this environment" : environment.name
+        return "Delete \(name)?"
+    }
+
+    private func environmentRemovalMessage(_ environment: EnvironmentSummary) -> String {
+        environment.name.isEmpty
+            ? "Coolify deletes this environment."
+            : "Coolify deletes the \(environment.name) environment."
+    }
+
+    private func remove(_ environment: EnvironmentSummary) async {
+        guard let onDeleteEnvironment, !isRemovingEnvironment else { return }
+        isRemovingEnvironment = true
+        defer { isRemovingEnvironment = false }
+        removalError = nil
+        do {
+            try await onDeleteEnvironment(environment)
+        } catch {
+            removalError = error.localizedDescription
+        }
     }
 
     private func newEnvironment(_ onAdd: @escaping (String, PlaceTint?) async throws -> Void) -> some View {
@@ -163,6 +220,13 @@ struct ProjectOverview: View {
                         Button("Edit Environment…", systemImage: "pencil") {
                             onEditEnvironment(group.environment)
                         }
+                        if canDeleteEnvironments, !group.environment.reference.isEmpty {
+                            Button(role: .destructive) {
+                                environmentToDelete = group.environment
+                            } label: {
+                                Label("Delete Environment…", systemImage: "trash")
+                            }
+                        }
                     } label: {
                         Label("More for \(group.environment.name)", systemImage: "ellipsis")
                             .labelStyle(.iconOnly)
@@ -174,7 +238,11 @@ struct ProjectOverview: View {
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
                     .fixedSize()
-                    .help("Rename or describe this environment")
+                    .help(
+                        canDeleteEnvironments
+                            ? "Rename, describe, or delete this environment"
+                            : "Rename or describe this environment"
+                    )
                 }
             }
             .padding(.horizontal, 4)
@@ -420,7 +488,8 @@ private struct ProjectDeploymentRow: View {
         ],
         onOpen: { _ in },
         onEditEnvironment: { _ in },
-        onAddEnvironment: { _, _ in }
+        onAddEnvironment: { _, _ in },
+        onDeleteEnvironment: { _ in }
     )
     .frame(width: 600, height: 640)
     .environment(\.placePalette, .preview(environments: ["env-prod": .orange, "env-staging": .indigo]))
