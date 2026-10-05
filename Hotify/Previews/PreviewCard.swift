@@ -24,7 +24,7 @@ struct PreviewCard: View {
                 FlameGlyph(heat: preview.heat, height: 22, tone: .preview)
                 PullRequestBadge(number: preview.number)
                 if preview.isDraft {
-                    Tag(text: "Draft")
+                    Chip(text: "Draft")
                 }
                 Spacer(minLength: 8)
                 Text(preview.stateLabel)

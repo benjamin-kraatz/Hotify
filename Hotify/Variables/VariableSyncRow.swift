@@ -55,7 +55,7 @@ struct VariableSyncRow: View {
                         .truncationMode(.middle)
                         .layoutPriority(1)
                     ForEach(change.source == nil ? destinationTags : sourceTags, id: \.self) { tag in
-                        Tag(text: tag)
+                        Chip(text: tag)
                     }
                     Spacer(minLength: 8)
                     if let verb {

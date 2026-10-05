@@ -18,7 +18,7 @@ struct VariableRow: View {
                         .truncationMode(.middle)
                         .layoutPriority(1)
                     ForEach(line.tags, id: \.self) { tag in
-                        Tag(text: tag)
+                        Chip(text: tag)
                     }
                 }
                 valueText

@@ -11,8 +11,8 @@ struct MoveSheet: View {
     @State private var isSaving = false
     @State private var confirm = false
     @State private var failure: String?
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.placePalette) private var palette
+    @SwiftUI.Environment(\.dismiss) private var dismiss
+    @SwiftUI.Environment(\.placePalette) private var palette
 
     private var canMove: Bool {
         guard !isSaving, catalog.hasLoaded, let environmentUUID = catalog.environmentUUID, !environmentUUID.isEmpty

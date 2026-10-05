@@ -162,10 +162,10 @@ private struct DeploymentSummary: View {
                 PullRequestBadge(number: pullRequest)
             }
             if line.isRestart {
-                Tag(text: "Restart")
+                Chip(text: "Restart")
             }
             if line.isRollback {
-                Tag(text: "Rollback")
+                Chip(text: "Rollback")
             }
         }
         if let commit = line.commit {

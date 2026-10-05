@@ -165,10 +165,10 @@ private struct DeploymentRow: View {
                         PullRequestBadge(number: pullRequest)
                     }
                     if line.isRestart {
-                        Tag(text: "Restart")
+                        Chip(text: "Restart")
                     }
                     if line.isRollback {
-                        Tag(text: "Rollback")
+                        Chip(text: "Rollback")
                     }
                     Spacer(minLength: 8)
                     if let startedAt = line.startedAt {

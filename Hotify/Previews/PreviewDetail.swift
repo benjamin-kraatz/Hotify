@@ -175,7 +175,7 @@ private struct PreviewHeader: View {
                 HStack(spacing: 10) {
                     PullRequestBadge(number: preview.number)
                     if preview.isDraft {
-                        Tag(text: "Draft")
+                        Chip(text: "Draft")
                     }
                     Text(preview.stateLabel)
                         .fontWeight(.semibold)

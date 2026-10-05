@@ -83,7 +83,7 @@ struct ResourceHeader: View {
     /// Says that manual deploys build one commit, not the branch's latest. A pin isn't a problem, so it gets no heat.
     @ViewBuilder
     private func pinTag(_ pin: String) -> some View {
-        let tag = Tag(text: "Pinned to \(pin)")
+        let tag = Chip(text: "Pinned to \(pin)")
         if let onShowSource {
             Button(action: onShowSource) { tag }
                 .buttonStyle(.plain)

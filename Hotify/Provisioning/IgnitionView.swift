@@ -239,11 +239,12 @@ struct IgnitionView<Accessory: View>: View {
 
 extension IgnitionView where Accessory == EmptyView {
     init(
-        name: String, ignition: Ignition, addresses: [URL], onOpen: @escaping () -> Void,
-        onClose: @escaping () -> Void
+        name: String, ignition: Ignition, addresses: [URL], isDatabase: Bool = false, isApplication: Bool = false,
+        deploysNow: Bool = true, onOpen: @escaping () -> Void, onClose: @escaping () -> Void
     ) {
         self.init(
-            name: name, ignition: ignition, addresses: addresses, onOpen: onOpen, onClose: onClose,
+            name: name, ignition: ignition, addresses: addresses, isDatabase: isDatabase,
+            isApplication: isApplication, deploysNow: deploysNow, onOpen: onOpen, onClose: onClose,
             accessory: { EmptyView() })
     }
 }

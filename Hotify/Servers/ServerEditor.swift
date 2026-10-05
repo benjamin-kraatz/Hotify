@@ -611,7 +611,7 @@ private struct ServerFormValues {
 
 extension ServerEditor {
     /// A filled server for previews. It has no key material.
-    private static var sample: Server {
+    fileprivate static var sample: Server {
         var server = Server(uuid: "localhost", name: "localhost", ip: "10.0.0.8", isReachable: true)
         server.description = "The lab machine"
         server.port = 22

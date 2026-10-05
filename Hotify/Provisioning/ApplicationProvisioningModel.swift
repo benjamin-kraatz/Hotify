@@ -5,7 +5,7 @@ import Foundation
 @Observable
 final class ApplicationProvisioningModel {
     let placement: PlacementModel
-    var source: ApplicationSource = .publicGit
+    var source: NewApplicationSource = .publicGit
 
     var name = ""
     var description = ""

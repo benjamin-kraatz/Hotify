@@ -195,9 +195,9 @@ final class DashboardModel {
             }
                 + databases.map { ResourceSummary(database: $0, place: $0.environmentID.flatMap { places[$0] }) }
                 + services.map { ResourceSummary(service: $0, place: $0.environmentID.flatMap { places[$0] }) },
+            tags: Self.tagNames(tags),
             pending: transitions.mapValues(\.action),
             loadError: loadError,
-            tags: Self.tagNames(tags),
             actionError: actionError,
             isLoading: isLoading,
             hasLoaded: lastUpdated != nil

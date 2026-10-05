@@ -159,7 +159,7 @@ struct StorageEditor: View {
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive) { Task { await delete() } }
-            } message: { _ in
+            } message: {
                 Text("Coolify removes that storage from \(resourceName).")
             }
         }

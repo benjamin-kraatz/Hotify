@@ -88,7 +88,7 @@ enum TemplateCategory: String, CaseIterable, Identifiable, Hashable {
         self = labels.lazy.compactMap(Self.shelf(for:)).first ?? .other
     }
 
-    private static func shelf(for label: String) -> TemplateCategory? {
+    private nonisolated static func shelf(for label: String) -> TemplateCategory? {
         switch label {
         case "ai", "mcp": .ai
         case "automation", "ci": .automation

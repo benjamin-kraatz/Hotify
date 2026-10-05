@@ -1,7 +1,9 @@
 import Foundation
 
 /// Where a new service goes: a server and its network, and a project's environment.
-struct Placement: Codable, Hashable {
+///
+/// Nonisolated so the last placement can be read from a model that is not on the main actor. The value is only uuids.
+nonisolated struct Placement: Codable, Hashable {
     var serverUUID: String?
     var projectUUID: String?
     var environmentUUID: String?

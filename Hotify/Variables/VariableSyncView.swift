@@ -230,7 +230,7 @@ struct VariableSyncView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if endpoint.resource.kind == .application {
-                    Tag(text: isPreview ? "Preview" : "Production")
+                    Chip(text: isPreview ? "Preview" : "Production")
                 }
             }
             Text(endpoint.instanceName)

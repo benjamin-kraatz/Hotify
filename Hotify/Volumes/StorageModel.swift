@@ -19,7 +19,7 @@ extension StorageOwner {
 @Observable
 final class StorageModel {
     var storages: [ResourceStorage] = []
-    var schedules: [String: VolumeBackupSchedule] = []
+    var schedules: [String: VolumeBackupSchedule] = [:]
     var s3Stores: [S3Storage] = []
     var error: String?
     var notice: String?

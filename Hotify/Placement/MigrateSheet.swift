@@ -12,7 +12,7 @@ struct MigrateSheet: View {
     @State private var confirm = false
     @State private var isSaving = false
     @State private var failure: String?
-    @Environment(\.dismiss) private var dismiss
+    @SwiftUI.Environment(\.dismiss) private var dismiss
 
     private var destinationUUID: String? {
         let uuid = catalog.destinationUUID ?? ""

@@ -3,7 +3,7 @@ import SwiftUI
 
 /// One application source, up close: where it should run, the fields that source needs, and whether to deploy it now.
 struct ApplicationLaunchPad: View {
-    var source: ApplicationSource
+    var source: NewApplicationSource
     var model: ApplicationProvisioningModel
     var instanceRoot: URL?
 
@@ -356,18 +356,18 @@ struct ApplicationLaunchPad: View {
 }
 
 #Preview("Public repository") {
-    preview(.publicGit)
+    launchPad(.publicGit)
 }
 
 #Preview("Dockerfile") {
-    preview(.dockerfile)
+    launchPad(.dockerfile)
 }
 
 #Preview("GitHub App") {
-    preview(.githubApp)
+    launchPad(.githubApp)
 }
 
-private func preview(_ source: ApplicationSource) -> some View {
+private func launchPad(_ source: NewApplicationSource) -> some View {
     let placement = PlacementModel(
         servers: [Server(uuid: "s1", name: "localhost", isReachable: true)],
         projects: [Project(uuid: "p1", name: "Website", environments: [Environment(uuid: "e1", name: "production")])],

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A small capsule for facts like `Literal` or `Draft`. Pull request numbers use `PullRequestBadge`.
-struct Tag: View {
+struct Chip: View {
     var text: String
 
     var body: some View {
@@ -17,8 +17,8 @@ struct Tag: View {
 
 #Preview {
     HStack {
-        Tag(text: "Draft")
-        Tag(text: "Literal")
+        Chip(text: "Draft")
+        Chip(text: "Literal")
     }
     .padding()
 }

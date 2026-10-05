@@ -2,7 +2,7 @@ import CoolifyAPI
 import Foundation
 
 /// Where a new application's code comes from. Each one is a screen of the New Resource sheet.
-enum ApplicationSource: String, CaseIterable, Identifiable, Hashable {
+enum NewApplicationSource: String, CaseIterable, Identifiable, Hashable {
     case publicGit
     case dockerfile
     case dockerImage

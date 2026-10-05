@@ -38,7 +38,6 @@ struct ServerDetailScreen: View {
             client: client,
             model: model,
             canAct: client != nil,
-            client: client,
             onValidate: { Task { await validate(install: false) } },
             onInstall: { prompt = .install },
             onSaveCleanup: { Task { await saveCleanup() } },
@@ -171,7 +170,6 @@ struct ServerDetail: View {
     var client: CoolifyClient? = nil
     var model: ServerPageModel
     var canAct: Bool
-    var client: CoolifyClient? = nil
     var onValidate: () -> Void = {}
     var onInstall: () -> Void = {}
     var onSaveCleanup: () -> Void = {}
@@ -393,14 +391,16 @@ private enum ServerPrompt: Identifiable {
 
 #Preview("Reachable") {
     NavigationStack {
-        ServerDetail(server: ServerLine(id: "localhost", name: "localhost", isReachable: true), model: .sample)
+        ServerDetail(
+            server: ServerLine(id: "localhost", name: "localhost", isReachable: true), model: .sample, canAct: true)
     }
     .frame(width: 640, height: 760)
 }
 
 #Preview("Unreachable") {
     NavigationStack {
-        ServerDetail(server: ServerLine(id: "build", name: "build-1", isReachable: false), model: .sample)
+        ServerDetail(
+            server: ServerLine(id: "build", name: "build-1", isReachable: false), model: .sample, canAct: false)
     }
     .frame(width: 640, height: 760)
 }

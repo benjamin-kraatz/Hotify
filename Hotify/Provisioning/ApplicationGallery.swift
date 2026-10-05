@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The ways to create an application, one card per source.
 struct ApplicationGallery: View {
-    var onSelect: (ApplicationSource) -> Void = { _ in }
+    var onSelect: (NewApplicationSource) -> Void = { _ in }
 
     @SwiftUI.Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -25,7 +25,7 @@ struct ApplicationGallery: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(ApplicationSource.allCases) { source in
+                    ForEach(NewApplicationSource.allCases) { source in
                         Button {
                             onSelect(source)
                         } label: {

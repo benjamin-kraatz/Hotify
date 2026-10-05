@@ -386,7 +386,7 @@ private struct ProjectDeploymentRow: View {
                             EnvironmentBadge(name: environment, tint: palette.environment(deployment.environmentUUID))
                         }
                         if line.isRestart {
-                            Tag(text: "Restart")
+                            Chip(text: "Restart")
                         }
                     }
                     HStack(alignment: .firstTextBaseline, spacing: 8) {

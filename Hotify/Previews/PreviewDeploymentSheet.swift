@@ -213,7 +213,7 @@ struct PreviewDeploymentSheet: View {
                                 .foregroundStyle(FlameTone.preview.tint(for: state.heat))
                         }
                         if choice.isDraft {
-                            Tag(text: "Draft")
+                            Chip(text: "Draft")
                         }
                         if let branch = choice.branch {
                             Label(branch, systemImage: "arrow.triangle.branch")

@@ -59,7 +59,7 @@ struct CommitList: View {
                 }
                 Spacer(minLength: 8)
                 if keptImages.contains(where: { $0.matches(commit: commit.sha) }) {
-                    Tag(text: "Image kept")
+                    Chip(text: "Image kept")
                 }
                 Image(systemName: "checkmark")
                     .foregroundStyle(.tint)

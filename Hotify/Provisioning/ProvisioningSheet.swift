@@ -238,7 +238,7 @@ enum ProvisioningRoute: Hashable {
     /// A new database's first start, with how to connect to it.
     case databaseStart
     /// One application source, where it is placed, named, and created.
-    case application(ApplicationSource)
+    case application(NewApplicationSource)
     /// A new application's first deploy, or the screen that opens it when it was left stopped.
     case applicationStart
 }

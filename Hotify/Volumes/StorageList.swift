@@ -10,11 +10,12 @@ struct StorageList: View {
     @State private var editor: StorageTarget?
     @State private var deleting: ResourceStorage?
 
-    init(client: CoolifyClient?, route: ResourceRoute, resourceName: String, model: StorageModel = StorageModel()) {
+    init(client: CoolifyClient?, route: ResourceRoute, resourceName: String, model: StorageModel? = nil) {
         self.client = client
         self.route = route
         self.resourceName = resourceName
-        _model = State(initialValue: model)
+        // A default argument is nonisolated, and StorageModel is created on the main actor.
+        _model = State(initialValue: model ?? StorageModel())
     }
 
     private var owner: StorageOwner { StorageOwner(route: route) }
