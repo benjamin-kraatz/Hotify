@@ -15,6 +15,39 @@ final class BackupsModel {
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
+        await load(client: client, database: database)
+    }
+
+    func create(_ draft: DatabaseBackupDraft, client: CoolifyClient, database: String) async throws {
+        _ = try await client.createDatabaseBackup(database: database, draft)
+        error = nil
+        await load(client: client, database: database)
+    }
+
+    func update(
+        _ backup: DatabaseBackup,
+        with draft: DatabaseBackupDraft,
+        client: CoolifyClient,
+        database: String
+    ) async throws {
+        _ = try await client.updateDatabaseBackup(database: database, backup: backup.id, draft)
+        error = nil
+        await load(client: client, database: database)
+    }
+
+    func delete(_ backup: DatabaseBackup, client: CoolifyClient, database: String) async {
+        do {
+            _ = try await client.deleteDatabaseBackup(database: database, backup: backup.id)
+            error = nil
+            await load(client: client, database: database)
+        } catch is CancellationError {
+            return
+        } catch {
+            self.error = (error as? CoolifyError)?.summary ?? error.localizedDescription
+        }
+    }
+
+    private func load(client: CoolifyClient, database: String) async {
         do {
             let loaded = try await client.databaseBackups(database)
             try Task.checkCancellation()
@@ -22,7 +55,7 @@ final class BackupsModel {
             hasLoaded = true
             error = nil
         } catch is CancellationError { return } catch {
-            self.error = (error as? CoolifyError)?.message ?? error.localizedDescription
+            self.error = (error as? CoolifyError)?.summary ?? error.localizedDescription
         }
     }
 
