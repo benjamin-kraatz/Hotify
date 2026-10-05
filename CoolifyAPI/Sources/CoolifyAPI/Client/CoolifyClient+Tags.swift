@@ -42,7 +42,7 @@ extension CoolifyClient {
     }
 
     public func deleteTag(_ uuid: String) async throws {
-        try await acknowledge("DELETE", path: "tags/\(CoolifyURL.encodePathComponent(uuid))")
+        _ = try await acknowledge("DELETE", path: "tags/\(CoolifyURL.encodePathComponent(uuid))")
     }
 
     /// The tags on one application, database, or service.
@@ -59,7 +59,7 @@ extension CoolifyClient {
     }
 
     public func removeTag(_ tagUUID: String, from owner: TagOwner) async throws {
-        try await acknowledge("DELETE", path: owner.tagPath(tagUUID))
+        _ = try await acknowledge("DELETE", path: owner.tagPath(tagUUID))
     }
 
     private static func tagName(_ name: String) throws -> String {

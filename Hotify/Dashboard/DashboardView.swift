@@ -23,7 +23,7 @@ struct DashboardView: View {
     /// Missing in previews, which leaves Add Server disabled.
     @SwiftUI.Environment(InstanceStore.self) private var store: InstanceStore?
     #if os(iOS)
-    @Environment(\.openURL) private var openURL
+    @SwiftUI.Environment(\.openURL) private var openURL
     #endif
     #if os(macOS)
     @FocusState private var isFiltering: Bool
