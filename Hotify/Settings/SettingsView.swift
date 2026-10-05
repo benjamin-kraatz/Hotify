@@ -55,6 +55,7 @@ struct SettingsView: View {
             } footer: {
                 Text(footer)
             }
+            BackupStorageSection()
             #if os(iOS)
             Section {
                 NavigationLink {
@@ -75,7 +76,7 @@ struct SettingsView: View {
         #endif
         #if os(macOS)
         .frame(width: 500)
-        .frame(minHeight: 340, idealHeight: 640)
+        .frame(minHeight: 340, idealHeight: 720)
         #endif
     }
 

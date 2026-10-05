@@ -10,7 +10,10 @@ struct BackupCard: View {
     var pendingSince: Date?
     var isBusy: Bool
     var canRun: Bool
+    var canManage: Bool = true
     var onRun: () -> Void
+    var onEdit: () -> Void = {}
+    var onDelete: () -> Void = {}
 
     private var history: [BackupExecution] { backup.history }
 
@@ -45,9 +48,27 @@ struct BackupCard: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                if backup.saveS3 {
+                    Text("Copies to S3")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer(minLength: 8)
+
+            if canManage {
+                Menu {
+                    Button("Edit Schedule", systemImage: "pencil", action: onEdit)
+                    Button("Delete Schedule", systemImage: "trash", role: .destructive, action: onDelete)
+                } label: {
+                    Label("Schedule actions", systemImage: "ellipsis.circle")
+                        .labelStyle(.iconOnly)
+                }
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Edit or delete this schedule")
+            }
 
             Button(action: onRun) {
                 Label(isBusy ? "Backing Up…" : "Back Up Now", systemImage: "externaldrive.badge.plus")

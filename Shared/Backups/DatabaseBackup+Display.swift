@@ -9,6 +9,7 @@ extension DatabaseBackup {
 
     /// The databases this configuration dumps, when Coolify names them.
     var databaseNames: String? {
+        if dumpAll { return "All databases" }
         guard let names = databasesToBackup?.trimmingCharacters(in: .whitespaces), !names.isEmpty else { return nil }
         return names.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: ", ")
     }
