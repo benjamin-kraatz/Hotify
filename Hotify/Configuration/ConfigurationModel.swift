@@ -1,8 +1,9 @@
 import CoolifyAPI
 import Foundation
 
-/// Loads and saves one resource's settings: its name and description, domains, health check, and a database's
-/// public port. Edits stay in `draft` until saved, across tab switches, since the detail screen keeps this model.
+/// Loads and saves one resource's settings: its name and description, domains, health check, a database's
+/// public port, and an application's proxy labels. Edits stay in `draft` until saved, across tab switches, since the
+/// detail screen keeps this model.
 @Observable
 final class ConfigurationModel {
     /// What the user is editing. `nil` until the first load.

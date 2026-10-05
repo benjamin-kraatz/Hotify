@@ -2,8 +2,8 @@ import CoolifyAPI
 import SwiftUI
 
 /// The Settings tab of a resource: its name and description, an application's source, its domains, a database's public
-/// port, its health check, and its tags, in one form with one Save. Nothing restarts or deploys on save. A bar offers
-/// that afterwards. Tags are saved on their own, as they are added or removed.
+/// port, its health check, an application's proxy labels, and its tags, in one form with one Save. Nothing restarts
+/// or deploys on save. A bar offers that afterwards. Tags are saved on their own, as they are added or removed.
 struct ConfigurationView: View {
     var model: ConfigurationModel
     var resource: ResourceSummary
@@ -169,6 +169,7 @@ struct ConfigurationView: View {
                 } else {
                     applicationDomains
                 }
+                LabelsSection(labels: draft.customLabels, escapesDollarSigns: draft.escapesDollarSigns)
             case .service:
                 containerDomains(empty: "None of this service's containers takes a domain.")
             case .database:
@@ -312,7 +313,13 @@ struct ConfigurationView: View {
                 domains: ["https://hotify.example.com", "https://www.hotify.example.com"],
                 redirect: .nonWWW,
                 healthCheck: HealthCheck(
-                    isEnabled: true, kind: .http, method: "GET", path: "/health", returnCode: 200, interval: 30)
+                    isEnabled: true, kind: .http, method: "GET", path: "/health", returnCode: 200, interval: 30),
+                customLabels: """
+                    traefik.http.middlewares.hotify-compress.compress=true
+                    traefik.http.routers.hotify.middlewares=hotify-compress
+                    traefik.http.services.hotify.loadbalancer.server.port=3000
+                    """,
+                escapesDollarSigns: true
             )
         ),
         resource: ResourceSummary(
@@ -327,7 +334,7 @@ struct ConfigurationView: View {
             ]
         )
     )
-    .frame(width: 560, height: 820)
+    .frame(width: 560, height: 960)
 }
 
 #Preview("Database") {

@@ -19,6 +19,10 @@ struct ResourceConfiguration: Hashable {
     var hasContainerDomains = false
     /// `nil` for a service, whose health checks live in its compose file.
     var healthCheck: HealthCheck?
+    /// An application's proxy labels. Empty when it has none. Unused for a database or a service.
+    var customLabels = ""
+    /// Whether Coolify writes `$` as `$$`. Off lets the labels expand environment variables.
+    var escapesDollarSigns = true
     var isPublic = false
     var publicPort: Int?
 }
@@ -42,6 +46,9 @@ extension ResourceConfiguration {
         redirect = application.redirect ?? .both
         forcesHTTPS = application.settings?.isForceHTTPSEnabled ?? true
         healthCheck = Self.cleaned(application.healthCheck)
+        customLabels = application.customLabels ?? ""
+        // Coolify escapes by default, and a GET may omit the flag.
+        escapesDollarSigns = application.isContainerLabelEscapeEnabled ?? true
         if application.isDockerCompose {
             hasContainerDomains = true
             containers = (application.dockerComposeDomains ?? [:])
@@ -123,6 +130,11 @@ extension ResourceConfiguration {
         update.healthCheck = healthCheckChanges(from: saved)
         if let source, let before = saved.source {
             source.write(changesFrom: before, into: &update)
+        }
+        // An empty string clears labels that were present. Leaving them empty sends nothing.
+        if customLabels != saved.customLabels { update.customLabels = customLabels }
+        if escapesDollarSigns != saved.escapesDollarSigns {
+            update.isContainerLabelEscapeEnabled = escapesDollarSigns
         }
         if force, update.domains != nil || update.dockerComposeDomains != nil { update.forceDomainOverride = true }
         return update

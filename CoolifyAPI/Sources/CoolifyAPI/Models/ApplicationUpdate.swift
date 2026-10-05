@@ -46,6 +46,10 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
     public var gitCommitSHA: String?
     public var dockerRegistryImageTag: String?
     public var isAutoDeployEnabled: Bool?
+    /// The proxy label block. An empty string clears labels that were present. `nil` leaves them alone.
+    public var customLabels: String?
+    /// Whether Coolify turns `$` into `$$` in the labels. Off lets the labels expand environment variables.
+    public var isContainerLabelEscapeEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -60,6 +64,8 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         case gitCommitSHA = "gitCommitSha"
         case dockerRegistryImageTag
         case isAutoDeployEnabled
+        case customLabels
+        case isContainerLabelEscapeEnabled
     }
 
     public init(
@@ -74,7 +80,9 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         gitBranch: String? = nil,
         gitCommitSHA: String? = nil,
         dockerRegistryImageTag: String? = nil,
-        isAutoDeployEnabled: Bool? = nil
+        isAutoDeployEnabled: Bool? = nil,
+        customLabels: String? = nil,
+        isContainerLabelEscapeEnabled: Bool? = nil
     ) {
         self.name = name
         self.description = description
@@ -88,20 +96,24 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         self.gitCommitSHA = gitCommitSHA
         self.dockerRegistryImageTag = dockerRegistryImageTag
         self.isAutoDeployEnabled = isAutoDeployEnabled
+        self.customLabels = customLabels
+        self.isContainerLabelEscapeEnabled = isContainerLabelEscapeEnabled
     }
 
     /// Whether there is anything to send.
     public var isEmpty: Bool {
         name == nil && description == nil && domains == nil && redirect == nil && isForceHTTPSEnabled == nil
             && dockerComposeDomains == nil && healthCheck == nil && gitBranch == nil && gitCommitSHA == nil
-            && dockerRegistryImageTag == nil && isAutoDeployEnabled == nil
+            && dockerRegistryImageTag == nil && isAutoDeployEnabled == nil && customLabels == nil
+            && isContainerLabelEscapeEnabled == nil
     }
 
-    /// Whether the change only reaches the running app with its next deployment. Coolify writes domains and the
-    /// health check into the container's labels and settings as it deploys, and builds a new version only then.
+    /// Whether the change only reaches the running app with its next deployment. Coolify writes domains, the
+    /// health check, and proxy labels into the container as it deploys, and builds a new version only then.
     public var needsRedeploy: Bool {
         domains != nil || redirect != nil || isForceHTTPSEnabled != nil || dockerComposeDomains != nil
             || healthCheck != nil || gitBranch != nil || gitCommitSHA != nil || dockerRegistryImageTag != nil
+            || customLabels != nil || isContainerLabelEscapeEnabled != nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -117,6 +129,8 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         try container.encodeIfPresent(gitCommitSHA, forKey: .gitCommitSHA)
         try container.encodeIfPresent(dockerRegistryImageTag, forKey: .dockerRegistryImageTag)
         try container.encodeIfPresent(isAutoDeployEnabled, forKey: .isAutoDeployEnabled)
+        try container.encodeIfPresent(customLabels, forKey: .customLabels)
+        try container.encodeIfPresent(isContainerLabelEscapeEnabled, forKey: .isContainerLabelEscapeEnabled)
         try healthCheck?.encode(to: encoder)
     }
 }
