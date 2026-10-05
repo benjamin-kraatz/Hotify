@@ -17,6 +17,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Versions/` changes which version of an application runs. The toolbar's Versions menu rolls back to an image Coolify kept, and Roll Back to This does the same from a deployment. Deploy a Version deploys any commit or image tag, once or pinned, and lists a GitHub branch's recent commits to pick from.
   - `Provisioning/` creates services from Coolify's one-click templates, and databases of any engine Coolify offers: a gallery, then placement, setup for a service, and the first start, in one New Resource sheet that opens from a project page's New Resource button, its ⇧⌘N in the Project menu, or an empty dashboard. From a project, the sheet starts in that project, on the server that runs most of it. A new database's connection strings hold its password, so they stay behind `VariableLock`.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
+  - `Volumes/` lists a resource's persistent volumes and file mounts, and schedules a backup of a volume or a directory mount.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS.
   - `Storage/` holds the GitHub token.
 - `HotifyWidgets/` is the WidgetKit extension: the Pinned Resources, Instance, Needs Attention, Recent Deployments, and Backups widgets, two Control Center controls, and on iPhone the deploy Live Activity.

@@ -26,6 +26,18 @@ extension CoolifyClient {
         return try decode(T.self, from: data, response: response)
     }
 
+    func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
+        let (data, response) = try await send("PUT", path: path, body: try CoolifyJSON.encoder().encode(body))
+        return try decode(T.self, from: data, response: response)
+    }
+
+    /// A write whose body is only a message, or empty. Volume backup delete and run are documented that way.
+    func acknowledge(_ method: String, path: String, body: Data? = nil) async throws -> QueuedAction {
+        let (data, response) = try await send(method, path: path, body: body)
+        guard !data.isEmpty else { return QueuedAction(message: nil, deploymentUUID: nil) }
+        return try decode(QueuedAction.self, from: data, response: response)
+    }
+
     func patchList<T: Decodable>(_ path: String, body: some Encodable) async throws -> [T] {
         let (data, response) = try await send("PATCH", path: path, body: try CoolifyJSON.encoder().encode(body))
         return try decodeList(T.self, from: data, response: response)
