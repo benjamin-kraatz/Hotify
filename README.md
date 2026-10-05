@@ -24,7 +24,7 @@ A Mac and iPhone app for your self-hosted [Coolify](https://coolify.io).
 - **Resources.** Logs per container, deployment history, and a database's backups, with Back Up Now. A resource's Storage tab manages volumes and file mounts and can schedule a volume backup. Edit the name, domains, health check, an application's branch, pinned commit, or image tag, and a database's public port.
 - **Scheduled tasks.** Applications and services can run a command on a schedule. Each task keeps its history, and Run Now starts one immediately.
 - **Projects.** A page per project with its resources, recent deployments, previews, and shared variables. Add environments, rename things, and give projects and environments a color.
-- **New services and databases.** Pick one of Coolify's one-click templates, place it, set its domains, and watch its first start. Or create a database of any engine Coolify offers, and copy its connection string once Face ID allows.
+- **New services and databases.** Pick one of Coolify's one-click templates, place it, set its domains, and watch its first start. Or create a database of any engine Coolify offers, and copy its connection string once Face ID allows. Or create an application from a public repository, a Dockerfile, a Docker image, a GitHub App, or a deploy key.
 - **Pull request previews.** Deploy a preview for a pull request, browse the live ones, and read their logs. A GitHub token is optional, for private repositories.
 - **Variables.** Edit them, with values hidden until Face ID, Touch ID, or your passcode unlocks them. Copy them from one resource to another, across instances too.
 - **Failed deployments.** Apple Intelligence explains what went wrong. It runs on the device, so the log never leaves it.

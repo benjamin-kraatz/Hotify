@@ -2,7 +2,7 @@ import CoolifyAPI
 import SwiftUI
 
 /// From template to running service in one sheet: choose, place, set up, start. A database skips setup, since
-/// Coolify starts it as it creates it.
+/// Coolify starts it as it creates it. An application does too, and can deploy as soon as it exists.
 ///
 /// Each step is a screen pushed onto the sheet's navigation stack, so going back from a template is the system's
 /// own back button and swipe. The service only exists in Coolify once the user creates it on the second step.
@@ -18,6 +18,7 @@ struct ProvisioningSheet: View {
 
     @State private var model: ProvisioningModel
     @State private var databases: DatabaseProvisioningModel
+    @State private var applications: ApplicationProvisioningModel
     @State private var kind = NewResourceKind.service
     @State private var path: [ProvisioningRoute] = []
 
@@ -36,6 +37,7 @@ struct ProvisioningSheet: View {
         self.onClose = onClose
         _model = State(initialValue: model)
         _databases = State(initialValue: DatabaseProvisioningModel(placement: model.placement))
+        _applications = State(initialValue: ApplicationProvisioningModel(placement: model.placement))
     }
 
     var body: some View {
@@ -57,15 +59,20 @@ struct ProvisioningSheet: View {
         .onChange(of: databases.created) { _, created in
             if created != nil { path.append(.databaseStart) }
         }
+        .onChange(of: applications.created) { _, created in
+            if created != nil { path.append(.applicationStart) }
+        }
         // Only the gallery closes with a swipe. On a template the user may have named and placed the service, which
         // a stray swipe would lose. Once the service exists, closing has to keep or delete it, which setup asks about.
-        .interactiveDismissDisabled(!path.isEmpty || model.isCreating || databases.isCreating)
+        .interactiveDismissDisabled(
+            !path.isEmpty || model.isCreating || databases.isCreating || applications.isCreating)
         #if os(macOS)
         .frame(minWidth: 680, idealWidth: 860, minHeight: 600, idealHeight: 780)
         #endif
         .task {
             model.prepare(client, instanceID: instanceID, hint: hint)
             databases.prepare(client)
+            applications.prepare(client)
             async let templates: Void = catalog.load()
             async let placement: Void = model.placement.load()
             _ = await (templates, placement)
@@ -81,6 +88,12 @@ struct ProvisioningSheet: View {
                 DatabaseGallery(instanceRoot: model.instanceRoot) { engine in
                     databases.createProblem = nil
                     path.append(.database(engine))
+                }
+            case .application:
+                ApplicationGallery { source in
+                    applications.createProblem = nil
+                    applications.source = source
+                    path.append(.application(source))
                 }
             }
         }
@@ -106,7 +119,7 @@ struct ProvisioningSheet: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { onClose(nil) }
-                    .disabled(model.isCreating || databases.isCreating)
+                    .disabled(model.isCreating || databases.isCreating || applications.isCreating)
             }
         }
     }
@@ -177,6 +190,30 @@ struct ProvisioningSheet: View {
             .task { await databases.watch() }
             .provisioningStep(
                 .start, isFinished: databases.ignition.phase == .running, steps: NewResourceKind.database.steps)
+        case .application(let source):
+            ApplicationLaunchPad(source: source, model: applications, instanceRoot: model.instanceRoot)
+                .provisioningStep(.place, steps: NewResourceKind.application.steps)
+                .navigationTitle(source.title)
+                #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .navigationBarBackButtonHidden(applications.isCreating)
+        case .applicationStart:
+            IgnitionView(
+                name: applications.displayName,
+                ignition: applications.ignition,
+                addresses: [],
+                isApplication: true,
+                deploysNow: applications.instantDeploy,
+                onOpen: { onClose(applications.route) },
+                onClose: { onClose(nil) }
+            )
+            .task { await applications.watch() }
+            .provisioningStep(
+                .start,
+                isFinished: !applications.instantDeploy || applications.ignition.phase == .running,
+                steps: NewResourceKind.application.steps
+            )
         }
     }
 
@@ -200,12 +237,17 @@ enum ProvisioningRoute: Hashable {
     case database(DatabaseEngine)
     /// A new database's first start, with how to connect to it.
     case databaseStart
+    /// One application source, where it is placed, named, and created.
+    case application(ApplicationSource)
+    /// A new application's first deploy, or the screen that opens it when it was left stopped.
+    case applicationStart
 }
 
-/// What the sheet creates. Coolify's one-click services, or a database on its own.
+/// What the sheet creates. Coolify's one-click services, a database, or an application.
 enum NewResourceKind: CaseIterable, Identifiable, Hashable {
     case service
     case database
+    case application
 
     var id: Self { self }
 
@@ -213,14 +255,15 @@ enum NewResourceKind: CaseIterable, Identifiable, Hashable {
         switch self {
         case .service: "Service"
         case .database: "Database"
+        case .application: "Application"
         }
     }
 
-    /// A database skips setup, since Coolify starts it as it creates it.
+    /// A database or an application skips setup. Coolify can start either one as it creates it.
     var steps: [ProvisioningStep] {
         switch self {
         case .service: ProvisioningStep.allCases
-        case .database: [.choose, .place, .start]
+        case .database, .application: [.choose, .place, .start]
         }
     }
 }
