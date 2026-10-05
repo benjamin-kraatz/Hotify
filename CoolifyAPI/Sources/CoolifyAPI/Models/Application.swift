@@ -51,6 +51,10 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
     public var healthCheck: HealthCheck?
     /// Tag names when the payload includes them. The OpenAPI schema omits this field; an absent one is empty.
     public var tags: [String] = []
+    /// The proxy label block. Absent when the payload leaves it out or the application has none.
+    public var customLabels: String?
+    /// Whether Coolify turns `$` into `$$` in the labels. Off lets the labels expand environment variables.
+    public var isContainerLabelEscapeEnabled: Bool?
 
     /// Whether the application builds from a Docker Compose file, whose domains are set per service.
     public var isDockerCompose: Bool { buildPack == "dockercompose" }
@@ -87,6 +91,8 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         case redirect
         case dockerComposeDomains
         case tags
+        case customLabels
+        case isContainerLabelEscapeEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -112,6 +118,9 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         healthCheck = try? HealthCheck(from: decoder)
         // The OpenAPI Application schema has no tags field. Decode them when a payload sends them anyway.
         tags = container.flexTagNames(.tags)
+        // A GET may omit both. `0` and `1` are how Laravel often sends the escape flag.
+        customLabels = container.flexString(.customLabels)
+        isContainerLabelEscapeEnabled = container.flexBool(.isContainerLabelEscapeEnabled)
     }
 
     /// Coolify stores `docker_compose_domains` as a JSON string, `{"web": {"domain": "https://…"}}`, and sends it
