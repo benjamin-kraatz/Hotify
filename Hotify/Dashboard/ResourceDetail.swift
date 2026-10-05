@@ -224,6 +224,8 @@ struct ResourceDetail: View {
     @State private var removalError: String?
     /// A new value gives the confirmation fresh switches, so volumes start off every time it opens.
     @State private var removalPresentation = 0
+    /// Move, clone, or migrate, while that sheet is open.
+    @State private var placement: PlacementIntent?
     @State private var previewGeneration = 0
     @State private var followedPreviewDeployment: DeploymentLine?
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -389,6 +391,9 @@ struct ResourceDetail: View {
                 .id(uuid)
             }
         }
+        .sheet(item: $placement) { intent in
+            PlacementSheet(intent: intent, resource: resource, client: deploymentClient)
+        }
         .onChange(of: resource.route) { _, _ in
             previewGeneration += 1
             showsPreviewDeployment = false
@@ -402,6 +407,7 @@ struct ResourceDetail: View {
             versionNotice = nil
             showsRemoval = false
             removalError = nil
+            placement = nil
         }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
@@ -445,6 +451,9 @@ struct ResourceDetail: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         DetailNavigation(title: title, back: currentBack)
+        ToolbarItem(placement: .primaryAction) {
+            PlaceMenu(isEnabled: deploymentClient != nil) { placement = $0 }
+        }
         #if os(macOS)
         if let menuBar, menuBar.enabled {
             ToolbarItem(placement: .primaryAction) {
