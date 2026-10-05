@@ -60,6 +60,12 @@ struct Ignition: Hashable {
         observe([Heat(status: database.status)], overall: Heat(status: database.status), at: now)
     }
 
+    /// An application is its own one container. A build that has not started yet stays in `.starting`.
+    mutating func observe(_ application: Application, name: String, at now: Date = .now) {
+        containers = [ContainerSummary(id: 0, name: name, status: application.status)]
+        observe([Heat(status: application.status)], overall: Heat(status: application.status), at: now)
+    }
+
     private mutating func observe(_ counted: [Heat], overall: Heat, at now: Date) {
         let heats = counted.isEmpty ? [overall] : counted
 

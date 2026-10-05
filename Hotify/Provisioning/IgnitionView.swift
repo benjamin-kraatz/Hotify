@@ -9,6 +9,10 @@ struct IgnitionView<Accessory: View>: View {
     var addresses: [URL]
     /// A database is one container and has no addresses, which changes what the screen says.
     var isDatabase = false
+    /// An application is one container. Its first deploy is a build, not a pull of several images.
+    var isApplication = false
+    /// When false, Coolify created the application and left it stopped.
+    var deploysNow = true
     var onOpen: () -> Void
     var onClose: () -> Void
     @ViewBuilder var accessory: Accessory
@@ -17,8 +21,17 @@ struct IgnitionView<Accessory: View>: View {
 
     private var isRunning: Bool { ignition.phase == .running }
 
+    /// Created and left stopped, so the screen can offer to open it without waiting.
+    private var isHeld: Bool { isApplication && !deploysNow }
+
+    private var canOpenNow: Bool { isRunning || isHeld }
+
+    /// A held application is stopped, which is a cold flame. Anything deploying uses the ignition's own heat.
+    private var flameHeat: Heat { isHeld ? .cold : ignition.heat }
+
     private var status: String {
-        switch ignition.phase {
+        if isHeld { return "Created" }
+        return switch ignition.phase {
         case .starting: "Starting…"
         case .running: "Running"
         case .stalled: "Taking longer than usual"
@@ -27,21 +40,38 @@ struct IgnitionView<Accessory: View>: View {
     }
 
     private var detail: String {
-        switch ignition.phase {
+        if isHeld { return "Coolify has it. It stays stopped until you start it from its page." }
+        return switch ignition.phase {
         case .starting:
-            isDatabase
-                ? "Coolify is pulling the image and starting the database. The first start can take a minute."
-                : "Coolify is pulling images and starting \(containerCount). The first start can take a few minutes."
+            if isDatabase {
+                "Coolify is pulling the image and starting the database. The first start can take a minute."
+            } else if isApplication {
+                "Coolify is building the application and starting it. The first deploy can take a few minutes."
+            } else {
+                "Coolify is pulling images and starting \(containerCount). The first start can take a few minutes."
+            }
         case .running:
-            isDatabase
-                ? "It's up. It's in your dashboard now, with its logs and backups."
-                : "Every container is up. It's in your dashboard now, with its logs and variables."
+            if isDatabase {
+                "It's up. It's in your dashboard now, with its logs and backups."
+            } else if isApplication {
+                "It's up. It's in your dashboard now, with its logs and variables."
+            } else {
+                "Every container is up. It's in your dashboard now, with its logs and variables."
+            }
         case .stalled:
-            "A large image may still be pulling. Hotify keeps watching, or open it to read its logs."
+            if isApplication {
+                "The build is taking a while. Hotify keeps watching, or open it to read its logs."
+            } else {
+                "A large image may still be pulling. Hotify keeps watching, or open it to read its logs."
+            }
         case .stopped:
-            isDatabase
-                ? "It came up, then stopped. Its logs usually say why."
-                : "Its containers came up, then stopped. Its logs usually say why, often a setting it needs."
+            if isDatabase {
+                "It came up, then stopped. Its logs usually say why."
+            } else if isApplication {
+                "It came up, then stopped. Its logs usually say why."
+            } else {
+                "Its containers came up, then stopped. Its logs usually say why, often a setting it needs."
+            }
         }
     }
 
@@ -63,9 +93,9 @@ struct IgnitionView<Accessory: View>: View {
                     HStack(spacing: 8) {
                         Text(status)
                             .fontWeight(.semibold)
-                            .foregroundStyle(ignition.heat.tint)
+                            .foregroundStyle(flameHeat.tint)
                             .contentTransition(.interpolate)
-                        if !isRunning {
+                        if !canOpenNow {
                             elapsed
                         }
                     }
@@ -94,7 +124,7 @@ struct IgnitionView<Accessory: View>: View {
                 accessory
                     .frame(maxWidth: 480)
 
-                if !ignition.containers.isEmpty, !isDatabase {
+                if !ignition.containers.isEmpty, !isDatabase, !isApplication {
                     containers
                 }
             }
@@ -135,7 +165,7 @@ struct IgnitionView<Accessory: View>: View {
             StokableFlame(height: 112, headroom: 24, ignitesOnAppear: true)
                 .transition(.scale(scale: 0.7, anchor: .bottom).combined(with: .opacity))
         } else {
-            FlameGlyph(heat: ignition.heat, height: 112)
+            FlameGlyph(heat: flameHeat, height: 112)
                 .transition(.opacity)
         }
     }
@@ -193,10 +223,10 @@ struct IgnitionView<Accessory: View>: View {
             Spacer(minLength: 0)
             Button(action: onOpen) {
                 Label(
-                    isRunning ? "Open \(name)" : "Follow in Hotify",
-                    systemImage: isRunning ? "arrow.forward" : "text.alignleft")
+                    canOpenNow ? "Open \(name)" : "Follow in Hotify",
+                    systemImage: canOpenNow ? "arrow.forward" : "text.alignleft")
             }
-            .glassButton(prominent: isRunning)
+            .glassButton(prominent: canOpenNow)
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
             Spacer(minLength: 0)
@@ -249,6 +279,21 @@ extension IgnitionView where Accessory == EmptyView {
                 phase: .running
             ),
             addresses: [URL(string: "https://blog.example.com")!],
+            onOpen: {},
+            onClose: {}
+        )
+    }
+    .frame(width: 720, height: 720)
+}
+
+#Preview("Application created") {
+    NavigationStack {
+        IgnitionView(
+            name: "blog",
+            ignition: Ignition(),
+            addresses: [],
+            isApplication: true,
+            deploysNow: false,
             onOpen: {},
             onClose: {}
         )
