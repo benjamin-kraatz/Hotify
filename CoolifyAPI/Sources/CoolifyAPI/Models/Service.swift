@@ -3,7 +3,7 @@ import Foundation
 /// One container inside a service. This is not an `Application`: the id is numeric, and `uuid` is often absent.
 public struct ServiceApplication: Decodable, Sendable, Identifiable, Hashable, HasResourceStatus {
     public var id: Int
-    /// Empty when the payload omits it. Start, stop, and restart are keyed by this, never by `id`.
+    /// Empty when the payload omits it. Start, stop, restart, and edit are keyed by this, never by `id`.
     public var uuid: String
     public var name: String
     public var humanName: String?
@@ -11,6 +11,9 @@ public struct ServiceApplication: Decodable, Sendable, Identifiable, Hashable, H
     public var fqdn: String?
     public var image: String?
     public var excludeFromStatus: Bool?
+    /// Whether a database container accepts connections from the internet. Application containers leave this unset.
+    public var isPublic: Bool?
+    public var publicPort: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -21,6 +24,8 @@ public struct ServiceApplication: Decodable, Sendable, Identifiable, Hashable, H
         case fqdn
         case image
         case excludeFromStatus
+        case isPublic
+        case publicPort
     }
 
     public init(from decoder: Decoder) throws {
@@ -34,6 +39,9 @@ public struct ServiceApplication: Decodable, Sendable, Identifiable, Hashable, H
         fqdn = container.flexString(.fqdn)
         image = container.flexString(.image)
         excludeFromStatus = container.flexBool(.excludeFromStatus)
+        // The database list includes these. A nested service payload, and an application container, often omit them.
+        isPublic = container.flexBool(.isPublic)
+        publicPort = container.flexInt(.publicPort)
     }
 }
 

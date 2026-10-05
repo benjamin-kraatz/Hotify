@@ -40,10 +40,15 @@ struct ContainerSummary: Identifiable, Hashable {
     var status: String?
     var image: String?
     var link: URL?
-    /// The uuid start, stop, and restart use. Empty when the payload left it off.
+    /// The uuid start, stop, restart, and edit use. Empty when the payload left it off.
     var uuid: String = ""
     /// A database container of the service. Application containers are false.
     var isDatabase: Bool = false
+    /// The domains Coolify stored, comma-separated, when the payload included them.
+    var fqdn: String?
+    /// A database container's public access. Application containers leave this off.
+    var isPublic = false
+    var publicPort: Int?
 
     var heat: Heat { Heat(status: status) }
 }
@@ -92,7 +97,8 @@ extension ResourceSummary {
                 image: container.image,
                 link: Self.firstURL(in: container.fqdn),
                 uuid: container.uuid,
-                isDatabase: false
+                isDatabase: false,
+                fqdn: container.fqdn
             )
         }
         let databases = (service.databases ?? []).map { container in
@@ -105,7 +111,10 @@ extension ResourceSummary {
                 image: container.image,
                 link: Self.firstURL(in: container.fqdn),
                 uuid: container.uuid,
-                isDatabase: true
+                isDatabase: true,
+                fqdn: container.fqdn,
+                isPublic: container.isPublic ?? false,
+                publicPort: container.publicPort
             )
         }
         let containers = applications + databases

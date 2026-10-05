@@ -8,13 +8,15 @@ enum ContainerCommand {
     case restart
 }
 
-/// Loads each container's uuid, then starts, stops, or restarts one of them.
+/// Loads each container's uuid, then starts, stops, or restarts one of them, and remembers what an edit starts from.
 @Observable
 final class ContainerActions {
     var lookupError: String?
     var actionError: String?
     private(set) var busyUUID: String?
     private var targets: [Target] = []
+    /// Edits saved this visit. The lists keep the previous values until the next load, which would reopen a stale form.
+    private var savedEdits: [String: ContainerEditorValues] = [:]
 
     var isBusy: Bool { busyUUID != nil }
 
@@ -32,9 +34,10 @@ final class ContainerActions {
         busyUUID == uuid
     }
 
-    /// Drops uuids from the previous service. Does not touch the rows the dashboard already showed.
+    /// Drops the previous service's uuids and remembered edits. Does not touch the rows the dashboard already showed.
     func reset() {
         targets = []
+        savedEdits = [:]
         lookupError = nil
         actionError = nil
         busyUUID = nil
@@ -88,13 +91,56 @@ final class ContainerActions {
         }
     }
 
+    /// The name, domains, and public access the editor opens with. A save from this visit wins, then the lists.
+    func editorValues(for container: ContainerSummary) -> ContainerEditorValues {
+        if let saved = savedEdits[Self.editKey(container)] { return saved }
+        let match = target(for: container)
+        let fqdn = match.flatMap { Self.present($0.fqdn) } ?? Self.present(container.fqdn)
+        var domains = ResourceConfiguration.split(fqdn)
+        if domains.isEmpty, let link = container.link?.absoluteString, !link.isEmpty {
+            domains = [link]
+        }
+        return ContainerEditorValues(
+            name: match.flatMap { Self.present($0.humanName) } ?? container.name,
+            domains: domains,
+            isPublic: match.flatMap { $0.isPublic } ?? container.isPublic,
+            publicPort: match.flatMap { $0.publicPort } ?? container.publicPort
+        )
+    }
+
+    /// Keeps a successful edit for the next time this container's sheet opens.
+    func rememberEdit(_ container: ContainerSummary, _ values: ContainerEditorValues) {
+        guard !container.uuid.isEmpty else { return }
+        savedEdits[Self.editKey(container)] = values
+    }
+
     private func uuid(matching container: ContainerSummary) -> String? {
+        target(for: container)?.uuid
+    }
+
+    /// Prefers the loaded row with this uuid. A row whose payload omitted the uuid falls back to the name, then the id.
+    private func target(for container: ContainerSummary) -> Target? {
+        if !container.uuid.isEmpty {
+            let sameUUID = targets.filter { $0.uuid == container.uuid && $0.isDatabase == container.isDatabase }
+            if sameUUID.count == 1 { return sameUUID[0] }
+        }
         let matches = targets.filter { $0.matches(container) }
-        if matches.count == 1 { return matches[0].uuid }
+        if matches.count == 1 { return matches[0] }
         let listedID = Self.listedID(of: container)
         let sameID = matches.filter { listedID != 0 && $0.id == listedID }
-        if sameID.count == 1 { return sameID[0].uuid }
+        if sameID.count == 1 { return sameID[0] }
         return nil
+    }
+
+    private static func editKey(_ container: ContainerSummary) -> String {
+        let role = container.isDatabase ? "database" : "application"
+        return "\(role)-\(container.uuid)"
+    }
+
+    private static func present(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// A database row stores `-id - 1`. Matching uses the id the list decoded.
@@ -105,9 +151,26 @@ final class ContainerActions {
 
     private static func targets(_ items: [ServiceApplication], isDatabase: Bool) -> [Target] {
         items.map {
-            Target(name: $0.name, humanName: $0.humanName, id: $0.id, uuid: $0.uuid, isDatabase: isDatabase)
+            Target(
+                name: $0.name,
+                humanName: $0.humanName,
+                id: $0.id,
+                uuid: $0.uuid,
+                isDatabase: isDatabase,
+                fqdn: $0.fqdn,
+                isPublic: $0.isPublic,
+                publicPort: $0.publicPort
+            )
         }
     }
+}
+
+/// What the container editor opens with: the row, filled in from the lists when those have loaded.
+struct ContainerEditorValues: Hashable {
+    var name: String
+    var domains: [String]
+    var isPublic: Bool
+    var publicPort: Int?
 }
 
 private struct Target: Hashable {
@@ -116,6 +179,9 @@ private struct Target: Hashable {
     var id: Int
     var uuid: String
     var isDatabase: Bool
+    var fqdn: String?
+    var isPublic: Bool?
+    var publicPort: Int?
 
     /// The list's `name` is the compose service name. The row title may be `humanName` instead.
     func matches(_ container: ContainerSummary) -> Bool {

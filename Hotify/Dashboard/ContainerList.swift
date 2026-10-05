@@ -1,7 +1,7 @@
 import CoolifyAPI
 import SwiftUI
 
-/// The containers inside a service, each with its own status, and start, stop, and restart when it has a uuid.
+/// The containers inside a service, each with its own status, and start, stop, restart, and edit when it has a uuid.
 struct ContainerList: View {
     var containers: [ContainerSummary]
     var client: CoolifyClient?
@@ -9,10 +9,19 @@ struct ContainerList: View {
 
     @State private var actions = ContainerActions()
     @State private var stopTarget: ContainerSummary?
+    @State private var editing: ContainerSummary?
+    /// Names and links saved here, until a later poll brings the same values from Coolify.
+    @State private var revisions: [String: ContainerRevision] = [:]
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var rows: [ContainerSummary] {
-        actions.resolved(containers)
+        actions.resolved(containers).map { container in
+            guard let revision = revisions[container.uuid] else { return container }
+            var copy = container
+            copy.name = revision.name
+            copy.link = revision.link
+            return copy
+        }
     }
 
     private var loadID: String {
@@ -40,6 +49,7 @@ struct ContainerList: View {
                             showsActions: !container.uuid.isEmpty,
                             isBusy: actions.isBusy(container.uuid),
                             canAct: client != nil && !actions.isBusy,
+                            onEdit: { editing = container },
                             onStart: { run(.start, container) },
                             onRestart: { run(.restart, container) },
                             onStop: { stopTarget = container }
@@ -65,9 +75,26 @@ struct ContainerList: View {
         .animation(.snappy, value: actions.actionError)
         .animation(reduceMotion ? nil : .snappy, value: actions.busyUUID)
         .task(id: loadID) {
+            revisions = [:]
             actions.reset()
             guard let client, let serviceUUID, !serviceUUID.isEmpty else { return }
             await actions.load(client: client, service: serviceUUID)
+        }
+        .sheet(item: $editing) { container in
+            ContainerEditor(
+                container: container,
+                values: actions.editorValues(for: container),
+                client: client,
+                serviceUUID: serviceUUID,
+                onSaved: { saved in
+                    actions.rememberEdit(container, saved)
+                    let link = saved.domains
+                        .map { $0.trimmingCharacters(in: .whitespaces) }
+                        .first { !$0.isEmpty }
+                        .flatMap(URL.init(string:))
+                    revisions[container.uuid] = ContainerRevision(name: saved.name, link: link)
+                }
+            )
         }
         .confirmationDialog(
             stopTarget.map { "Stop \($0.name)?" } ?? "",
@@ -107,6 +134,7 @@ private struct ContainerRow: View {
     var showsActions: Bool
     var isBusy: Bool
     var canAct: Bool
+    var onEdit: () -> Void
     var onStart: () -> Void
     var onRestart: () -> Void
     var onStop: () -> Void
@@ -152,6 +180,7 @@ private struct ContainerRow: View {
 
     private var actionButtons: some View {
         HStack(spacing: 0) {
+            commandButton("Edit", systemImage: "pencil", help: "Edit this container", action: onEdit)
             commandButton("Start", systemImage: "play.fill", help: "Start this container", action: onStart)
             commandButton(
                 "Restart", systemImage: "arrow.clockwise", help: "Restart this container", action: onRestart)
@@ -179,6 +208,11 @@ private struct ContainerRow: View {
     }
 }
 
+private struct ContainerRevision: Hashable {
+    var name: String
+    var link: URL?
+}
+
 extension ContainerSummary {
     /// Stable across a status change, and distinct when an application and a database share a numeric id.
     fileprivate var listKey: String {
@@ -204,16 +238,29 @@ extension ContainerSummary {
     .frame(width: 480, height: 320)
 }
 
-#Preview("No client") {
+#Preview("Application and database") {
     ContainerList(containers: [
         ContainerSummary(
             id: 1,
             name: "dashboard",
             serviceName: "dashboard",
             status: "running:healthy",
-            uuid: "app-1"
+            image: "ghcr.io/get-convex/convex-dashboard:latest",
+            link: URL(string: "https://convex.example.com"),
+            uuid: "app-1",
+            fqdn: "https://convex.example.com,https://www.convex.example.com"
         ),
-        ContainerSummary(id: 2, name: "postgres", status: "exited", isDatabase: true),
+        ContainerSummary(
+            id: -2,
+            name: "postgres",
+            serviceName: "postgres",
+            status: "running:healthy",
+            image: "postgres:16-alpine",
+            uuid: "db-1",
+            isDatabase: true,
+            isPublic: true,
+            publicPort: 5432
+        ),
     ])
-    .frame(width: 520, height: 240)
+    .frame(width: 560, height: 240)
 }
