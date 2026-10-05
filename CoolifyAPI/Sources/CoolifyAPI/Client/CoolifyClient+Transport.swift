@@ -31,11 +31,24 @@ extension CoolifyClient {
         return try decode(T.self, from: data, response: response)
     }
 
-    /// A write whose body is only a message, or empty. Volume backup delete and run are documented that way.
-    func acknowledge(_ method: String, path: String, body: Data? = nil) async throws -> QueuedAction {
-        let (data, response) = try await send(method, path: path, body: body)
+    /// A write whose body is a message, a queued action, or empty.
+    ///
+    /// Volume backup delete and run are documented that way. A 2xx that is not that shape still counts, so a delete
+    /// whose body is only a message, or empty, does not fail the client.
+    func acknowledge(
+        _ method: String,
+        path: String,
+        query: [URLQueryItem] = [],
+        body: Data? = nil
+    ) async throws -> QueuedAction {
+        let (data, _) = try await send(method, path: path, query: query, body: body)
         guard !data.isEmpty else { return QueuedAction(message: nil, deploymentUUID: nil) }
-        return try decode(QueuedAction.self, from: data, response: response)
+        if let action = try? CoolifyJSON.decoder().decode(QueuedAction.self, from: data) {
+            return action
+        }
+        // Coolify may answer a delete with a message object this model does not quite match. The status succeeded.
+        let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
+        return QueuedAction(message: message, deploymentUUID: nil)
     }
 
     func patchList<T: Decodable>(_ path: String, body: some Encodable) async throws -> [T] {

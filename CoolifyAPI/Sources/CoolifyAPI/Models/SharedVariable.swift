@@ -1,6 +1,7 @@
 import Foundation
 
-/// A variable every resource in a project or environment can reference, as `{{project.KEY}}` or `{{environment.KEY}}`.
+/// A variable resources can reference, as `{{team.KEY}}`, `{{project.KEY}}`, `{{environment.KEY}}`, or
+/// `{{server.KEY}}`.
 ///
 /// Coolify leaves out `value` when the token lacks the `read:sensitive` ability, and for any variable saved with
 /// `isShownOnce`. It stays `nil` then, which is different from an empty value.
@@ -47,7 +48,8 @@ public struct SharedVariable: Decodable, Sendable, Hashable, Identifiable {
 /// The body for creating or updating a shared variable.
 ///
 /// Coolify answers 422 to any field it does not list for shared variables, such as `is_preview`, so this has its own
-/// type rather than borrowing `EnvironmentVariableDraft`.
+/// type rather than borrowing `EnvironmentVariableDraft`. Creating a team variable requires `key`. A nil stays out
+/// of the body.
 public struct SharedVariableDraft: Encodable, Sendable, Hashable {
     public var key: String
     public var value: String

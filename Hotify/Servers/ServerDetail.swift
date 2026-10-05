@@ -10,8 +10,28 @@ struct ServerDetailScreen: View {
     @State private var model = ServerPageModel()
     @State private var prompt: ServerPrompt?
     @State private var refreshes = 0
+    /// Shared variables replace the overview in this column. Back returns here, without a new route.
+    @State private var showsVariables = false
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        Group {
+            if showsVariables {
+                SharedVariableScreen(
+                    client: client,
+                    scope: .server(server.id),
+                    sectionTitle: server.name,
+                    navigationTitle: "Server Variables",
+                    back: DetailBack(title: server.name) { showsVariables = false }
+                )
+            } else {
+                overview
+            }
+        }
+        .animation(reduceMotion ? nil : .snappy, value: showsVariables)
+    }
+
+    private var overview: some View {
         ServerDetail(
             server: server,
             model: model,
@@ -21,7 +41,8 @@ struct ServerDetailScreen: View {
             onSaveCleanup: { Task { await saveCleanup() } },
             onRunCleanup: askToCleanUp,
             onRestartProxy: { prompt = .restartProxy },
-            onRetry: { Task { await reload() } }
+            onRetry: { Task { await reload() } },
+            onShowVariables: { showsVariables = true }
         )
         .navigationTitle("Server")
         #if os(iOS)
@@ -128,12 +149,15 @@ struct ServerDetail: View {
     var onRunCleanup: () -> Void = {}
     var onRestartProxy: () -> Void = {}
     var onRetry: () -> Void = {}
+    /// Swaps this page for the server's shared variables.
+    var onShowVariables: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 actions
+                sharedVariables
             }
             .padding(.horizontal, 24)
             .padding(.top, 20)
@@ -236,6 +260,23 @@ struct ServerDetail: View {
             .disabled(!canAct || model.isBusy)
             .help("Installs missing prerequisites and can restart Docker.")
         }
+    }
+
+    private var sharedVariables: some View {
+        Button(action: onShowVariables) {
+            HStack(spacing: 8) {
+                Label("Shared Variables", systemImage: "curlybraces")
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .font(.subheadline.weight(.medium))
+        }
+        .buttonStyle(.plain)
+        .help("Variables every resource on \(server.name) can use, as {{server.KEY}}.")
+        .accessibilityHint("Shows this server's shared variables")
     }
 
     @ViewBuilder

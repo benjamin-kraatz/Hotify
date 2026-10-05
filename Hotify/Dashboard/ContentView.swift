@@ -231,6 +231,16 @@ struct ContentView: View {
                     nothingOpen(
                         "This server is gone", detail: "Coolify no longer lists it. It may have been deleted.")
                 }
+            case .teamVariables:
+                SharedVariableScreen(
+                    client: client,
+                    scope: .team,
+                    sectionTitle: snapshot.teamName.isEmpty ? "Team" : snapshot.teamName,
+                    navigationTitle: "Team Variables",
+                    back: DetailBack(title: "Dashboard") { selection = nil }
+                )
+                .id(store.selectedID)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
             case nil:
                 nothingOpen(
                     "Nothing open",
@@ -267,6 +277,7 @@ struct ContentView: View {
             },
             onAction: run,
             onChanged: { await dashboard.reloadProjects() },
+            onDeleted: { selection = nil },
             onNewService: newService
         )
         // Only the project's own page sets this, so the menu's New Resource goes dim on a resource it opened.
@@ -294,7 +305,8 @@ struct ContentView: View {
                 onOpenProject: resource.place.map { place in
                     { show(.project(place.projectID)) }
                 },
-                onAction: { action in run(action, route) }
+                onAction: { action in run(action, route) },
+                onDeleted: { selection = nil }
             )
             .id(DetailIdentity(instanceID: store.selectedID, route: .resource(route), visit: request?.visit))
         } else {

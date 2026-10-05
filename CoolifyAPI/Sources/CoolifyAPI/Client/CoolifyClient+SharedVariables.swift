@@ -1,10 +1,14 @@
 import Foundation
 
-/// The project or environment whose shared variables a request reads or changes.
+/// The project, environment, team, or server whose shared variables a request reads or changes.
 public enum SharedVariableScope: Sendable, Hashable {
     case project(String)
     /// One environment of a project. Coolify takes the environment's uuid or its name.
     case environment(project: String, environment: String)
+    /// The team the API token belongs to. A token has one team, so the path carries no id.
+    case team
+    /// One server, by its uuid.
+    case server(String)
 
     var path: String {
         switch self {
@@ -12,6 +16,10 @@ public enum SharedVariableScope: Sendable, Hashable {
             "projects/\(CoolifyURL.encodePathComponent(uuid))/envs"
         case .environment(let project, let environment):
             "projects/\(CoolifyURL.encodePathComponent(project))/environments/\(CoolifyURL.encodePathComponent(environment))/envs"
+        case .team:
+            "team/envs"
+        case .server(let uuid):
+            "servers/\(CoolifyURL.encodePathComponent(uuid))/envs"
         }
     }
 }
@@ -23,7 +31,9 @@ extension CoolifyClient {
     }
 
     /// Adds a shared variable and returns its id, which is all Coolify sends back.
-    /// Coolify answers 409 when the scope already has the key.
+    ///
+    /// Coolify answers 409 when the scope already has the key, and that is a normal error. Creating a team
+    /// variable requires `key`. A nil `comment` stays out of the body.
     public func createSharedVariable(_ draft: SharedVariableDraft, in scope: SharedVariableScope) async throws -> Int {
         let created: CreatedSharedVariable = try await post(scope.path, body: draft)
         return created.id

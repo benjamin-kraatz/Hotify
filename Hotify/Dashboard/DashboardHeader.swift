@@ -3,11 +3,13 @@ import SwiftUI
 // The top of the dashboard, as separate list rows. A macOS List keeps the height it first measured for a row,
 // so each piece holds a fixed shape and new facts arrive as new rows rather than a taller one.
 
-/// The instance name on macOS, then the team and Coolify version.
+/// The instance name on macOS, then the team and Coolify version. The team name opens its shared variables.
 struct DashboardTitle: View {
     var instanceName: String
     var teamName: String
     var version: String
+    var isTeamSelected = false
+    var onOpenTeam: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -17,10 +19,7 @@ struct DashboardTitle: View {
                 .lineLimit(1)
             #endif
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                // A space keeps the line's height while the team loads.
-                Text(teamName.isEmpty ? " " : teamName)
-                    .font(.headline)
-                    .lineLimit(1)
+                teamButton
                 Spacer(minLength: 0)
                 Text("Coolify \(version)")
                     .font(.caption.weight(.medium))
@@ -34,6 +33,30 @@ struct DashboardTitle: View {
         .padding(.top, 6)
         .animation(.snappy, value: teamName)
         .animation(.snappy, value: version)
+        .animation(.snappy, value: isTeamSelected)
+    }
+
+    /// A space keeps the line's height while the team loads, and stays inert until the name arrives.
+    private var teamButton: some View {
+        Button(action: onOpenTeam) {
+            HStack(spacing: 4) {
+                Text(teamName.isEmpty ? " " : teamName)
+                    .font(.headline)
+                    .lineLimit(1)
+                if !teamName.isEmpty {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .buttonStyle(.borderless)
+        .disabled(teamName.isEmpty)
+        .foregroundStyle(isTeamSelected ? AnyShapeStyle(.ember) : AnyShapeStyle(.primary))
+        .help(teamName.isEmpty ? "" : "Shared variables for \(teamName)")
+        .accessibilityHint("Shows the team's shared variables")
+        .accessibilityAddTraits(isTeamSelected ? .isSelected : [])
     }
 }
 
