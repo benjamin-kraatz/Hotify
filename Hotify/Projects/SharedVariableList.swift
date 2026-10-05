@@ -1,14 +1,15 @@
 import CoolifyAPI
 import SwiftUI
 
-/// The variables a project and its environments share with their resources. Keys always show. Values wait until
+/// The variables one or more scopes share with their resources. Keys always show. Values wait until
 /// `VariableLock` opens, as they do for a resource.
 struct SharedVariableList: View {
     @SwiftUI.Environment(VariableLock.self) private var lock
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var model: SharedVariablesModel
-    var projectName: String
+    /// Names the project in a project-scoped caption. A team or a server does not have one.
+    var projectName: String? = nil
 
     @State private var filter = ""
     @State private var editing: EditorTarget?
@@ -190,11 +191,19 @@ struct SharedVariableList: View {
 
             VStack(spacing: 0) {
                 if section.lines.isEmpty {
-                    Text("No shared variables yet.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("No shared variables yet.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            Task { await edit(.new(section.scope)) }
+                        } label: {
+                            Label("Add Variable", systemImage: "plus")
+                        }
+                        .glassButton()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
                 }
                 ForEach(Array(section.lines.enumerated()), id: \.element.id) { index, line in
                     if index > 0 {
@@ -212,15 +221,21 @@ struct SharedVariableList: View {
         switch section.scope {
         case .project: "Add a variable for the whole project"
         case .environment: "Add a variable for \(section.title)"
+        case .team: "Add a variable for the team"
+        case .server: "Add a variable for \(section.title)"
         }
     }
 
     private func caption(for section: SharedVariableSection) -> String {
         switch section.scope {
         case .project:
-            "Every resource in \(projectName) can use these, as \(section.reference(to: "KEY"))."
+            "Every resource in \(projectName ?? "this project") can use these, as \(section.reference(to: "KEY"))."
         case .environment:
             "Resources in \(section.title) can use these, as \(section.reference(to: "KEY"))."
+        case .team:
+            "Every resource in this team can use these, as \(section.reference(to: "KEY"))."
+        case .server:
+            "Resources on \(section.title) can use these, as \(section.reference(to: "KEY"))."
         }
     }
 
