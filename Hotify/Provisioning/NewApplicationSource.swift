@@ -21,6 +21,16 @@ enum NewApplicationSource: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    var systemImage: String {
+        switch self {
+        case .publicGit: "arrow.triangle.branch"
+        case .dockerfile: "doc.text"
+        case .dockerImage: "shippingbox"
+        case .githubApp: "lock.shield"
+        case .deployKey: "key"
+        }
+    }
+
     var slogan: String {
         switch self {
         case .publicGit: "A repository anyone can clone, on the branch you name."

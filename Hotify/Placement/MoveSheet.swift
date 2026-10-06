@@ -8,6 +8,8 @@ struct MoveSheet: View {
     var client: CoolifyClient?
 
     @Bindable var catalog: MoveCatalog
+    var heat: Heat = .unknown
+    var origin: String?
     @State private var isSaving = false
     @State private var confirm = false
     @State private var failure: String?
@@ -38,6 +40,7 @@ struct MoveSheet: View {
     var body: some View {
         PlacementChrome(
             title: "Move", actionTitle: "Move", canAct: canMove, isBusy: isSaving, failure: failure,
+            journey: journey,
             onAct: { confirm = true }
         ) {
             Section {
@@ -83,6 +86,20 @@ struct MoveSheet: View {
             catalog.prepare(client)
             await catalog.load()
         }
+    }
+
+    private var journey: PlacementJourney? {
+        guard catalog.hasLoaded, catalog.environment != nil else { return nil }
+        let project = catalog.project?.name ?? ""
+        return PlacementJourney(
+            resourceName: resourceName,
+            heat: heat,
+            origin: origin,
+            destination: catalog.environmentName,
+            destinationKind: project.isEmpty ? "Environment" : "Environment in \(project)",
+            destinationImage: "square.3.layers.3d",
+            destinationTint: palette.environment(catalog.environmentUUID)
+        )
     }
 
     private var projectPicker: some View {

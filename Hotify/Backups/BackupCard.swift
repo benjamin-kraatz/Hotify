@@ -27,7 +27,7 @@ struct BackupCard: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             if history.count > 1 {
-                BackupHistoryStrip(history: history)
+                RunStrip(heats: history.map(\.heat), verb: "backed up")
             }
             runs
         }
@@ -112,6 +112,7 @@ struct BackupCard: View {
             }
         }
         .well()
+        .heatEdge(isActive: isBusy || pendingSince != nil)
     }
 }
 
@@ -140,44 +141,6 @@ private struct PendingRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// One tick per recent run, oldest on the left, so a streak of failures shows before you read a row.
-private struct BackupHistoryStrip: View {
-    var history: [BackupExecution]
-
-    private static let limit = 30
-
-    /// Oldest first.
-    private var recent: [BackupExecution] { history.prefix(Self.limit).reversed() }
-
-    private var goodCount: Int { recent.count { $0.heat == .lit } }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 3) {
-                ForEach(recent) { execution in
-                    Capsule()
-                        .fill(fill(for: execution.heat))
-                        .frame(width: 5, height: 14)
-                }
-            }
-            Text("\(goodCount) of the last \(recent.count) backed up")
-                .font(.subheadline)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .contentTransition(.numericText())
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func fill(for heat: Heat) -> AnyShapeStyle {
-        switch heat {
-        case .lit: AnyShapeStyle(.ember)
-        case .warming, .troubled: AnyShapeStyle(.glow)
-        case .cold, .unknown: AnyShapeStyle(.quaternary)
-        }
     }
 }
 

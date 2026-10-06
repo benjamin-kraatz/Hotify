@@ -30,7 +30,7 @@ final class BackupScheduleTests: XCTestCase {
             let expected = """
                 {"database_backup_retention_amount_locally":4,\
                 "database_backup_retention_max_storage_locally":1.5,\
-                "s3_storage_uuid":"store-1","save_s3":true}\
+                "s3_storage_uuid":"store-1","save_s3":true}
                 """
             XCTAssertEqual(bodyText(request), expected)
             return (200, Data(#"{"message":"Database backup configuration updated"}"#.utf8), [:])
@@ -72,10 +72,14 @@ final class BackupScheduleTests: XCTestCase {
         let client = try makeClient { request in
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.url?.path, "/api/v1/s3-storages")
-            let expected =
-                #"{"bucket":"dumps","endpoint":"https://s3.example.com","key":"access-key","#
-                + #""name":"Backups","region":"us-east-1","secret":"secret-value"}"#
-            XCTAssertEqual(bodyText(request), expected)
+            // JSONEncoder writes `/` as `\/`, so compare the parsed body rather than its text.
+            let body = try JSONSerialization.jsonObject(with: Data((bodyText(request) ?? "").utf8)) as? NSDictionary
+            XCTAssertEqual(
+                body,
+                [
+                    "bucket": "dumps", "endpoint": "https://s3.example.com", "key": "access-key", "name": "Backups",
+                    "region": "us-east-1", "secret": "secret-value",
+                ] as NSDictionary)
             return (201, Data(#"{"uuid":"store-1"}"#.utf8), [:])
         }
         let created = try await client.createS3Storage(
@@ -112,7 +116,7 @@ final class BackupScheduleTests: XCTestCase {
             "database_backup_retention_days_locally":14,\
             "database_backup_retention_max_storage_locally":"1.5","timeout":"3600",\
             "executions":[{"uuid":"execution","status":"failed","size":"42",\
-            "message":"Storage unavailable"}]}]\
+            "message":"Storage unavailable"}]}]
             """
         let backups = try CoolifyJSON.decoder().decode([DatabaseBackup].self, from: Data(fixture.utf8))
         let backup = backups[0]

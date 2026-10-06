@@ -11,7 +11,9 @@ final class ApplicationLabelTests: XCTestCase {
             XCTAssertEqual(
                 jsonBody(request),
                 [
-                    "custom_labels": "traefik.enable=true\ntraefik.http.routers.app.rule=Host(`app.example.com`)",
+                    "custom_labels": Data(
+                        "traefik.enable=true\ntraefik.http.routers.app.rule=Host(`app.example.com`)".utf8
+                    ).base64EncodedString(),
                     "is_container_label_escape_enabled": false,
                 ] as NSDictionary)
             return (200, Data(#"{"uuid":"app-1"}"#.utf8), [:])
@@ -64,6 +66,13 @@ final class ApplicationLabelTests: XCTestCase {
         let bare = try CoolifyJSON.decoder().decode(Application.self, from: Data(missing.utf8))
         XCTAssertNil(bare.customLabels)
         XCTAssertNil(bare.isContainerLabelEscapeEnabled)
+    }
+
+    func testApplicationDecodesBase64Labels() throws {
+        let labels = "traefik.enable=true\ntraefik.http.routers.app.rule=Host(`app.example.com`)"
+        let json = #"{"uuid":"app","name":"site","custom_labels":"\#(Data(labels.utf8).base64EncodedString())"}"#
+        let application = try CoolifyJSON.decoder().decode(Application.self, from: Data(json.utf8))
+        XCTAssertEqual(application.customLabels, labels)
     }
 }
 

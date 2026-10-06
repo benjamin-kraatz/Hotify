@@ -12,12 +12,7 @@ struct ServerProxySection: View {
     @State private var confirmSettings = false
     @State private var confirmConfiguration = false
 
-    private var heat: Heat {
-        switch model.proxy?.status?.lowercased() {
-        case "failed", "error": .troubled
-        default: Heat(status: model.proxy?.status)
-        }
-    }
+    private var heat: Heat { model.proxy?.heat ?? .unknown }
 
     private var proxyType: Binding<String> {
         Binding(get: { model.proxyTypeDraft }, set: { model.proxyTypeDraft = $0 })
@@ -57,14 +52,14 @@ struct ServerProxySection: View {
             TextField("Type", text: proxyType, prompt: Text("traefik, caddy, nginx, or none"))
                 .autocorrectionDisabled()
                 #if os(iOS)
-                .textInputAutocapitalization(.never)
+            .textInputAutocapitalization(.never)
                 #endif
             Toggle("Redirect", isOn: redirectEnabled)
             TextField("Redirect URL", text: redirectURL, prompt: Text("https://example.com"))
                 .autocorrectionDisabled()
                 #if os(iOS)
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
+            .textInputAutocapitalization(.never)
+            .keyboardType(.URL)
                 #endif
             Button {
                 confirmSettings = true
@@ -93,7 +88,7 @@ struct ServerProxySection: View {
                 .frame(minHeight: 140)
                 .autocorrectionDisabled()
                 #if os(iOS)
-                .textInputAutocapitalization(.never)
+            .textInputAutocapitalization(.never)
                 #endif
             Button {
                 confirmConfiguration = true
@@ -128,6 +123,16 @@ struct ServerProxySection: View {
             Text("Proxy")
         } footer: {
             Text(footer)
+        }
+    }
+}
+
+extension ServerProxy {
+    /// Coolify reports a proxy that failed to start as `failed` or `error`, outside the `state:health` shape.
+    var heat: Heat {
+        switch status?.lowercased() {
+        case "failed", "error": .troubled
+        default: Heat(status: status)
         }
     }
 }

@@ -47,7 +47,7 @@ struct ContainerList: View {
                         ContainerRow(
                             container: container,
                             showsActions: !container.uuid.isEmpty,
-                            isBusy: actions.isBusy(container.uuid),
+                            busyCommand: container.uuid.isEmpty ? nil : actions.command(runningOn: container.uuid),
                             canAct: client != nil && !actions.isBusy,
                             onEdit: { editing = container },
                             onStart: { run(.start, container) },
@@ -56,7 +56,8 @@ struct ContainerList: View {
                         )
                     }
                 }
-                .background(Color.primary.opacity(0.045), in: .rect(cornerRadius: 14))
+                .well()
+                .heatEdge(isActive: actions.isBusy)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
@@ -129,23 +130,55 @@ struct ContainerList: View {
     }
 }
 
+/// One container: its flame, name, and image, then only the commands that fit its state. A stopped container offers
+/// Start, and a running one Restart and Stop. Every command is also in the row's context menu.
 private struct ContainerRow: View {
     var container: ContainerSummary
     var showsActions: Bool
-    var isBusy: Bool
+    var busyCommand: ContainerCommand?
     var canAct: Bool
     var onEdit: () -> Void
     var onStart: () -> Void
     var onRestart: () -> Void
     var onStop: () -> Void
 
+    @State private var isHovered = false
+
+    private var heat: Heat { busyCommand == nil ? container.heat : .warming }
+
+    /// Up or on its way, which is what Stop and Restart need. Unknown counts as down, so Start stays reachable.
+    private var isUp: Bool { container.heat == .lit || container.heat == .troubled || container.heat == .warming }
+
+    private var statusText: String {
+        switch busyCommand {
+        case .start: "Starting…"
+        case .stop: "Stopping…"
+        case .restart: "Restarting…"
+        case nil: StatusLabel.text(for: container.status)
+        }
+    }
+
+    private var portText: String? {
+        guard container.isPublic, let port = container.publicPort else { return nil }
+        return "Public :\(port)"
+    }
+
     var body: some View {
         HStack(spacing: 14) {
-            FlameGlyph(heat: container.heat, height: 18)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(container.name)
-                    .font(.body.weight(.semibold))
+            FlameGlyph(heat: heat, height: 20)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(container.name)
+                        .font(.body.weight(.semibold))
+                        .lineLimit(1)
+                    if container.isDatabase {
+                        Chip(text: "Database")
+                    }
+                    if let portText {
+                        Chip(text: portText)
+                    }
+                }
                 if let image = container.image, !image.isEmpty {
                     Text(image)
                         .font(.caption.monospaced())
@@ -163,33 +196,53 @@ private struct ContainerRow: View {
                 .help("Open \(link.host() ?? link.absoluteString)")
                 .accessibilityLabel("Open \(link.host() ?? link.absoluteString)")
             }
-            Text(StatusLabel.text(for: container.status))
-                .font(.subheadline)
-                .foregroundStyle(container.heat.needsAttention ? AnyShapeStyle(.glow) : AnyShapeStyle(.secondary))
-            if isBusy {
-                ProgressView()
-                    .controlSize(.small)
-            } else if showsActions {
+            Text(statusText)
+                .font(.subheadline.weight(busyCommand == nil ? .regular : .semibold))
+                .foregroundStyle(heat.needsAttention ? AnyShapeStyle(.glow) : AnyShapeStyle(.secondary))
+                .contentTransition(.interpolate)
+            if showsActions {
                 actionButtons
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .accessibilityElement(children: showsActions || isBusy ? .contain : .combine)
+        .background(Color.primary.opacity(isHovered ? 0.035 : 0))
+        .contentShape(.rect)
+        .onHover { isHovered = $0 }
+        .contextMenu {
+            if showsActions {
+                Button("Start", systemImage: "play.fill", action: onStart)
+                    .disabled(!canAct || isUp)
+                Button("Restart", systemImage: "arrow.clockwise", action: onRestart)
+                    .disabled(!canAct || !isUp)
+                Button("Stop…", systemImage: "stop.fill", action: onStop)
+                    .disabled(!canAct || !isUp)
+                Divider()
+                Button("Edit…", systemImage: "pencil", action: onEdit)
+                    .disabled(!canAct)
+            }
+        }
+        .animation(.snappy(duration: 0.15), value: isHovered)
+        .animation(.snappy, value: heat)
+        .animation(.snappy, value: statusText)
+        .animation(.snappy, value: isUp)
+        .accessibilityElement(children: showsActions ? .contain : .combine)
     }
 
     private var actionButtons: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 2) {
+            if busyCommand == nil {
+                if isUp {
+                    commandButton(
+                        "Restart", systemImage: "arrow.clockwise", help: "Restart this container", action: onRestart)
+                    commandButton(
+                        "Stop", systemImage: "stop.fill", help: "Stop this container. Volumes and data stay.",
+                        action: onStop)
+                } else {
+                    commandButton("Start", systemImage: "play.fill", help: "Start this container", action: onStart)
+                }
+            }
             commandButton("Edit", systemImage: "pencil", help: "Edit this container", action: onEdit)
-            commandButton("Start", systemImage: "play.fill", help: "Start this container", action: onStart)
-            commandButton(
-                "Restart", systemImage: "arrow.clockwise", help: "Restart this container", action: onRestart)
-            commandButton(
-                "Stop",
-                systemImage: "stop.fill",
-                help: "Stop this container. Volumes and data stay.",
-                action: onStop
-            )
         }
         .disabled(!canAct)
         .controlSize(.small)
@@ -204,7 +257,10 @@ private struct ContainerRow: View {
         Button(title, systemImage: systemImage, action: action)
             .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
+            .frame(width: 24, height: 24)
+            .contentShape(.rect)
             .help(help)
+            .transition(.scale(scale: 0.6).combined(with: .opacity))
     }
 }
 

@@ -86,7 +86,7 @@ final class ScheduledTaskTests: XCTestCase {
             ScheduledTask.self,
             from: Data(
                 (#"{"id":7,"uuid":"task-1","enabled":1,"name":"Cleanup","command":"echo ok","#
-                    + #"frequency":"daily","timeout":"300"}"#).utf8
+                    + #""frequency":"daily","timeout":"300"}"#).utf8
             )
         )
         XCTAssertEqual(task.id, 7)

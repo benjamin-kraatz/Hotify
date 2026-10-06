@@ -46,7 +46,8 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
     public var gitCommitSHA: String?
     public var dockerRegistryImageTag: String?
     public var isAutoDeployEnabled: Bool?
-    /// The proxy label block. An empty string clears labels that were present. `nil` leaves them alone.
+    /// The proxy label block, as plain text. It is sent as base64. An empty string clears labels that were
+    /// present. `nil` leaves them alone.
     public var customLabels: String?
     /// Whether Coolify turns `$` into `$$` in the labels. Off lets the labels expand environment variables.
     public var isContainerLabelEscapeEnabled: Bool?
@@ -129,7 +130,8 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         try container.encodeIfPresent(gitCommitSHA, forKey: .gitCommitSHA)
         try container.encodeIfPresent(dockerRegistryImageTag, forKey: .dockerRegistryImageTag)
         try container.encodeIfPresent(isAutoDeployEnabled, forKey: .isAutoDeployEnabled)
-        try container.encodeIfPresent(customLabels, forKey: .customLabels)
+        // The live API rejects `custom_labels` unless they are base64, which the OpenAPI spec does not mention.
+        try container.encodeIfPresent(customLabels.map(Base64Text.encode), forKey: .customLabels)
         try container.encodeIfPresent(isContainerLabelEscapeEnabled, forKey: .isContainerLabelEscapeEnabled)
         try healthCheck?.encode(to: encoder)
     }

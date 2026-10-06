@@ -29,7 +29,9 @@ struct ApplicationGallery: View {
                         Button {
                             onSelect(source)
                         } label: {
-                            TemplateCard(name: source.title, slogan: source.slogan, logoURL: nil)
+                            TemplateCard(
+                                name: source.title, slogan: source.slogan, logoURL: nil,
+                                systemImage: source.systemImage)
                         }
                         .buttonStyle(.plain)
                     }

@@ -18,33 +18,54 @@ struct ResourceRemovalDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Delete \(name)?")
-                .font(.headline)
-
-            Text("Coolify deletes \(name).")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle("Delete configurations", isOn: $configurations)
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Delete volumes", isOn: $volumes)
-                    Text("The data in those volumes goes away.")
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: "trash.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .symbolEffect(.wiggle, value: isDeleting)
+                    .frame(width: 40, height: 40)
+                    .background(.quaternary.opacity(0.6), in: .rect(cornerRadius: 11, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Delete \(name)?")
+                        .font(.headline)
+                        .lineLimit(2)
+                    Text(isDeleting ? "Coolify is deleting it…" : "Coolify deletes \(name). This can't be undone.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
                 }
-                Toggle("Docker cleanup", isOn: $dockerCleanup)
-                Toggle("Delete connected networks", isOn: $connectedNetworks)
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                option("Delete configurations", systemImage: "doc.badge.gearshape", isOn: $configurations)
+                Divider().padding(.leading, 40)
+                option("Delete volumes", systemImage: "externaldrive", isOn: $volumes)
+                if volumes {
+                    Label("The data in those volumes goes away.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.glow)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 40)
+                        .padding(.trailing, 12)
+                        .padding(.bottom, 10)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                Divider().padding(.leading, 40)
+                option("Docker cleanup", systemImage: "eraser", isOn: $dockerCleanup)
+                Divider().padding(.leading, 40)
+                option("Delete connected networks", systemImage: "network", isOn: $connectedNetworks)
+            }
+            .well(cornerRadius: 12)
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(.glow.opacity(volumes ? 0.45 : 0), lineWidth: 1)
             }
             .disabled(isDeleting)
 
             if let error {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.glow)
-                    .fixedSize(horizontal: false, vertical: true)
+                NoticeBanner(message: error)
             }
 
             HStack {
@@ -73,6 +94,20 @@ struct ResourceRemovalDialog: View {
         #endif
         .animation(reduceMotion ? nil : .snappy, value: volumes)
         .animation(reduceMotion ? nil : .snappy, value: error)
+    }
+
+    private func option(_ title: String, systemImage: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: systemImage)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
     }
 
     private func confirm() {

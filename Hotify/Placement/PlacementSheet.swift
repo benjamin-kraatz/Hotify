@@ -34,12 +34,23 @@ struct PlacementSheet: View {
     var body: some View {
         switch intent {
         case .move:
-            MoveSheet(resourceName: resource.name, route: resource.route, client: client, catalog: moveCatalog)
+            MoveSheet(
+                resourceName: resource.name, route: resource.route, client: client, catalog: moveCatalog,
+                heat: resource.heat, origin: origin)
         case .clone:
-            CloneSheet(resourceName: resource.name, route: resource.route, client: client, catalog: destinations)
+            CloneSheet(
+                resourceName: resource.name, route: resource.route, client: client, catalog: destinations,
+                heat: resource.heat, origin: origin)
         case .migrate:
-            MigrateSheet(resourceName: resource.name, route: resource.route, client: client, catalog: destinations)
+            MigrateSheet(
+                resourceName: resource.name, route: resource.route, client: client, catalog: destinations,
+                heat: resource.heat, origin: origin)
         }
+    }
+
+    private var origin: String? {
+        guard let place = resource.place else { return nil }
+        return place.environmentName.isEmpty ? place.projectName : "\(place.projectName) · \(place.environmentName)"
     }
 }
 

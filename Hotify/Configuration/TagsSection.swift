@@ -51,41 +51,88 @@ struct TagsSection: View {
         }
     }
 
-    /// Each tag is its own form row. The confirmation stays on this list so the other rows remain rows.
+    /// The tags as chips on one row of the form, wrapping when they run out of room. The confirmation stays on this
+    /// row so the rest of the form keeps its rows.
+    @ViewBuilder
     private var assignedTags: some View {
-        ForEach(shown) { tag in
-            HStack(spacing: 8) {
-                Label(tag.name, systemImage: "tag")
-                Spacer(minLength: 8)
-                Button("Remove", systemImage: "minus.circle.fill") {
-                    model.pendingRemoval = tag
+        if !shown.isEmpty {
+            FlowLayout(spacing: 6, lineSpacing: 6) {
+                ForEach(shown) { tag in
+                    TagChip(name: tag.name, canRemove: !model.isBusy && !tag.uuid.isEmpty) {
+                        model.pendingRemoval = tag
+                    }
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
                 }
+            }
+            .padding(.vertical, 2)
+            .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.3), value: shown.map(\.id))
+            .modifier(RemovalConfirmation(model: model))
+        }
+    }
+}
+
+/// One tag on the resource, with the button that takes it off.
+private struct TagChip: View {
+    var name: String
+    var canRemove: Bool
+    var onRemove: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "number")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.ember)
+            Text(name)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+            Button("Remove", systemImage: "xmark.circle.fill", action: onRemove)
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .disabled(model.isBusy || tag.uuid.isEmpty)
-                .help("Remove \(tag.name)")
-                .accessibilityLabel("Remove \(tag.name)")
-            }
+                .font(.callout)
+                .foregroundStyle(isHovered ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                .disabled(!canRemove)
+                .help("Remove \(name)")
+                .accessibilityLabel("Remove \(name)")
         }
-        .animation(reduceMotion ? nil : .snappy, value: shown.map(\.id))
-        .confirmationDialog(
-            model.pendingRemoval.map { "Remove \($0.name)?" } ?? "",
-            isPresented: Binding(
-                get: { model.pendingRemoval != nil },
-                set: { isPresented in
-                    if !isPresented { model.pendingRemoval = nil }
+        .padding(.leading, 9)
+        .padding(.trailing, 5)
+        .padding(.vertical, 4)
+        .background(.ember.opacity(isHovered ? 0.16 : 0.1), in: .capsule)
+        .overlay {
+            Capsule()
+                .strokeBorder(.ember.opacity(0.18), lineWidth: 1)
+        }
+        .fixedSize()
+        .onHover { isHovered = $0 }
+        .animation(.snappy(duration: 0.15), value: isHovered)
+    }
+}
+
+/// Asks before a tag comes off. The team keeps the tag.
+private struct RemovalConfirmation: ViewModifier {
+    @Bindable var model: ResourceTagsModel
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(
+                model.pendingRemoval.map { "Remove \($0.name)?" } ?? "",
+                isPresented: Binding(
+                    get: { model.pendingRemoval != nil },
+                    set: { isPresented in
+                        if !isPresented { model.pendingRemoval = nil }
+                    }
+                ),
+                titleVisibility: .visible,
+                presenting: model.pendingRemoval
+            ) { tag in
+                Button("Remove", role: .destructive) {
+                    Task { await model.remove(tag) }
                 }
-            ),
-            titleVisibility: .visible,
-            presenting: model.pendingRemoval
-        ) { tag in
-            Button("Remove", role: .destructive) {
-                Task { await model.remove(tag) }
+            } message: { tag in
+                Text("This takes \(tag.name) off this resource. The team keeps the tag.")
             }
-        } message: { tag in
-            Text("This takes \(tag.name) off this resource. The team keeps the tag.")
-        }
     }
 }
 

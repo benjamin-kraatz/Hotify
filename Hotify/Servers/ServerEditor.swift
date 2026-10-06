@@ -129,7 +129,7 @@ struct ServerEditor: View {
             form
                 .navigationTitle(isEditing ? "Edit Server" : "Add Server")
                 #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
                 #endif
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -212,17 +212,17 @@ struct ServerEditor: View {
             TextField("IP", text: $ip, prompt: Text(verbatim: "10.0.0.8"))
                 .autocorrectionDisabled()
                 #if os(iOS)
-                .textInputAutocapitalization(.never)
-                .keyboardType(.numbersAndPunctuation)
+            .textInputAutocapitalization(.never)
+            .keyboardType(.numbersAndPunctuation)
                 #endif
             TextField("Port", value: $port, format: .number.grouping(.never))
                 #if os(iOS)
-                .keyboardType(.numberPad)
+            .keyboardType(.numberPad)
                 #endif
             TextField("User", text: $userName, prompt: Text("root"))
                 .autocorrectionDisabled()
                 #if os(iOS)
-                .textInputAutocapitalization(.never)
+            .textInputAutocapitalization(.never)
                 #endif
         } header: {
             Text("Connection")
@@ -255,8 +255,8 @@ struct ServerEditor: View {
                     .lineLimit(4...10)
                     .autocorrectionDisabled()
                     #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .textContentType(.none)
+                .textInputAutocapitalization(.never)
+                .textContentType(.none)
                     #endif
             }
         } header: {
@@ -291,29 +291,29 @@ struct ServerEditor: View {
         Section {
             TextField("Concurrent builds", text: $concurrentBuilds, prompt: Text("Optional"))
                 #if os(iOS)
-                .keyboardType(.numberPad)
+            .keyboardType(.numberPad)
                 #endif
             TextField("Deployment timeout", text: $deploymentTimeout, prompt: Text("Seconds"))
                 #if os(iOS)
-                .keyboardType(.numberPad)
+            .keyboardType(.numberPad)
                 #endif
             TextField("Queue limit", text: $queueLimit, prompt: Text("Optional"))
                 #if os(iOS)
-                .keyboardType(.numberPad)
+            .keyboardType(.numberPad)
                 #endif
             TextField("Disk threshold", text: $diskThreshold, prompt: Text("Percent"))
                 #if os(iOS)
-                .keyboardType(.numberPad)
+            .keyboardType(.numberPad)
                 #endif
             TextField("Disk check", text: $diskFrequency, prompt: Text("0 23 * * *"))
                 .font(.body.monospaced())
                 .autocorrectionDisabled()
                 #if os(iOS)
-                .textInputAutocapitalization(.never)
+            .textInputAutocapitalization(.never)
                 #endif
             TextField("Connection timeout", text: $connectionTimeout, prompt: Text("Seconds"))
                 #if os(iOS)
-                .keyboardType(.numberPad)
+            .keyboardType(.numberPad)
                 #endif
         } header: {
             Text("Capacity")

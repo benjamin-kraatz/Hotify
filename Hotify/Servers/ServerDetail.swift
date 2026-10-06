@@ -185,12 +185,15 @@ struct ServerDetail: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                if model.hasLoaded {
+                    ServerVitals(model: model)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+                }
                 actions
-                sharedVariables
             }
             .padding(.horizontal, 24)
             .padding(.top, 20)
-            .padding(.bottom, 8)
+            .padding(.bottom, 12)
 
             notices
 
@@ -219,12 +222,10 @@ struct ServerDetail: View {
                     }
                 } else if canAct {
                     Section {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                            Spacer()
-                        }
+                        Kindling(caption: "Reading \(server.name)…")
+                            .frame(height: 140)
                     }
+                    .listRowBackground(Color.clear)
                 } else {
                     Section {
                         Text("Hotify is not connected to this instance.")
@@ -255,27 +256,61 @@ struct ServerDetail: View {
         }
     }
 
+    /// Validating or installing warms the flame, since Coolify is reaching out to the server.
+    private var headerHeat: Heat {
+        model.write == .validate || model.write == .install ? .warming : heat
+    }
+
+    private var headerStatus: String {
+        switch model.write {
+        case .validate: "Validating…"
+        case .install: "Installing prerequisites…"
+        default: reachability
+        }
+    }
+
     private var header: some View {
         HStack(alignment: .center, spacing: 18) {
-            FlameGlyph(heat: heat, height: 56, ignitesOnAppear: true, breathes: true)
+            FlameGlyph(heat: headerHeat, height: 56, ignitesOnAppear: true, breathes: true)
             VStack(alignment: .leading, spacing: 5) {
                 Text(server.name)
                     .font(.display(.title))
                     .lineLimit(2)
                     .minimumScaleFactor(0.6)
                     .textSelection(.enabled)
-                Text(reachability)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(heat == .troubled ? AnyShapeStyle(.glow) : AnyShapeStyle(.secondary))
+                HStack(spacing: 12) {
+                    Label("Server", systemImage: "server.rack")
+                        .foregroundStyle(.secondary)
+                    Text(headerStatus)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(headerHeat.tint)
+                        .contentTransition(.interpolate)
+                    if model.isCoolifyHost {
+                        Chip(text: "Runs Coolify")
+                    }
+                }
+                .font(.subheadline)
             }
         }
+        .animation(.snappy, value: headerHeat)
+        .animation(.snappy, value: headerStatus)
         .accessibilityElement(children: .combine)
     }
 
+    /// The lead action keeps its label when room runs out. The rest shrink to icons.
     private var actions: some View {
+        ViewThatFits(in: .horizontal) {
+            actionRow(showsTitles: true)
+            actionRow(showsTitles: false)
+        }
+        .controlSize(.large)
+    }
+
+    private func actionRow(showsTitles: Bool) -> some View {
         HStack(spacing: 10) {
             Button(action: onValidate) {
-                Label(model.write == .validate ? "Validating…" : "Validate", systemImage: "checkmark.circle")
+                Label(model.write == .validate ? "Validating…" : "Validate", systemImage: "checkmark.seal")
+                    .contentTransition(.interpolate)
             }
             .glassButton(prominent: true)
             .disabled(!canAct || model.isBusy)
@@ -286,28 +321,20 @@ struct ServerDetail: View {
                     model.write == .install ? "Installing…" : "Install Prerequisites",
                     systemImage: "arrow.down.circle"
                 )
+                .labelStyle(TitleWhenRoom(showsTitle: showsTitles))
             }
             .glassButton()
             .disabled(!canAct || model.isBusy)
             .help("Installs missing prerequisites and can restart Docker.")
-        }
-    }
 
-    private var sharedVariables: some View {
-        Button(action: onShowVariables) {
-            HStack(spacing: 8) {
+            Button(action: onShowVariables) {
                 Label("Shared Variables", systemImage: "curlybraces")
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                    .labelStyle(TitleWhenRoom(showsTitle: showsTitles))
             }
-            .font(.subheadline.weight(.medium))
+            .glassButton()
+            .help("Variables every resource on \(server.name) can use, as {{server.KEY}}.")
+            .accessibilityHint("Shows this server's shared variables")
         }
-        .buttonStyle(.plain)
-        .help("Variables every resource on \(server.name) can use, as {{server.KEY}}.")
-        .accessibilityHint("Shows this server's shared variables")
     }
 
     @ViewBuilder
@@ -317,17 +344,26 @@ struct ServerDetail: View {
                 NoticeBanner(message: error)
             }
             if let notice = model.notice {
-                Label(notice, systemImage: "checkmark.circle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.ember)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(.ember.opacity(0.12), in: .rect(cornerRadius: 12))
+                NoticeBanner(message: notice, tone: .done)
             }
         }
         .padding(.horizontal, 20)
         .padding(.bottom, model.error == nil && model.notice == nil ? 0 : 12)
+    }
+}
+
+/// Title and icon, or the icon alone while the title still reaches VoiceOver.
+private struct TitleWhenRoom: LabelStyle {
+    var showsTitle: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if showsTitle {
+            Label(configuration)
+                .labelStyle(.titleAndIcon)
+        } else {
+            Label(configuration)
+                .labelStyle(.iconOnly)
+        }
     }
 }
 

@@ -132,9 +132,13 @@ struct ServerStatusLine: View {
                 .accessibilityHidden(true)
         }
         .font(.subheadline)
-        .padding(.vertical, 4)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
         .background(isSelected ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 8))
+        // Inside the pill's padding, so the row's text still lines up with the rows around it.
+        .padding(.horizontal, -8)
         .contentShape(.rect)
+        .animation(.snappy(duration: 0.2), value: isSelected)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

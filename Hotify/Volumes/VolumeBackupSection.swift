@@ -91,7 +91,7 @@ struct VolumeBackupSection: View {
                     .font(.body.monospaced())
                     .autocorrectionDisabled()
                     #if os(iOS)
-                    .textInputAutocapitalization(.never)
+                .textInputAutocapitalization(.never)
                     #endif
             }
             Toggle("Enabled", isOn: $enabled)
@@ -236,7 +236,7 @@ struct VolumeBackupSection: View {
     private func numberField(_ title: String, text: Binding<String>) -> some View {
         TextField(title, text: text)
             #if os(iOS)
-            .keyboardType(.decimalPad)
+        .keyboardType(.decimalPad)
             #endif
     }
 

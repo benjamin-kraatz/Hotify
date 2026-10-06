@@ -214,6 +214,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(project)
             if parts[-1] == "envs":
                 return self.respond(copy.deepcopy(self.server.shared.get(self.scope(project, parts), [])))
+        fixture = self.maintenance_fixture(path)
+        if fixture is not None:
+            return self.respond(fixture)
         if path == "/servers/server/destinations":
             return self.respond([{"uuid": "fixture-network", "name": "Fixture network", "network": "coolify", "server_uuid": "server"}])
         if path == "/servers":
@@ -292,6 +295,47 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/databases/db/backups":
             return self.respond([{"uuid": "daily", "enabled": "1", "frequency": "daily", "databases_to_backup": "app", "executions": self.server.executions}])
         return self.respond({"message": "Fixture endpoint not found"}, 404)
+
+    def maintenance_fixture(self, path):
+        """Read-only answers for the server page, scheduled tasks, storage, and the metrics service's containers."""
+        if path == "/servers/server":
+            return {"uuid": "server", "name": "Fixture server", "ip": "10.0.0.8", "is_coolify_host": True, "is_reachable": 1 if self.server.server_reachable else 0}
+        if path == "/servers/server/docker-cleanup":
+            return {"docker_cleanup_frequency": "daily", "docker_cleanup_threshold": 80, "force_docker_cleanup": 0, "delete_unused_volumes": 0, "delete_unused_networks": 1, "disable_application_image_retention": 0}
+        if path == "/servers/server/docker-cleanup/executions":
+            return [
+                {"uuid": f"cleanup-{i}", "status": "failed" if i == 3 else "success", "message": "Disk still above the threshold after the prune." if i == 3 else f"Pruned {i + 2} images.", "created_at": f"2026-10-0{6 - min(i, 5)}T04:00:00Z", "finished_at": f"2026-10-0{6 - min(i, 5)}T04:01:00Z"}
+                for i in range(6)
+            ]
+        if path == "/servers/server/proxy":
+            return {"status": "running", "proxy_type": "TRAEFIK", "redirect_enabled": True, "redirect_url": "https://fixture.example", "configuration": "services:\n  traefik:\n    image: traefik:v3.1\n"}
+        if path == "/servers/server/domains":
+            return [{"ip": "10.0.0.8", "domains": ["fixture.example", "api.fixture.example", "grafana.fixture.example"]}, {"ip": "10.0.0.9", "domains": ["whoami.fixture.example"]}]
+        if path == "/servers/server/cloudflare-tunnel":
+            return {"ip": "10.0.0.8", "ip_previous": "203.0.113.10", "is_cloudflare_tunnel": False}
+        if path in ("/applications/web/scheduled-tasks", "/services/metrics/scheduled-tasks"):
+            return [
+                {"uuid": "task-cache", "enabled": 1, "name": "Clear cache", "command": "php artisan cache:clear", "frequency": "hourly", "container": "web"},
+                {"uuid": "task-report", "enabled": 0, "name": "Weekly report", "command": "php artisan report:send --channel=ops", "frequency": "0 9 * * 1"},
+            ]
+        if path.endswith("/scheduled-tasks/task-cache/executions") or path.endswith("/scheduled-tasks/task-report/executions"):
+            return [
+                {"uuid": f"run-{i}", "status": "failed" if i == 2 else "success", "message": "php: command not found" if i == 2 else "Cache cleared.", "duration": 1.4 + i, "started_at": f"2026-10-06T0{8 - i}:00:00Z"}
+                for i in range(5)
+            ]
+        if path in ("/applications/web/storages", "/databases/db/storages", "/services/metrics/storages"):
+            return {
+                "persistent_storages": [{"uuid": "vol-data", "name": "fixture-data", "mount_path": "/var/lib/data"}],
+                "file_storages": [
+                    {"uuid": "dir-config", "mount_path": "/etc/app/conf.d", "is_directory": True, "fs_path": "/data/coolify/config"},
+                    {"uuid": "file-caddy", "mount_path": "/etc/caddy/Caddyfile", "is_directory": False, "content": "fixture.example"},
+                ],
+            }
+        if path == "/services/metrics/applications":
+            return [{"id": 1, "uuid": "grafana-app", "name": "grafana", "human_name": "Grafana", "fqdn": "https://grafana.fixture.example"}]
+        if path == "/services/metrics/databases":
+            return [{"id": 2, "uuid": "metrics-db", "name": "postgres", "is_public": True, "public_port": 5433}]
+        return None
 
     def running_row(self, row):
         """A running fixture deployment as Coolify lists it: building until its time is up, then its result."""

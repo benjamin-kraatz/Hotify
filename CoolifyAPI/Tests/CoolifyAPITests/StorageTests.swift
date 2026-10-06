@@ -84,7 +84,8 @@ final class StorageTests: XCTestCase {
                 XCTAssertNil(body["fs_path"])
                 return (
                     201, Data(#"{"uuid":"vol-1","type":"persistent","name":"data","mount_path":"/var/lib/data"}"#.utf8),
-                    [:])
+                    [:]
+                )
             }
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.url?.path, "/api/v1/services/svc-1/storages")
@@ -95,7 +96,8 @@ final class StorageTests: XCTestCase {
             XCTAssertNil(body["name"])
             XCTAssertNil(body["content"])
             return (
-                201, Data(#"{"uuid":"dir-1","type":"file","mount_path":"/mnt/config","is_directory":true}"#.utf8), [:])
+                201, Data(#"{"uuid":"dir-1","type":"file","mount_path":"/mnt/config","is_directory":true}"#.utf8), [:]
+            )
         }
         let volume = try await client.createStorage(
             ResourceStorageDraft(
@@ -131,7 +133,8 @@ final class StorageTests: XCTestCase {
                 XCTAssertNil(body["is_directory"])
                 XCTAssertNil(body["fs_path"])
                 return (
-                    200, Data(#"{"uuid":"vol-1","type":"persistent","name":"data","mount_path":"/data"}"#.utf8), [:])
+                    200, Data(#"{"uuid":"vol-1","type":"persistent","name":"data","mount_path":"/data"}"#.utf8), [:]
+                )
             }
             XCTAssertEqual(request.httpMethod, "DELETE")
             XCTAssertEqual(request.url?.path, "/api/v1/applications/app-1/storages/vol-1")

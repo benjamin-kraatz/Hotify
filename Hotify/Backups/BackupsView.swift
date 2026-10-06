@@ -99,7 +99,7 @@ struct BackupsView: View {
     @ViewBuilder
     private var overlay: some View {
         if model.isLoading, !model.hasLoaded {
-            ProgressView()
+            Kindling(caption: "Loading backups…")
         } else if model.hasLoaded, model.backups.isEmpty {
             ContentUnavailableView {
                 Label("No backups set up", systemImage: "externaldrive")

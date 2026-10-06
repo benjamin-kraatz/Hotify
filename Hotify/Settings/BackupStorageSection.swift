@@ -30,7 +30,8 @@ struct BackupStorageSection: View {
                 Text(message)
                     .foregroundStyle(.secondary)
             } else if model.isLoading, !model.hasLoaded {
-                ProgressView()
+                Kindling(caption: "Loading stores…", height: 22)
+                    .frame(height: 90)
             } else {
                 if let error = model.error {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -42,7 +43,8 @@ struct BackupStorageSection: View {
                         notice,
                         systemImage: model.noticeIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
                     )
-                    .foregroundStyle(model.noticeIsError ? AnyShapeStyle(.glow) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(model.noticeIsError ? AnyShapeStyle(.glow) : AnyShapeStyle(.ember))
+                    .symbolEffect(.bounce, value: notice)
                 }
                 if model.stores.isEmpty {
                     Text("No S3 stores yet.")
@@ -109,12 +111,22 @@ struct BackupStorageSection: View {
 
     private func storageRow(_ storage: S3Storage) -> some View {
         HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "externaldrive.connected.to.line.below.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(storage.isUsable ? AnyShapeStyle(.ember) : AnyShapeStyle(.glow))
+                .frame(width: 32, height: 32)
+                .background(
+                    (storage.isUsable ? Color.ember : Color.glow).opacity(0.12),
+                    in: .rect(cornerRadius: 9, style: .continuous)
+                )
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(storage.name)
+                        .fontWeight(.semibold)
                     if !storage.isUsable {
                         Text("Not usable")
-                            .font(.caption)
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(.glow)
                     }
                 }

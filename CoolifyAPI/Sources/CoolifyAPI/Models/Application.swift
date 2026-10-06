@@ -118,8 +118,9 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         healthCheck = try? HealthCheck(from: decoder)
         // The OpenAPI Application schema has no tags field. Decode them when a payload sends them anyway.
         tags = container.flexTagNames(.tags)
-        // A GET may omit both. `0` and `1` are how Laravel often sends the escape flag.
-        customLabels = container.flexString(.customLabels)
+        // A GET may omit both. `0` and `1` are how Laravel often sends the escape flag. Coolify keeps the labels
+        // as base64 and sends them that way, which the OpenAPI spec does not mention.
+        customLabels = container.flexString(.customLabels).map(Base64Text.decode)
         isContainerLabelEscapeEnabled = container.flexBool(.isContainerLabelEscapeEnabled)
     }
 
