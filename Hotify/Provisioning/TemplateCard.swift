@@ -6,6 +6,8 @@ struct TemplateCard: View {
     var name: String
     var slogan: String
     var logoURL: URL?
+    /// Drawn in place of a logo, for a card that stands for a kind of source rather than a product.
+    var systemImage: String?
 
     @State private var isHovered = false
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -13,7 +15,17 @@ struct TemplateCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
-                TemplateLogo(name: name, url: logoURL, size: 40)
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.ember)
+                        .symbolEffect(.bounce, value: isHovered && !reduceMotion)
+                        .frame(width: 40, height: 40)
+                        .background(
+                            .ember.opacity(isHovered ? 0.2 : 0.12), in: .rect(cornerRadius: 10.4, style: .continuous))
+                } else {
+                    TemplateLogo(name: name, url: logoURL, size: 40)
+                }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.forward")
                     .font(.caption.weight(.bold))

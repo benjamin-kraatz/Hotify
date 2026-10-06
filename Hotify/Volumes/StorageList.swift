@@ -22,20 +22,23 @@ struct StorageList: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                addMenu
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+            VStack(alignment: .leading, spacing: 12) {
+                if !model.storages.isEmpty {
+                    listHeader
+                }
                 if let error = model.error {
                     NoticeBanner(message: error)
                 }
                 if let notice = model.notice {
-                    Label(notice, systemImage: "checkmark.circle.fill")
-                        .font(.callout)
-                        .foregroundStyle(.ember)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    NoticeBanner(message: notice, tone: .done)
                 }
                 ForEach(model.storages) { storage in
-                    storageRow(storage)
+                    StorageRow(storage: storage, schedule: scheduleLabel(for: storage)) {
+                        editor = StorageTarget(kind: storage.kind, original: storage)
+                    } onDelete: {
+                        deleting = storage
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
             .padding(.horizontal, 20)
@@ -45,7 +48,7 @@ struct StorageList: View {
         }
         .overlay {
             if model.isLoading, !model.hasLoaded {
-                ProgressView()
+                Kindling(caption: "Loading storage…")
             } else if model.hasLoaded, model.storages.isEmpty, model.error == nil {
                 ContentUnavailableView {
                     Label("No storage", systemImage: "externaldrive")
@@ -53,11 +56,13 @@ struct StorageList: View {
                     Text("Add a persistent volume or a file mount to \(resourceName).")
                 } actions: {
                     addMenu
+                        .glassButton(prominent: true)
                 }
             }
         }
         .animation(.snappy, value: model.error)
         .animation(.snappy, value: model.notice)
+        .animation(.snappy, value: model.storages.map(\.id))
         .refreshable { await reload() }
         .task(id: route) { await reload() }
         .sheet(item: $editor) { target in
@@ -87,55 +92,34 @@ struct StorageList: View {
                 editor = StorageTarget(kind: .file, original: nil)
             }
         } label: {
-            Label("Add", systemImage: "plus")
+            Label("Add Storage", systemImage: "plus")
+        }
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Add a persistent volume or a file mount")
+    }
+
+    private var listHeader: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(storageSummary)
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .contentTransition(.numericText())
+            Spacer()
+            addMenu
+                .glassButton()
+                .disabled(client == nil)
         }
     }
 
-    private func storageRow(_ storage: ResourceStorage) -> some View {
-        Button {
-            editor = StorageTarget(kind: storage.kind, original: storage)
-        } label: {
-            HStack(alignment: .center, spacing: 14) {
-                Image(systemName: storage.kind == .persistent ? "externaldrive.fill" : "doc.fill")
-                    .font(.title3)
-                    .foregroundStyle(.ember)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(storage.listTitle)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(storage.mountPath)
-                        .font(.subheadline.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if storage.canScheduleBackup {
-                        Text(scheduleLabel(for: storage))
-                            .font(.caption)
-                            .foregroundStyle(.core)
-                    }
-                }
-                Spacer(minLength: 8)
-                Text(storage.kindLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.core)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.ember.opacity(0.12), in: .capsule)
-            }
-            .padding(14)
-            .background(.fill.quaternary, in: .rect(cornerRadius: 14))
-        }
-        .buttonStyle(.plain)
-        .swipeActions {
-            Button("Delete", role: .destructive) { deleting = storage }
-        }
-        .contextMenu {
-            Button("Edit") { editor = StorageTarget(kind: storage.kind, original: storage) }
-            Button("Delete", role: .destructive) { deleting = storage }
-        }
+    private var storageSummary: String {
+        let volumes = model.storages.count { $0.kind == .persistent }
+        let files = model.storages.count - volumes
+        var parts: [String] = []
+        if volumes > 0 { parts.append(volumes == 1 ? "1 volume" : "\(volumes) volumes") }
+        if files > 0 { parts.append(files == 1 ? "1 file mount" : "\(files) file mounts") }
+        return parts.joined(separator: " · ")
     }
 
     private func editorSheet(_ target: StorageTarget) -> some View {
@@ -183,9 +167,10 @@ struct StorageList: View {
         )
     }
 
-    private func scheduleLabel(for storage: ResourceStorage) -> String {
+    /// `nil` when the mount has no backup schedule.
+    private func scheduleLabel(for storage: ResourceStorage) -> String? {
         guard let frequency = model.schedule(for: storage)?.frequency, !frequency.isEmpty else {
-            return "No schedule"
+            return nil
         }
         return BackupFrequencyLabel.title(frequency)
     }
@@ -193,6 +178,107 @@ struct StorageList: View {
     private func reload() async {
         guard let client else { return }
         await model.load(client: client, owner: owner)
+    }
+}
+
+/// One volume or file mount: what it is, where it mounts, and whether a backup runs on a schedule. Opens the editor.
+private struct StorageRow: View {
+    var storage: ResourceStorage
+    /// The backup frequency. `nil` when nothing is scheduled.
+    var schedule: String?
+    var onEdit: () -> Void
+    var onDelete: () -> Void
+
+    @State private var isHovered = false
+
+    private var symbol: String {
+        switch storage.kind {
+        case .persistent: "externaldrive.fill"
+        case .file: storage.isDirectory ? "folder.fill" : "doc.text.fill"
+        }
+    }
+
+    private var hostPath: String? {
+        guard let path = storage.fsPath?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else {
+            return nil
+        }
+        return path
+    }
+
+    var body: some View {
+        Button(action: onEdit) {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.ember)
+                    .frame(width: 36, height: 36)
+                    .background(.ember.opacity(0.12), in: .rect(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(storage.listTitle)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Chip(text: storage.kindLabel)
+                    }
+                    pathLine
+                    if storage.canScheduleBackup {
+                        backupLine
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .offset(x: isHovered ? 2 : 0)
+                    .accessibilityHidden(true)
+            }
+            .padding(14)
+            .well()
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(.ember.opacity(isHovered ? 0.35 : 0), lineWidth: 1)
+            }
+            .contentShape(.rect(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.snappy(duration: 0.18), value: isHovered)
+        .contextMenu {
+            Button("Edit…", systemImage: "pencil", action: onEdit)
+            Button("Delete…", systemImage: "trash", role: .destructive, action: onDelete)
+        }
+        .accessibilityHint("Edits this storage")
+    }
+
+    /// The path inside the container, after the host path a directory mount reads from.
+    private var pathLine: some View {
+        HStack(spacing: 5) {
+            if let hostPath, storage.kind == .file, storage.isDirectory {
+                Text(hostPath)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Image(systemName: "arrow.right")
+                    .imageScale(.small)
+                    .foregroundStyle(.tertiary)
+            }
+            Text(storage.mountPath)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .font(.subheadline.monospaced())
+        .foregroundStyle(.secondary)
+    }
+
+    private var backupLine: some View {
+        Label(
+            schedule.map { $0.contains(" ") ? "Backs up on \($0)" : "Backs up \($0.lowercased())" }
+                ?? "No backup schedule",
+            systemImage: schedule == nil ? "clock.badge.questionmark" : "clock.arrow.circlepath"
+        )
+        .font(.caption.weight(.medium))
+        .foregroundStyle(schedule == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.core))
     }
 }
 

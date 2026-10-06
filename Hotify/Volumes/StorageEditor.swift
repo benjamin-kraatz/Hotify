@@ -173,7 +173,7 @@ struct StorageEditor: View {
                     .autocorrectionDisabled()
                     .focused($focus, equals: .name)
                     #if os(iOS)
-                    .textInputAutocapitalization(.never)
+                .textInputAutocapitalization(.never)
                     #endif
             }
             TextField("Mount path", text: $mountPath, prompt: Text(verbatim: "/var/lib/data"))
@@ -181,7 +181,7 @@ struct StorageEditor: View {
                 .autocorrectionDisabled()
                 .focused($focus, equals: .mountPath)
                 #if os(iOS)
-                .textInputAutocapitalization(.never)
+            .textInputAutocapitalization(.never)
                 #endif
             if kind == .file {
                 if isNew {
@@ -194,7 +194,7 @@ struct StorageEditor: View {
                             .autocorrectionDisabled()
                             .focused($focus, equals: .fsPath)
                             #if os(iOS)
-                            .textInputAutocapitalization(.never)
+                        .textInputAutocapitalization(.never)
                             #endif
                     } else if let fsPath = original?.fsPath, !fsPath.isEmpty {
                         LabeledContent("Host path") {
@@ -210,7 +210,7 @@ struct StorageEditor: View {
                         .autocorrectionDisabled()
                         .focused($focus, equals: .content)
                         #if os(iOS)
-                        .textInputAutocapitalization(.never)
+                    .textInputAutocapitalization(.never)
                         #endif
                 }
             }

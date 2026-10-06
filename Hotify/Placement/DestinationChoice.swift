@@ -86,6 +86,25 @@ struct DestinationChoice: View {
     }
 }
 
+extension DestinationCatalog {
+    /// The sheet's head once a server is picked: the server, and the network when there is a choice of one.
+    func destinationJourney(
+        resourceName: String, heat: Heat, origin: String?, arrowImage: String = "arrow.right"
+    ) -> PlacementJourney? {
+        guard let server else { return nil }
+        let network = destinations.count > 1 ? destination?.name : nil
+        return PlacementJourney(
+            resourceName: resourceName,
+            heat: heat,
+            origin: origin,
+            destination: network.map { "\(server.name) · \($0)" } ?? server.name,
+            destinationKind: isReachable(server) ? "Server" : "Server, unreachable",
+            destinationImage: "server.rack",
+            arrowImage: arrowImage
+        )
+    }
+}
+
 #Preview {
     @Previewable @State var catalog = DestinationCatalog(
         servers: [

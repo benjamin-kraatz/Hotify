@@ -47,7 +47,7 @@ struct ContainerEditor: View {
             }
             .navigationTitle("Edit Container")
             #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

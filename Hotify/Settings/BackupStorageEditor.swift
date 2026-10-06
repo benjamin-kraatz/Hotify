@@ -67,18 +67,18 @@ struct BackupStorageEditor: View {
                     TextField("Endpoint", text: $endpoint, prompt: Text(verbatim: "https://s3.example.com"))
                         .autocorrectionDisabled()
                         #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
                         #endif
                     TextField("Bucket", text: $bucket, prompt: Text(verbatim: "dumps"))
                         .autocorrectionDisabled()
                         #if os(iOS)
-                        .textInputAutocapitalization(.never)
+                    .textInputAutocapitalization(.never)
                         #endif
                     TextField("Region", text: $region, prompt: Text(verbatim: "us-east-1"))
                         .autocorrectionDisabled()
                         #if os(iOS)
-                        .textInputAutocapitalization(.never)
+                    .textInputAutocapitalization(.never)
                         #endif
                     Toggle(isOn: $isUsable) {
                         Text("Usable")
@@ -93,8 +93,8 @@ struct BackupStorageEditor: View {
                         .font(.body.monospaced())
                         .autocorrectionDisabled()
                         #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .textContentType(.none)
+                    .textInputAutocapitalization(.never)
+                    .textContentType(.none)
                         #endif
                     SecureField(
                         "Secret",

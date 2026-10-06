@@ -18,7 +18,7 @@ struct DockerCleanupSection: View {
                 TextField("80", text: threshold)
                     .multilineTextAlignment(.trailing)
                     #if os(iOS)
-                    .keyboardType(.numberPad)
+                .keyboardType(.numberPad)
                     #endif
                     .frame(width: 64)
                     .monospacedDigit()
@@ -56,6 +56,9 @@ struct DockerCleanupSection: View {
                 Text("No cleanup runs yet.")
                     .foregroundStyle(.secondary)
             } else {
+                if model.executions.count > 1 {
+                    RunStrip(heats: model.executions.map(\.heat), verb: "finished")
+                }
                 ForEach(model.executions) { execution in
                     CleanupRunRow(execution: execution)
                 }
@@ -92,18 +95,23 @@ struct DockerCleanupSection: View {
     }
 }
 
-/// One Docker cleanup run: how it ended, and when.
-private struct CleanupRunRow: View {
-    var execution: DockerCleanupExecution
-
-    private var heat: Heat {
-        switch execution.status.lowercased() {
+extension DockerCleanupExecution {
+    /// A finished prune is lit, a failed one needs a look, and one queued or running is warming.
+    var heat: Heat {
+        switch status.lowercased() {
         case "success", "finished", "completed": .lit
         case "failed", "error": .troubled
         case "queued", "running", "in_progress", "started": .warming
         default: .unknown
         }
     }
+}
+
+/// One Docker cleanup run: how it ended, and when.
+private struct CleanupRunRow: View {
+    var execution: DockerCleanupExecution
+
+    private var heat: Heat { execution.heat }
 
     private var status: String {
         switch execution.status.lowercased() {

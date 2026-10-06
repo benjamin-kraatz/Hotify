@@ -184,7 +184,7 @@ struct BackupScheduleEditor: View {
                     .font(.body.monospaced())
                     .autocorrectionDisabled()
                     #if os(iOS)
-                    .textInputAutocapitalization(.never)
+                .textInputAutocapitalization(.never)
                     #endif
             }
             Toggle(isOn: $enabled) {
@@ -195,8 +195,8 @@ struct BackupScheduleEditor: View {
                 .monospacedDigit()
                 .autocorrectionDisabled()
                 #if os(iOS)
-                .keyboardType(.numberPad)
-                .textInputAutocapitalization(.never)
+            .keyboardType(.numberPad)
+            .textInputAutocapitalization(.never)
                 #endif
         } header: {
             Text("Schedule")
@@ -215,7 +215,7 @@ struct BackupScheduleEditor: View {
                 TextField("Databases", text: $databases, prompt: Text(verbatim: "app, analytics"))
                     .autocorrectionDisabled()
                     #if os(iOS)
-                    .textInputAutocapitalization(.never)
+                .textInputAutocapitalization(.never)
                     #endif
             }
         } header: {
@@ -403,8 +403,8 @@ private struct RetentionField: View {
             .monospacedDigit()
             .autocorrectionDisabled()
             #if os(iOS)
-            .keyboardType(.numberPad)
-            .textInputAutocapitalization(.never)
+        .keyboardType(.numberPad)
+        .textInputAutocapitalization(.never)
             #endif
     }
 }

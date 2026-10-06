@@ -112,7 +112,7 @@ struct TaskEditor: View {
                         .focused($focus, equals: .container)
                     TextField("Timeout", value: $timeout, format: .number.grouping(.never))
                         #if os(iOS)
-                        .keyboardType(.numberPad)
+                    .keyboardType(.numberPad)
                         #endif
                     Toggle("Enabled", isOn: $enabled)
                 } footer: {

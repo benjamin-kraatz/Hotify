@@ -8,6 +8,8 @@ struct CloneSheet: View {
     var client: CoolifyClient?
 
     @Bindable var catalog: DestinationCatalog
+    var heat: Heat = .unknown
+    var origin: String?
     @State private var name = ""
     @State private var cloneVolumes = false
     @State private var confirmVolumes = false
@@ -25,6 +27,8 @@ struct CloneSheet: View {
     var body: some View {
         PlacementChrome(
             title: "Clone", actionTitle: "Clone", canAct: canClone, isBusy: isSaving, failure: failure,
+            journey: catalog.destinationJourney(
+                resourceName: resourceName, heat: heat, origin: origin, arrowImage: "plus.square.on.square"),
             onAct: {
                 if cloneVolumes {
                     confirmVolumes = true
@@ -37,7 +41,7 @@ struct CloneSheet: View {
                 TextField("Name", text: $name, prompt: Text("Keep \(resourceName)"))
                     .autocorrectionDisabled()
                     #if os(iOS)
-                    .textInputAutocapitalization(.never)
+                .textInputAutocapitalization(.never)
                     #endif
             } header: {
                 Text("Name")

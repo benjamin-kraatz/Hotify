@@ -8,10 +8,17 @@ struct TaskExecutionList: View {
     var error: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Runs")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 14) {
+                Text("Runs")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                if executions.count > 1 {
+                    RunStrip(heats: executions.map(\.heat), verb: "succeeded")
+                        .transition(.opacity)
+                }
+            }
             if let error {
                 NoticeBanner(message: error)
             }
@@ -36,6 +43,7 @@ struct TaskExecutionList: View {
                 .well(cornerRadius: 10)
             }
         }
+        .animation(.snappy, value: executions.map(\.id))
     }
 }
 

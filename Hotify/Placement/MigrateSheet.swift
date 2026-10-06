@@ -8,6 +8,8 @@ struct MigrateSheet: View {
     var client: CoolifyClient?
 
     @Bindable var catalog: DestinationCatalog
+    var heat: Heat = .unknown
+    var origin: String?
     @State private var migrateVolumes = true
     @State private var confirm = false
     @State private var isSaving = false
@@ -24,6 +26,7 @@ struct MigrateSheet: View {
     var body: some View {
         PlacementChrome(
             title: "Migrate", actionTitle: "Migrate", canAct: canMigrate, isBusy: isSaving, failure: failure,
+            journey: catalog.destinationJourney(resourceName: resourceName, heat: heat, origin: origin),
             onAct: { confirm = true }
         ) {
             DestinationChoice(catalog: catalog)

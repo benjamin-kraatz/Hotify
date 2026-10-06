@@ -45,6 +45,7 @@ struct DestinationSection: View {
             if let notice = model.notice {
                 Label(notice, systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.ember)
+                    .symbolEffect(.bounce, value: notice)
             }
             if let error = model.error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -64,7 +65,7 @@ struct DestinationSection: View {
                 .font(.body.monospaced())
                 .autocorrectionDisabled()
                 #if os(iOS)
-                .textInputAutocapitalization(.never)
+            .textInputAutocapitalization(.never)
                 #endif
                 .disabled(client == nil || model.isSaving)
             if let networkProblem {

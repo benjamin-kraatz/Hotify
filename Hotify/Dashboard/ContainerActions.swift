@@ -14,6 +14,8 @@ final class ContainerActions {
     var lookupError: String?
     var actionError: String?
     private(set) var busyUUID: String?
+    /// What the busy container was asked to do, so its row can say `Restarting…` until the request returns.
+    private(set) var busyCommand: ContainerCommand?
     private var targets: [Target] = []
     /// Edits saved this visit. The lists keep the previous values until the next load, which would reopen a stale form.
     private var savedEdits: [String: ContainerEditorValues] = [:]
@@ -34,6 +36,10 @@ final class ContainerActions {
         busyUUID == uuid
     }
 
+    func command(runningOn uuid: String) -> ContainerCommand? {
+        busyUUID == uuid ? busyCommand : nil
+    }
+
     /// Drops the previous service's uuids and remembered edits. Does not touch the rows the dashboard already showed.
     func reset() {
         targets = []
@@ -41,6 +47,7 @@ final class ContainerActions {
         lookupError = nil
         actionError = nil
         busyUUID = nil
+        busyCommand = nil
     }
 
     /// Reads both lists. The rows stay up while this runs; a failure only explains missing actions.
@@ -72,8 +79,12 @@ final class ContainerActions {
         let uuid = container.uuid
         guard !uuid.isEmpty, busyUUID == nil else { return }
         busyUUID = uuid
+        busyCommand = command
         actionError = nil
-        defer { busyUUID = nil }
+        defer {
+            busyUUID = nil
+            busyCommand = nil
+        }
         let role: ServiceContainerRole = container.isDatabase ? .database : .application
         do {
             switch command {

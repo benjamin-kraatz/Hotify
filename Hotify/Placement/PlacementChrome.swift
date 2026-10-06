@@ -7,6 +7,8 @@ struct PlacementChrome<Content: View>: View {
     var canAct: Bool
     var isBusy: Bool
     var failure: String?
+    /// Where the resource is and where it goes, above the form.
+    var journey: PlacementJourney? = nil
     var onAct: () -> Void
     @ViewBuilder var content: () -> Content
 
@@ -15,14 +17,24 @@ struct PlacementChrome<Content: View>: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let journey {
+                    Section {
+                        journey
+                            .heatEdge(isActive: isBusy)
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
                 if let failure {
                     Section {
-                        Label(failure, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.glow)
+                        NoticeBanner(message: failure)
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
                 }
                 content()
             }
+            .animation(.snappy, value: failure)
             .formStyle(.grouped)
             .disabled(isBusy)
             .navigationTitle(title)

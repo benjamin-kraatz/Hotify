@@ -65,7 +65,8 @@ struct ProvisioningSheet: View {
         // Only the gallery closes with a swipe. On a template the user may have named and placed the service, which
         // a stray swipe would lose. Once the service exists, closing has to keep or delete it, which setup asks about.
         .interactiveDismissDisabled(
-            !path.isEmpty || model.isCreating || databases.isCreating || applications.isCreating)
+            !path.isEmpty || model.isCreating || databases.isCreating || applications.isCreating
+        )
         #if os(macOS)
         .frame(minWidth: 680, idealWidth: 860, minHeight: 600, idealHeight: 780)
         #endif
