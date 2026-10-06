@@ -517,7 +517,10 @@ final class CoolifyAPITests: XCTestCase {
     func testRollbackSendsTheTagAndReturnsTheDeployment() async throws {
         let client = try makeClient { request in
             XCTAssertEqual(request.httpMethod, "POST")
-            XCTAssertEqual(request.url?.path, "/api/v1/applications/app%201/rollback")
+            // `URL.path` decodes `%20`, so read the path as it was sent.
+            XCTAssertEqual(
+                request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.percentEncodedPath,
+                "/api/v1/applications/app%201/rollback")
             XCTAssertTrue(queryItems(request).isEmpty)
             let body = try JSONSerialization.jsonObject(with: Data((bodyText(request) ?? "").utf8)) as? NSDictionary
             XCTAssertEqual(body, ["commit": "5aa01e77c3d4e5f60718293a4b5c6d7e8f901234"] as NSDictionary)

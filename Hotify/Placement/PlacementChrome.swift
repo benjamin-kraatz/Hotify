@@ -59,11 +59,13 @@ struct PlacementChrome<Content: View>: View {
 }
 
 #Preview {
-    PlacementChrome(title: "Move", actionTitle: "Move", canAct: true, isBusy: false, failure: nil, onAct: {}) {
-        Section {
-            Text("production")
-        } footer: {
-            Text("Running containers stay up.")
-        }
-    }
+    PlacementChrome(
+        title: "Move", actionTitle: "Move", canAct: true, isBusy: false, failure: nil, onAct: {},
+        content: {
+            Section {
+                Text("production")
+            } footer: {
+                Text("Running containers stay up.")
+            }
+        })
 }

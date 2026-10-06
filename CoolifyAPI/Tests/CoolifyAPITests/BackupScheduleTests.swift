@@ -72,10 +72,14 @@ final class BackupScheduleTests: XCTestCase {
         let client = try makeClient { request in
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.url?.path, "/api/v1/s3-storages")
-            let expected =
-                #"{"bucket":"dumps","endpoint":"https://s3.example.com","key":"access-key","#
-                + #""name":"Backups","region":"us-east-1","secret":"secret-value"}"#
-            XCTAssertEqual(bodyText(request), expected)
+            // JSONEncoder writes `/` as `\/`, so compare the parsed body rather than its text.
+            let body = try JSONSerialization.jsonObject(with: Data((bodyText(request) ?? "").utf8)) as? NSDictionary
+            XCTAssertEqual(
+                body,
+                [
+                    "bucket": "dumps", "endpoint": "https://s3.example.com", "key": "access-key", "name": "Backups",
+                    "region": "us-east-1", "secret": "secret-value",
+                ] as NSDictionary)
             return (201, Data(#"{"uuid":"store-1"}"#.utf8), [:])
         }
         let created = try await client.createS3Storage(
