@@ -30,7 +30,7 @@ final class BackupScheduleTests: XCTestCase {
             let expected = """
                 {"database_backup_retention_amount_locally":4,\
                 "database_backup_retention_max_storage_locally":1.5,\
-                "s3_storage_uuid":"store-1","save_s3":true}\
+                "s3_storage_uuid":"store-1","save_s3":true}
                 """
             XCTAssertEqual(bodyText(request), expected)
             return (200, Data(#"{"message":"Database backup configuration updated"}"#.utf8), [:])
@@ -112,7 +112,7 @@ final class BackupScheduleTests: XCTestCase {
             "database_backup_retention_days_locally":14,\
             "database_backup_retention_max_storage_locally":"1.5","timeout":"3600",\
             "executions":[{"uuid":"execution","status":"failed","size":"42",\
-            "message":"Storage unavailable"}]}]\
+            "message":"Storage unavailable"}]}]
             """
         let backups = try CoolifyJSON.decoder().decode([DatabaseBackup].self, from: Data(fixture.utf8))
         let backup = backups[0]
