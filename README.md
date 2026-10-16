@@ -10,6 +10,7 @@ A Mac and iPhone app for your self-hosted [Coolify](https://coolify.io).
 ![iOS 18.6](https://img.shields.io/badge/iOS-18.6-black?logo=apple)
 ![Swift 6.4](https://img.shields.io/badge/Swift-6.4-F05138?logo=swift&logoColor=white)
 ![Coolify 4.3.x](https://img.shields.io/badge/Coolify-4.3.x-6B16ED)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/benjamin-kraatz/Hotify?utm_source=oss&utm_medium=github&utm_campaign=benjamin-kraatz%2FHotify&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
 </div>
 
