@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @State private var instanceStore: InstanceStore
     @State private var menuBar: MenuBarModel
     @State private var variableLock = VariableLock()
+    /// Restores outlive the sheet that started them, so they live as long as the app.
+    @State private var databaseRestores = DatabaseRestores()
     @State private var placeColors: PlaceColors
     /// The notification center keeps only a weak reference to its delegate.
     @State private var notificationRouter = NotificationRouter()
@@ -109,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Settings {
             SettingsView()
                 .environment(variableLock)
+                .environment(databaseRestores)
                 .environment(instanceStore)
                 .environment(menuBar)
                 .environment(notificationSettings)
@@ -150,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ContentView()
             .environment(instanceStore)
             .environment(variableLock)
+            .environment(databaseRestores)
             .environment(menuBar)
             .environment(placeColors)
             #if os(iOS)

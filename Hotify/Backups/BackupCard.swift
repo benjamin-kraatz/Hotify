@@ -14,6 +14,8 @@ struct BackupCard: View {
     var onRun: () -> Void
     var onEdit: () -> Void = {}
     var onDelete: () -> Void = {}
+    /// Restores a successful run whose dump Coolify still keeps. `nil` leaves restore out.
+    var onRestore: ((BackupExecution) -> Void)?
 
     private var history: [BackupExecution] { backup.history }
 
@@ -96,7 +98,11 @@ struct BackupCard: View {
                         .padding(.leading, 46)
                 }
                 // The newest run opens by itself when it failed. That message is what you came for.
-                BackupExecutionRow(execution: execution, startsExpanded: index == 0 && execution.heat == .troubled)
+                BackupExecutionRow(
+                    execution: execution,
+                    startsExpanded: index == 0 && execution.heat == .troubled,
+                    onRestore: restoreAction(for: execution)
+                )
             }
             if history.isEmpty, pendingSince == nil {
                 Text(
@@ -113,6 +119,13 @@ struct BackupCard: View {
         }
         .well()
         .heatEdge(isActive: isBusy || pendingSince != nil)
+    }
+}
+
+extension BackupCard {
+    fileprivate func restoreAction(for execution: BackupExecution) -> (() -> Void)? {
+        guard let onRestore, RestorableRun(execution: execution, backup: backup) != nil else { return nil }
+        return { onRestore(execution) }
     }
 }
 

@@ -20,6 +20,8 @@ struct ResourceSummary: Identifiable, Hashable {
     var pinnedCommit: String?
     /// Team tag names loaded with the resource. Empty when the list left them off, which does not match a tag filter.
     var tags: [String] = []
+    /// A standalone database's Coolify type, such as `standalone-postgresql`. `nil` for everything else.
+    var databaseType: String?
 
     var id: ResourceRoute { route }
     var kind: ResourceKind { route.kind }
@@ -83,7 +85,8 @@ extension ResourceSummary {
             status: database.status,
             subtitle: Self.engineName(database.databaseType),
             place: place,
-            tags: database.tags
+            tags: database.tags,
+            databaseType: database.databaseType
         )
     }
 
@@ -132,7 +135,7 @@ extension ResourceSummary {
     }
 
     /// Turns `standalone-postgresql` into `PostgreSQL`.
-    private static func engineName(_ type: String?) -> String? {
+    static func engineName(_ type: String?) -> String? {
         guard let type, !type.isEmpty else { return nil }
         let engine = type.hasPrefix("standalone-") ? String(type.dropFirst("standalone-".count)) : type
         let names = [

@@ -2,14 +2,20 @@ import CoolifyAPI
 import SwiftUI
 
 /// The containers inside a service, each with its own status, and start, stop, restart, and edit when it has a uuid.
+/// A database container also offers to restore a backup.
 struct ContainerList: View {
     var containers: [ContainerSummary]
     var client: CoolifyClient?
     var serviceUUID: String?
+    /// The service's name, which the restore sheet shows beside the container's.
+    var serviceName: String?
 
     @State private var actions = ContainerActions()
     @State private var stopTarget: ContainerSummary?
     @State private var editing: ContainerSummary?
+    @State private var restoring: ContainerSummary?
+    /// Missing in previews, which leaves restore out.
+    @SwiftUI.Environment(DatabaseRestores.self) private var restores: DatabaseRestores?
     /// Names and links saved here, until a later poll brings the same values from Coolify.
     @State private var revisions: [String: ContainerRevision] = [:]
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -21,6 +27,17 @@ struct ContainerList: View {
             copy.name = revision.name
             copy.link = revision.link
             return copy
+        }
+    }
+
+    /// Restores of this service's database containers that run or just ended, with the container each one is for.
+    private var restoreJobs: [(container: ContainerSummary, job: RestoreJob)] {
+        guard let restores, let serviceUUID, !serviceUUID.isEmpty else { return [] }
+        return rows.compactMap { container in
+            guard container.isDatabase, !container.uuid.isEmpty,
+                let job = restores.job(for: .serviceDatabase(service: serviceUUID, database: container.uuid))
+            else { return nil }
+            return (container, job)
         }
     }
 
@@ -38,6 +55,9 @@ struct ContainerList: View {
                 if let actionError = actions.actionError {
                     NoticeBanner(message: actionError)
                 }
+                ForEach(restoreJobs, id: \.job.id) { entry in
+                    RestoreBanner(job: entry.job) { restoring = entry.container }
+                }
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.element.listKey) { index, container in
                         if index > 0 {
@@ -50,6 +70,7 @@ struct ContainerList: View {
                             busyCommand: container.uuid.isEmpty ? nil : actions.command(runningOn: container.uuid),
                             canAct: client != nil && !actions.isBusy,
                             onEdit: { editing = container },
+                            onRestore: canRestore(container) ? { restoring = container } : nil,
                             onStart: { run(.start, container) },
                             onRestart: { run(.restart, container) },
                             onStop: { stopTarget = container }
@@ -75,6 +96,7 @@ struct ContainerList: View {
         .animation(.snappy, value: actions.lookupError)
         .animation(.snappy, value: actions.actionError)
         .animation(reduceMotion ? nil : .snappy, value: actions.busyUUID)
+        .animation(reduceMotion ? nil : .snappy, value: restoreJobs.map(\.job.id))
         .task(id: loadID) {
             revisions = [:]
             actions.reset()
@@ -96,6 +118,14 @@ struct ContainerList: View {
                     revisions[container.uuid] = ContainerRevision(name: saved.name, link: link)
                 }
             )
+        }
+        .sheet(item: $restoring) { container in
+            if let serviceUUID {
+                DatabaseRestoreSheet(
+                    target: RestoreTarget(container: container, service: serviceUUID, serviceName: serviceName),
+                    client: client
+                )
+            }
         }
         .confirmationDialog(
             stopTarget.map { "Stop \($0.name)?" } ?? "",
@@ -121,6 +151,12 @@ struct ContainerList: View {
         }
     }
 
+    /// A database container with a uuid, in a service Hotify can reach.
+    private func canRestore(_ container: ContainerSummary) -> Bool {
+        container.isDatabase && !container.uuid.isEmpty && client != nil && serviceUUID?.isEmpty == false
+            && restores != nil
+    }
+
     /// Skips the call when there is no client or no uuid, so a numeric id never reaches the path.
     private func run(_ command: ContainerCommand, _ container: ContainerSummary) {
         guard let client, let serviceUUID, !serviceUUID.isEmpty, !container.uuid.isEmpty else { return }
@@ -138,6 +174,8 @@ private struct ContainerRow: View {
     var busyCommand: ContainerCommand?
     var canAct: Bool
     var onEdit: () -> Void
+    /// `nil` for a container that cannot take a restore.
+    var onRestore: (() -> Void)?
     var onStart: () -> Void
     var onRestart: () -> Void
     var onStop: () -> Void
@@ -220,6 +258,9 @@ private struct ContainerRow: View {
                 Divider()
                 Button("Edit…", systemImage: "pencil", action: onEdit)
                     .disabled(!canAct)
+                if let onRestore {
+                    Button("Restore Backup…", systemImage: "arrow.counterclockwise", action: onRestore)
+                }
             }
         }
         .animation(.snappy(duration: 0.15), value: isHovered)
@@ -231,20 +272,30 @@ private struct ContainerRow: View {
 
     private var actionButtons: some View {
         HStack(spacing: 2) {
-            if busyCommand == nil {
-                if isUp {
-                    commandButton(
-                        "Restart", systemImage: "arrow.clockwise", help: "Restart this container", action: onRestart)
-                    commandButton(
-                        "Stop", systemImage: "stop.fill", help: "Stop this container. Volumes and data stay.",
-                        action: onStop)
-                } else {
-                    commandButton("Start", systemImage: "play.fill", help: "Start this container", action: onStart)
+            Group {
+                if busyCommand == nil {
+                    if isUp {
+                        commandButton(
+                            "Restart", systemImage: "arrow.clockwise", help: "Restart this container", action: onRestart
+                        )
+                        commandButton(
+                            "Stop", systemImage: "stop.fill", help: "Stop this container. Volumes and data stay.",
+                            action: onStop)
+                    } else {
+                        commandButton("Start", systemImage: "play.fill", help: "Start this container", action: onStart)
+                    }
                 }
+                commandButton("Edit", systemImage: "pencil", help: "Edit this container", action: onEdit)
             }
-            commandButton("Edit", systemImage: "pencil", help: "Edit this container", action: onEdit)
+            .disabled(!canAct)
+            // Stays enabled while another command runs, so a restore in progress can always be opened.
+            if let onRestore {
+                commandButton(
+                    "Restore Backup", systemImage: "arrow.counterclockwise",
+                    help: "Restore a backup into this database",
+                    action: onRestore)
+            }
         }
-        .disabled(!canAct)
         .controlSize(.small)
     }
 
