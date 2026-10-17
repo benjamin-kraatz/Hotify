@@ -1,17 +1,44 @@
 import CoolifyAPI
 import SwiftUI
 
-/// A database's backup configurations with their run history, and a way to add, edit, delete, or run one.
+/// A database's backup configurations with their run history, a way to add, edit, delete, or run one, and a way to
+/// restore a backup into the database.
 struct BackupsView: View {
     var client: CoolifyClient?
     var database: String
     var resourceName: String
+    /// The Coolify type, such as `standalone-postgresql`, which decides whether and how a restore works.
+    var databaseType: String?
+    var status: String?
     @State private var model = BackupsModel()
     @State private var prompt: BackupPrompt?
     @State private var editor: BackupScheduleTarget?
+    @State private var restore: RestoreSheetTarget?
+    /// Missing in previews, which leaves the restore banner out.
+    @SwiftUI.Environment(DatabaseRestores.self) private var restores: DatabaseRestores?
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var restoreTarget: RestoreTarget {
+        RestoreTarget(
+            database: database,
+            name: resourceName,
+            databaseType: databaseType,
+            engineDescription: ResourceSummary.engineName(databaseType),
+            status: status
+        )
+    }
+
+    private var restoreJob: RestoreJob? {
+        restores?.job(for: .database(database))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            if let restoreJob {
+                RestoreBanner(job: restoreJob) { restore = RestoreSheetTarget(runID: nil) }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+            }
             if let error = model.error {
                 NoticeBanner(message: error)
                     .padding(.horizontal, 20)
@@ -32,7 +59,8 @@ struct BackupsView: View {
                             canManage: client != nil && !backup.id.isEmpty,
                             onRun: { prompt = .run(backup) },
                             onEdit: { editor = BackupScheduleTarget(backup: backup) },
-                            onDelete: { prompt = .delete(backup) }
+                            onDelete: { prompt = .delete(backup) },
+                            onRestore: client == nil ? nil : { restore = RestoreSheetTarget(runID: $0.id) }
                         )
                     }
                 }
@@ -44,6 +72,7 @@ struct BackupsView: View {
             .overlay { overlay }
         }
         .animation(.snappy, value: model.error)
+        .animation(reduceMotion ? nil : .snappy, value: restoreJob?.id)
         .refreshable { if let client { await model.refresh(client: client, database: database) } }
         .task(id: database) { await followHistory() }
         .sheet(item: $editor) { target in
@@ -55,6 +84,14 @@ struct BackupsView: View {
                     try await model.create(draft, client: client, database: database)
                 }
             }
+        }
+        .sheet(item: $restore) { request in
+            DatabaseRestoreSheet(
+                target: restoreTarget,
+                client: client,
+                runs: RestorableRun.all(in: model.backups),
+                runID: request.runID
+            )
         }
         .confirmationDialog(
             promptTitle,
@@ -87,6 +124,7 @@ struct BackupsView: View {
     private var addButton: some View {
         HStack {
             Spacer()
+            restoreButton
             Button("Add Schedule", systemImage: "plus") {
                 editor = BackupScheduleTarget(backup: nil)
             }
@@ -113,8 +151,18 @@ struct BackupsView: View {
                 }
                 .glassButton(prominent: true)
                 .disabled(client == nil)
+                restoreButton
             }
         }
+    }
+
+    private var restoreButton: some View {
+        Button("Restore…", systemImage: "arrow.counterclockwise") {
+            restore = RestoreSheetTarget(runID: nil)
+        }
+        .glassButton()
+        .disabled(client == nil)
+        .help("Restore a backup into \(resourceName)")
     }
 
     private var promptTitle: String {
@@ -142,12 +190,21 @@ private enum BackupPrompt {
     case delete(DatabaseBackup)
 }
 
+/// The restore sheet, opened on its own or on one run.
+private struct RestoreSheetTarget: Identifiable {
+    var runID: String?
+    var id: String { runID ?? "restore" }
+}
+
 private struct BackupScheduleTarget: Identifiable {
     var backup: DatabaseBackup?
     var id: String { backup?.id ?? "new" }
 }
 
 #Preview {
-    BackupsView(client: nil, database: "preview", resourceName: "Postgres")
-        .frame(width: 560, height: 420)
+    BackupsView(
+        client: nil, database: "preview", resourceName: "Postgres", databaseType: "standalone-postgresql",
+        status: "running:healthy"
+    )
+    .frame(width: 560, height: 420)
 }

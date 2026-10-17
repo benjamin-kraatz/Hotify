@@ -10,6 +10,8 @@ public struct DatabaseBackup: Decodable, Sendable, Identifiable {
     public var saveS3: Bool
     /// The store that receives a remote copy, when the response names one.
     public var s3StorageUUID: String?
+    /// The store's numeric id, as text. Coolify's import accepts it where it asks for the store's uuid.
+    public var s3StorageID: String?
     public var databaseBackupRetentionAmountLocally: Int?
     public var databaseBackupRetentionDaysLocally: Int?
     public var databaseBackupRetentionMaxStorageLocally: Double?
@@ -30,6 +32,7 @@ public struct DatabaseBackup: Decodable, Sendable, Identifiable {
         case saveS3
         // `s3_storage_uuid` becomes `s3StorageUuid` after snake_case conversion.
         case s3StorageUuid
+        case s3StorageId
         case timeout
         case databaseBackupRetentionAmountLocally
         case databaseBackupRetentionDaysLocally
@@ -50,6 +53,7 @@ public struct DatabaseBackup: Decodable, Sendable, Identifiable {
         // Coolify 4.3.23 lists `s3_storage_id`, the numeric row, and not the uuid.
         // The uuid is kept when a response has it.
         s3StorageUUID = container.flexString(.s3StorageUuid)
+        s3StorageID = container.flexString(.s3StorageId)
         databaseBackupRetentionAmountLocally = container.flexInt(.databaseBackupRetentionAmountLocally)
         databaseBackupRetentionDaysLocally = container.flexInt(.databaseBackupRetentionDaysLocally)
         databaseBackupRetentionMaxStorageLocally = container.flexString(.databaseBackupRetentionMaxStorageLocally)

@@ -867,7 +867,13 @@ struct ResourceDetail: View {
                     }
                 case .backups:
                     if case .database(let uuid) = resource.route {
-                        BackupsView(client: deploymentClient, database: uuid, resourceName: resource.name)
+                        BackupsView(
+                            client: deploymentClient,
+                            database: uuid,
+                            resourceName: resource.name,
+                            databaseType: resource.databaseType,
+                            status: resource.status
+                        )
                     }
                 case .storage:
                     StorageList(client: deploymentClient, route: resource.route, resourceName: resource.name)
@@ -876,6 +882,7 @@ struct ResourceDetail: View {
                         containers: resource.containers,
                         client: deploymentClient,
                         serviceUUID: resource.kind == .service ? resource.route.uuid : nil,
+                        serviceName: resource.name,
                         onOpenTerminal: { container in
                             terminal = .container(container, in: resource)
                         }
