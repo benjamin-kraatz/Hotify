@@ -126,6 +126,75 @@ public final class SSHConnection: Sendable {
         return SSHTerminal(channel: session, events: events)
     }
 
+    /// One round trip to the server, and how long it took.
+    ///
+    /// Throws `SSHConnectionError.timedOut` when no answer comes within `timeout`, and `.closed` once the connection
+    /// is gone.
+    public func probe(timeout: Duration = .seconds(10)) async throws -> Duration {
+        let channel = self.channel
+        guard channel.isActive else { throw SSHConnectionError.closed }
+        let start = ContinuousClock.now
+        let answered = channel.eventLoop.makePromise(of: Void.self)
+        channel.eventLoop.execute {
+            do {
+                let ssh = try channel.pipeline.syncOperations.handler(type: NIOSSHHandler.self)
+                let reply = channel.eventLoop.makePromise(of: GlobalRequest.TCPForwardingResponse?.self)
+                // NIOSSH only sends the global requests it knows, and OpenSSH's `keepalive@openssh.com` isn't one.
+                // Cancelling a port forward that was never set up asks the same question: the server has to answer,
+                // and it answers with a failure, which is as good as a success here. Nothing is cancelled, and sshd
+                // mentions the request only at debug level.
+                ssh.sendTCPForwardingRequest(.cancel(host: "", port: 0), promise: reply)
+                reply.futureResult.whenComplete { result in
+                    switch result {
+                    case .success:
+                        answered.succeed(())
+                    case .failure(let error as NIOSSHError) where error.type == .globalRequestRefused:
+                        answered.succeed(())
+                    case .failure(let error):
+                        answered.fail(error)
+                    }
+                }
+            } catch {
+                answered.fail(error)
+            }
+        }
+        let deadline = channel.eventLoop.scheduleTask(in: TimeAmount(timeout)) {
+            answered.fail(SSHConnectionError.timedOut)
+        }
+        defer { deadline.cancel() }
+        do {
+            try await answered.futureResult.get()
+        } catch {
+            throw Self.reason(error)
+        }
+        return start.duration(to: .now)
+    }
+
+    /// Keeps an idle connection alive, and notices when it dies.
+    ///
+    /// Every `interval` the connection probes the server, so NAT tables and idle timeouts see traffic. The stream
+    /// yields each round trip. A server that doesn't answer within `timeout` is gone: the connection closes, which
+    /// ends every terminal on it, and the stream finishes. Cancel the stream to stop probing.
+    public func keepAlive(every interval: Duration = .seconds(15), timeout: Duration = .seconds(10)) -> AsyncStream<
+        Duration
+    > {
+        AsyncStream { continuation in
+            let task = Task {
+                while !Task.isCancelled {
+                    guard (try? await Task.sleep(for: interval)) != nil else { break }
+                    do {
+                        continuation.yield(try await probe(timeout: timeout))
+                    } catch {
+                        await close()
+                        break
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     public func close() async {
         try? await channel.close()
     }
@@ -163,8 +232,18 @@ public final class SSHConnection: Sendable {
         if let error = error as? SSHConnectionError {
             return error
         }
-        if error is ChannelError, case .connectTimeout = error as? ChannelError {
+        switch error as? ChannelError {
+        case .connectTimeout?:
             return .timedOut
+        // A probe or request that was waiting when the connection went away fails with one of these.
+        case .eof?, .ioOnClosedChannel?, .alreadyClosed?:
+            return .closed
+        default:
+            break
+        }
+        // The handlers leave the pipeline when the connection closes, so a request after that finds none.
+        if error is ChannelPipelineError {
+            return .closed
         }
         if let error = error as? NIOSSHError, error.type == .channelSetupRejected {
             return .channelRejected
