@@ -6,6 +6,7 @@ import SwiftUI
 struct MenuBarView: View {
     @SwiftUI.Environment(MenuBarModel.self) private var model
     @SwiftUI.Environment(\.openWindow) private var openWindow
+    @State private var stopCandidate: ResourceSummary?
 
     /// Watched resources by instance, in the order they were added.
     private var groups: [(instance: String, entries: [WatchedResource])] {
@@ -34,10 +35,18 @@ struct MenuBarView: View {
                     }
                 }
             }
+            if let error = model.actionError {
+                actionError(error)
+            }
             Divider()
             footer
         }
         .frame(width: 340)
+        .animation(.snappy, value: model.actionError)
+        .stopConfirmation(for: $stopCandidate) { resource in
+            guard let entry = model.watched.first(where: { $0.route == resource.route }) else { return }
+            Task { await model.perform(.stop, on: entry) }
+        }
     }
 
     private var header: some View {
@@ -78,10 +87,15 @@ struct MenuBarView: View {
                             .padding(.bottom, 2)
                     }
                     ForEach(group.entries) { entry in
-                        MenuBarRow(entry: entry, state: model.state(for: entry)) {
-                            model.open(entry)
-                            openMainWindow()
-                        }
+                        MenuBarRow(
+                            entry: entry,
+                            state: model.state(for: entry),
+                            onOpen: {
+                                model.open(entry)
+                                openMainWindow()
+                            },
+                            onAction: { action in run(action, on: entry) }
+                        )
                     }
                 }
             }
@@ -110,6 +124,25 @@ struct MenuBarView: View {
         .padding(.bottom, 22)
     }
 
+    private func actionError(_ message: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
+            Text(message)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button("Dismiss", systemImage: "xmark") {
+                model.actionError = nil
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+        }
+        .font(.subheadline)
+        .foregroundStyle(.glow)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+        .transition(.opacity)
+    }
+
     private var footer: some View {
         HStack(spacing: 14) {
             Button("Open Hotify", action: openMainWindow)
@@ -135,71 +168,17 @@ struct MenuBarView: View {
         .padding(.vertical, 10)
     }
 
+    private func run(_ action: ResourceAction, on entry: WatchedResource) {
+        if action == .stop {
+            stopCandidate = model.state(for: entry).resource
+        } else {
+            Task { await model.perform(action, on: entry) }
+        }
+    }
+
     private func openMainWindow() {
         openWindow(id: "main")
         NSApplication.shared.activate(ignoringOtherApps: true)
-    }
-}
-
-/// One watched resource, laid out like its row in the dashboard.
-private struct MenuBarRow: View {
-    var entry: WatchedResource
-    var state: MenuBarResourceState
-    var onOpen: () -> Void
-
-    @State private var isHovered = false
-
-    private var kind: ResourceKind? { entry.route?.kind }
-
-    var body: some View {
-        Button(action: onOpen) {
-            HStack(alignment: .top, spacing: 12) {
-                FlameGlyph(heat: state.heat, height: 17)
-                    .frame(width: 16)
-                    .padding(.top, 1)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(state.resource?.name ?? entry.name)
-                            .font(.body.weight(.semibold))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 8)
-                        Text(state.statusText)
-                            .font(.subheadline)
-                            .foregroundStyle(
-                                state.heat.needsAttention || state.isStale
-                                    ? AnyShapeStyle(.glow) : AnyShapeStyle(.secondary)
-                            )
-                            .contentTransition(.interpolate)
-                            .lineLimit(1)
-                    }
-                    HStack(spacing: 8) {
-                        if let kind {
-                            Image(systemName: kind.systemImage)
-                                .imageScale(.small)
-                                .accessibilityLabel(kind.title)
-                        }
-                        Text(state.resource?.subtitle ?? kind?.title ?? "")
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(Color.primary.opacity(isHovered ? 0.07 : 0), in: .rect(cornerRadius: 9))
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .animation(.snappy(duration: 0.15), value: isHovered)
-        .animation(.snappy, value: state.statusText)
-        .help("Open \(entry.name) in Hotify")
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(state.statusText)
     }
 }
 
