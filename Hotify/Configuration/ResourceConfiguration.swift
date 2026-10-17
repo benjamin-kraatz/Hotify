@@ -19,6 +19,9 @@ struct ResourceConfiguration: Hashable {
     var hasContainerDomains = false
     /// `nil` for a service, whose health checks live in its compose file.
     var healthCheck: HealthCheck?
+    /// An application's CPU and memory limits. `nil` for anything else, and for a Docker Compose application, whose
+    /// compose file runs without them.
+    var limits: ApplicationLimits?
     /// An application's proxy labels. Empty when it has none. Unused for a database or a service.
     var customLabels = ""
     /// Whether Coolify writes `$` as `$$`. Off lets the labels expand environment variables.
@@ -56,6 +59,7 @@ extension ResourceConfiguration {
                 .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         } else {
             domains = Self.split(application.fqdn)
+            limits = ApplicationLimits(limits: application.limits)
         }
     }
 
@@ -128,6 +132,9 @@ extension ResourceConfiguration {
         if redirect != saved.redirect { update.redirect = redirect }
         if forcesHTTPS != saved.forcesHTTPS { update.isForceHTTPSEnabled = forcesHTTPS }
         update.healthCheck = healthCheckChanges(from: saved)
+        if let limits, let before = saved.limits {
+            update.limits = limits.changes(from: before)
+        }
         if let source, let before = saved.source {
             source.write(changesFrom: before, into: &update)
         }
@@ -218,7 +225,10 @@ extension ResourceConfiguration {
         if let port = publicPort, !(1...65_535).contains(port) {
             return "A port is a number from 1 to 65535."
         }
-        return healthCheck.flatMap { Self.problem(in: $0, kind: kind) }
+        if let problem = healthCheck.flatMap({ Self.problem(in: $0, kind: kind) }) {
+            return problem
+        }
+        return limits?.problem
     }
 
     static func isWebAddress(_ text: String) -> Bool {

@@ -49,6 +49,8 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
     /// that never had a domain are missing.
     public var dockerComposeDomains: [String: String]?
     public var healthCheck: HealthCheck?
+    /// The container's CPU and memory limits. A field the payload leaves out is `nil`.
+    public var limits: ResourceLimits?
     /// Tag names when the payload includes them. The OpenAPI schema omits this field; an absent one is empty.
     public var tags: [String] = []
     /// The proxy label block. Absent when the payload leaves it out or the application has none.
@@ -116,6 +118,7 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         redirect = container.flexString(.redirect).flatMap(DomainRedirect.init(rawValue:))
         dockerComposeDomains = container.flexString(.dockerComposeDomains).flatMap(Self.composeDomains(from:))
         healthCheck = try? HealthCheck(from: decoder)
+        limits = try? ResourceLimits(from: decoder)
         // The OpenAPI Application schema has no tags field. Decode them when a payload sends them anyway.
         tags = container.flexTagNames(.tags)
         // A GET may omit both. `0` and `1` are how Laravel often sends the escape flag. Coolify keeps the labels

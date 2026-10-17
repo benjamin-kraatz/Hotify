@@ -2,8 +2,9 @@ import CoolifyAPI
 import SwiftUI
 
 /// The Settings tab of a resource: its name and description, an application's source, its domains, a database's public
-/// port, its health check, an application's proxy labels, and its tags, in one form with one Save. Nothing restarts
-/// or deploys on save. A bar offers that afterwards. Tags are saved on their own, as they are added or removed.
+/// port, its health check, an application's proxy labels and resource limits, and its tags, in one form with one Save.
+/// Nothing restarts or deploys on save. A bar offers that afterwards. Tags are saved on their own, as they are added or
+/// removed.
 struct ConfigurationView: View {
     var model: ConfigurationModel
     var resource: ResourceSummary
@@ -37,6 +38,14 @@ struct ConfigurationView: View {
         return Binding(
             get: { model.draft?.source ?? source },
             set: { model.draft?.source = $0 }
+        )
+    }
+
+    private var limits: Binding<ApplicationLimits>? {
+        guard let limits = model.draft?.limits else { return nil }
+        return Binding(
+            get: { model.draft?.limits ?? limits },
+            set: { model.draft?.limits = $0 }
         )
     }
 
@@ -185,6 +194,15 @@ struct ConfigurationView: View {
                 }
             }
 
+            if let limits {
+                LimitsSection(limits: limits)
+            } else if resource.kind == .application {
+                Section("Resources") {
+                    Text("A Docker Compose app runs its compose file as written. Set its limits there.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             TagsSection(model: tags)
         }
         .formStyle(.grouped)
@@ -314,6 +332,7 @@ struct ConfigurationView: View {
                 redirect: .nonWWW,
                 healthCheck: HealthCheck(
                     isEnabled: true, kind: .http, method: "GET", path: "/health", returnCode: 200, interval: 30),
+                limits: ApplicationLimits(limits: ResourceLimits(cpus: "1.5", memory: "512m")),
                 customLabels: """
                     traefik.http.middlewares.hotify-compress.compress=true
                     traefik.http.routers.hotify.middlewares=hotify-compress
