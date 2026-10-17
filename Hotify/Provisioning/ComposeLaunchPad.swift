@@ -22,23 +22,14 @@ struct ComposeLaunchPad: View {
 
         Form {
             Section {
+                // The editor draws its own well, so the row gives it the whole width and no second box.
                 ComposeEditor(compose: $model.compose, height: Self.editorHeight)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
             } header: {
                 VStack(alignment: .leading, spacing: 0) {
                     hero
-                    HStack {
-                        Text("Compose File")
-                        Spacer(minLength: 12)
-                        if model.compose.isEmpty {
-                            PasteButton(payloadType: String.self) { strings in
-                                guard let text = strings.first else { return }
-                                Task { @MainActor in model.compose = text }
-                            }
-                            .labelStyle(.titleAndIcon)
-                            .buttonBorderShape(.capsule)
-                            .controlSize(.small)
-                        }
-                    }
+                    Text("Compose File")
                 }
             } footer: {
                 Text(
@@ -85,6 +76,7 @@ struct ComposeLaunchPad: View {
             }
         }
         .formStyle(.grouped)
+        .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom, spacing: 0) { createBar }
         .disabled(model.isCreating)
         .animation(.snappy, value: model.createProblem)
@@ -116,7 +108,28 @@ struct ComposeLaunchPad: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// The status beside the button where they fit, as on a Mac or iPad, and above it on an iPhone.
     private var createBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                createStatus
+                Spacer(minLength: 0)
+                createButton
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                createStatus
+                createButton
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(.bar)
+        .animation(.snappy, value: model.isCreating)
+        .animation(.snappy, value: isComposeBlank)
+    }
+
+    private var createStatus: some View {
         HStack(spacing: 14) {
             FlameGlyph(heat: model.isCreating ? .warming : .cold, height: 24)
             VStack(alignment: .leading, spacing: 3) {
@@ -126,35 +139,38 @@ struct ComposeLaunchPad: View {
                 Text(destinationSummary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
-            Button {
-                Task { await model.createFromCompose() }
-            } label: {
-                Text("Create Service")
-                    .opacity(model.isCreating ? 0 : 1)
-                    .overlay {
-                        if model.isCreating {
-                            ProgressView().controlSize(.small)
-                        }
-                    }
-            }
-            .glassButton(prominent: true)
-            .controlSize(.large)
-            .keyboardShortcut(.defaultAction)
-            .disabled(!model.canCreateFromCompose)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .background(.bar)
-        .animation(.snappy, value: model.isCreating)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var createButton: some View {
+        Button {
+            Task { await model.createFromCompose() }
+        } label: {
+            Text("Create Service")
+                .opacity(model.isCreating ? 0 : 1)
+                .overlay {
+                    if model.isCreating {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+        }
+        .glassButton(prominent: true)
+        .controlSize(.large)
+        .keyboardShortcut(.defaultAction)
+        .disabled(!model.canCreateFromCompose)
+        .help(isComposeBlank ? "Write or paste a compose file first" : "Create the service, stopped, and set it up")
+    }
+
+    private var isComposeBlank: Bool {
+        model.compose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var status: String {
-        model.compose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "Write or paste a compose file" : "Ready to create"
+        isComposeBlank ? "Write or paste a compose file" : "Ready to create"
     }
 
     /// Where the service lands, and that it waits there stopped.

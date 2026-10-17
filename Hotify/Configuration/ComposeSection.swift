@@ -11,6 +11,8 @@ struct ComposeSection: View {
     /// Opens the editor. `nil` leaves the button out, as in a preview of a single tab.
     var onEdit: (() -> Void)?
 
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Section {
             if let compose {
@@ -20,11 +22,17 @@ struct ComposeSection: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(summary(outline))
                             .fontWeight(.medium)
-                        Text(outline.containers.map(\.name).joined(separator: ", "))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                        if outline.containers.isEmpty {
+                            Text("Hotify reads no containers in it")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(outline.containers.map(\.name).joined(separator: ", "))
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                     }
                     Spacer(minLength: 8)
                     if isChanged {
@@ -34,14 +42,19 @@ struct ComposeSection: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(.ember.opacity(0.12), in: .capsule)
+                            .transition(.opacity.combined(with: .scale(scale: 0.8)))
                     }
                 }
+                .animation(reduceMotion ? nil : .snappy, value: isChanged)
                 .accessibilityElement(children: .combine)
+                .accessibilityValue(isChanged ? "Edited, not saved" : "")
                 if let onEdit {
                     Button(action: onEdit) {
                         Label("Edit Compose File", systemImage: "chevron.left.forwardslash.chevron.right")
                     }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .help("Open the compose file in the editor (⇧⌘E)")
+                    .accessibilityHint("Opens the compose file on its own screen")
                 }
             } else {
                 Text(
@@ -60,12 +73,20 @@ struct ComposeSection: View {
         }
     }
 
+    /// How many containers the file names, and how long it is, like `2 containers · 14 lines`.
     private func summary(_ outline: ComposeOutline) -> String {
-        switch outline.containers.count {
-        case 0: "Docker Compose"
-        case 1: "1 container"
-        default: "\(outline.containers.count) containers"
-        }
+        let containers =
+            switch outline.containers.count {
+            case 0: "Docker Compose"
+            case 1: "1 container"
+            default: "\(outline.containers.count) containers"
+            }
+        return "\(containers) · \(lineCount == 1 ? "1 line" : "\(lineCount) lines")"
+    }
+
+    private var lineCount: Int {
+        guard let compose, !compose.isEmpty else { return 0 }
+        return compose.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).count
     }
 }
 

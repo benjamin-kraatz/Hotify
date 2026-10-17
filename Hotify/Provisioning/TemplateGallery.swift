@@ -58,12 +58,14 @@ struct TemplateGallery: View {
                     shelfPicker
                     content
                 }
+                // In the flow, under the compose card, so a catalog that is still loading or did not load never
+                // covers the way to a compose file of one's own.
+                emptyState
                 footnote
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 20)
         }
-        .overlay { emptyState }
         #if os(iOS)
         .searchable(text: $query, prompt: searchPrompt)
         #endif
@@ -230,6 +232,7 @@ struct TemplateGallery: View {
                 Button("Try Again", action: onRetry)
                     .glassButton(prominent: true)
             }
+            .frame(maxWidth: .infinity, minHeight: 240)
         } else if shelves.isEmpty {
             VStack(spacing: 14) {
                 FlameGlyph(heat: .warming, height: 44)
@@ -237,9 +240,11 @@ struct TemplateGallery: View {
                     .font(.headline)
                     .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, minHeight: 240)
             .opacity(isLoading ? 1 : 0)
         } else if !trimmedQuery.isEmpty, results.isEmpty {
             ContentUnavailableView.search(text: trimmedQuery)
+                .frame(maxWidth: .infinity, minHeight: 240)
         }
     }
 
@@ -286,6 +291,7 @@ private struct ComposeEntry: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .animation(.snappy(duration: 0.2), value: isHovered)
+        .help("Write or paste a compose file and run it as a service")
         .accessibilityHint("Opens an editor for a compose file")
     }
 }
@@ -324,7 +330,15 @@ private struct ShelfLabelStyle: LabelStyle {
 
 #Preview("Loading") {
     NavigationStack {
-        TemplateGallery(shelves: [], isLoading: true)
+        TemplateGallery(shelves: [], isLoading: true, onCompose: {})
     }
     .frame(width: 820, height: 500)
+}
+
+#Preview("Catalog failed") {
+    NavigationStack {
+        TemplateGallery(
+            shelves: [], loadError: "cdn.coollabs.io did not answer in time.", onRetry: {}, onCompose: {})
+    }
+    .frame(width: 820, height: 560)
 }

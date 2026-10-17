@@ -13,6 +13,7 @@ struct ComposeEditorScreen: View {
 
     /// Missing in previews, which show the file as it is.
     @SwiftUI.Environment(VariableLock.self) private var lock: VariableLock?
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isOpen: Bool { lock?.isOpen ?? true }
 
@@ -26,7 +27,7 @@ struct ComposeEditorScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
                 .padding(.top, 20)
                 .padding(.bottom, 14)
             ConfigurationNotices(model: model, resource: resource, pendingAction: pendingAction, onAction: onAction)
@@ -42,23 +43,27 @@ struct ComposeEditorScreen: View {
         .task(id: model.route) {
             if model.draft == nil { await model.load() }
         }
-        .animation(.snappy, value: model.hasChanges)
-        .animation(.snappy, value: isOpen)
+        .animation(reduceMotion ? nil : .snappy, value: model.hasChanges)
+        .animation(reduceMotion ? nil : .snappy, value: isOpen)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(resource.name)
-                .font(.display(.title2))
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Text(
-                "The compose file Coolify runs this service from. Saving keeps the running containers as they are until a restart."
-            )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .top, spacing: 14) {
+            ComposeMark(size: 44)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(resource.name)
+                    .font(.display(.title2))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(
+                    "The compose file Coolify runs this service from. Saving keeps the running containers as they are until a restart."
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -83,10 +88,12 @@ struct ComposeEditorScreen: View {
                     Task { await lock.unlock() }
                 }
                 .padding(.horizontal, 20)
+                .transition(.opacity)
             } else {
                 ComposeEditor(compose: compose, isEditable: !model.isSaving)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 12)
+                    .transition(.opacity)
             }
         } else if let loadError = model.loadError {
             ContentUnavailableView {

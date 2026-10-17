@@ -11,6 +11,10 @@ struct ComposeEditor: View {
     /// The editor's height inside a form. `nil` lets it fill what it is given, as on a screen of its own.
     var height: CGFloat?
 
+    @State private var isFocused = false
+    @State private var caretLine = 1
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private static let placeholder = """
         services:
           web:
@@ -19,6 +23,8 @@ struct ComposeEditor: View {
               - SERVICE_URL_WEB_80
         """
 
+    private static let cornerRadius: CGFloat = 12
+
     var body: some View {
         let outline = ComposeOutline(compose)
         // Nothing to say about a file not started yet. The placeholder shows what goes there.
@@ -26,34 +32,65 @@ struct ComposeEditor: View {
 
         VStack(alignment: .leading, spacing: 10) {
             VStack(spacing: 0) {
-                CodeEditor(text: $compose, isEditable: isEditable, accessibilityLabel: "Compose file")
-                    .frame(height: height)
-                    .frame(minHeight: 160)
-                    .overlay(alignment: .topLeading) {
-                        if compose.isEmpty {
-                            Text(verbatim: Self.placeholder)
-                                .font(.body.monospaced())
-                                .foregroundStyle(.tertiary)
-                                .padding(.top, Self.placeholderInsets.top)
-                                .padding(.leading, Self.placeholderInsets.leading)
-                                .allowsHitTesting(false)
-                                .accessibilityHidden(true)
-                        }
-                    }
+                CodeEditor(
+                    text: $compose, isEditable: isEditable, accessibilityLabel: "Compose file",
+                    isFocused: $isFocused, caretLine: $caretLine
+                )
+                .frame(height: height)
+                .frame(minHeight: 160, maxHeight: height == nil ? .infinity : nil)
+                .overlay(alignment: .topLeading) { placeholder }
+                .overlay(alignment: .topTrailing) { pasteButton }
                 Divider()
-                ComposeSummary(outline: outline, lineCount: lineCount)
+                ComposeSummary(
+                    outline: outline, lineCount: lineCount, caretLine: isFocused ? caretLine : nil,
+                    isBlocking: findings.contains { $0.severity == .blocking })
             }
-            .well(cornerRadius: 12)
+            .well(cornerRadius: Self.cornerRadius)
             .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(.primary.opacity(0.08), lineWidth: 1)
+                // Lit like the gallery's search field while the keyboard is here.
+                RoundedRectangle(cornerRadius: Self.cornerRadius)
+                    .strokeBorder(
+                        isFocused ? AnyShapeStyle(.ember.opacity(0.5)) : AnyShapeStyle(.primary.opacity(0.08)),
+                        lineWidth: 1)
             }
+            .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: isFocused)
 
             ForEach(findings) { finding in
                 FindingRow(finding: finding)
             }
         }
-        .animation(.snappy, value: findings)
+        .animation(reduceMotion ? nil : .snappy, value: findings)
+    }
+
+    @ViewBuilder
+    private var placeholder: some View {
+        if compose.isEmpty {
+            Text(verbatim: Self.placeholder)
+                .font(CodeEditor.font)
+                .foregroundStyle(.tertiary)
+                .padding(.top, Self.placeholderInsets.top)
+                .padding(.leading, Self.placeholderInsets.leading)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .transition(.opacity)
+        }
+    }
+
+    /// The quickest start: a file copied from somewhere else, in one tap.
+    @ViewBuilder
+    private var pasteButton: some View {
+        if compose.isEmpty, isEditable {
+            PasteButton(payloadType: String.self) { strings in
+                guard let text = strings.first else { return }
+                Task { @MainActor in compose = text }
+            }
+            .labelStyle(.titleAndIcon)
+            .buttonBorderShape(.capsule)
+            .controlSize(.small)
+            .padding(10)
+            .transition(.opacity)
+            .help("Paste a compose file from the clipboard")
+        }
     }
 
     private var lineCount: Int {
@@ -70,16 +107,24 @@ struct ComposeEditor: View {
     }
 }
 
-/// The containers Hotify reads in the file, and how long it is.
+/// The containers Hotify reads in the file, how long it is, and where the caret is while it is being edited.
 private struct ComposeSummary: View {
     var outline: ComposeOutline
     var lineCount: Int
+    /// `nil` while the editor is not being typed in.
+    var caretLine: Int?
+    /// Whether the file cannot be saved as it is, which colors the count.
+    var isBlocking: Bool
 
     var body: some View {
         HStack(spacing: 12) {
             if outline.containers.isEmpty {
-                Text("No containers read yet")
-                    .foregroundStyle(.tertiary)
+                Label {
+                    Text(lineCount == 0 ? "Waiting for a compose file" : "No containers read yet")
+                } icon: {
+                    Image(systemName: ComposeMark.systemImage)
+                }
+                .foregroundStyle(isBlocking ? AnyShapeStyle(.glow) : AnyShapeStyle(.tertiary))
             } else {
                 Label {
                     Text(outline.containers.map(\.name).joined(separator: ", "))
@@ -94,13 +139,22 @@ private struct ComposeSummary: View {
                 )
             }
             Spacer(minLength: 8)
-            Text(lineCount == 1 ? "1 line" : "\(lineCount) lines")
+            Text(position)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
+                .contentTransition(.numericText())
+                .fixedSize()
         }
         .font(.caption)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var position: String {
+        let lines = lineCount == 1 ? "1 line" : "\(lineCount) lines"
+        guard let caretLine, lineCount > 0 else { return lines }
+        return "Line \(caretLine) of \(lineCount)"
     }
 }
 
@@ -120,7 +174,10 @@ private struct FindingRow: View {
                 .foregroundStyle(isBlocking ? AnyShapeStyle(.glow) : AnyShapeStyle(.secondary))
         }
         .font(.callout)
+        .padding(.horizontal, 4)
         .transition(.opacity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(isBlocking ? "Holds the save: \(finding.message)" : "Advice: \(finding.message)")
     }
 }
 
@@ -137,6 +194,8 @@ private struct FindingRow: View {
     Form {
         Section("Compose File") {
             ComposeEditor(compose: $compose, height: 260)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
     }
     .formStyle(.grouped)
@@ -148,4 +207,11 @@ private struct FindingRow: View {
     ComposeEditor(compose: $compose)
         .padding()
         .frame(width: 520, height: 360)
+}
+
+#Preview("Read only") {
+    @Previewable @State var compose = "services:\n  cache:\n    image: redis:7\n"
+    ComposeEditor(compose: $compose, isEditable: false)
+        .padding()
+        .frame(width: 520, height: 300)
 }

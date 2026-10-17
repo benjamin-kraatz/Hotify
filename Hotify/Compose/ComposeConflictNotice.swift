@@ -48,9 +48,11 @@ struct ComposeConflictNotice: View {
         Button("Save Mine Anyway", action: onReplace)
             .glassButton()
             .disabled(isSaving)
+            .help("Replace the file in Coolify with yours")
         Button("Use Theirs") { isConfirmingDiscard = true }
             .glassButton()
             .disabled(isSaving)
+            .help("Drop your compose edits and take the file in Coolify")
     }
 }
 
