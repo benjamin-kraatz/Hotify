@@ -52,8 +52,7 @@ struct ProjectDetailScreen: View {
             onAddEnvironment: addEnvironment,
             onSaveEnvironment: saveEnvironment,
             onReload: reload,
-            onDeleteProject: deleteProject,
-            onDeleteEnvironment: client == nil ? nil : { try await deleteEnvironment($0) },
+            onRemove: client == nil ? nil : { try await remove($0) },
             onNewService: onNewService
         )
         // Before the first frame, so a page left on another project never shows that project's tab or history.
@@ -125,16 +124,13 @@ struct ProjectDetailScreen: View {
         _ = await (dashboard, history, shared)
     }
 
-    private func deleteProject() async throws {
+    /// Sends a delete the owner confirmed, then reloads, and leaves the page when the project itself went.
+    private func remove(_ target: RemovalTarget) async throws {
         try await write { client in
-            _ = try await client.deleteProject(project.id)
+            _ = try await client.remove(target)
         }
-        onDeleted()
-    }
-
-    private func deleteEnvironment(_ environment: EnvironmentSummary) async throws {
-        try await write { client in
-            _ = try await client.deleteEnvironment(environment.reference, inProject: project.id)
+        if case .project(let uuid) = target, uuid == project.id {
+            onDeleted()
         }
     }
 }
@@ -162,10 +158,9 @@ struct ProjectDetail: View {
         _, _, _ in
     }
     var onReload: () async -> Void = {}
-    /// Deletes the project after the page has confirmed it.
-    var onDeleteProject: () async throws -> Void = {}
-    /// Deletes one environment. `nil` leaves the control out, as without a connection.
-    var onDeleteEnvironment: ((EnvironmentSummary) async throws -> Void)? = nil
+    /// Sends a delete of the project or one of its environments, once the page has confirmed it and the owner has
+    /// confirmed it's them. `nil` leaves the controls out, as without a connection.
+    var onRemove: ((RemovalTarget) async throws -> Void)? = nil
     /// `nil` hides the New Resource button.
     var onNewService: (() -> Void)?
 
@@ -173,8 +168,8 @@ struct ProjectDetail: View {
     /// The popover at the toolbar menu. The overview has one of its own at its button.
     @State private var isAddingEnvironment = false
     @State private var showsProjectRemoval = false
-    @State private var isRemovingProject = false
-    @State private var removalError: String?
+    /// Every delete on the page goes through it, so the project and an environment can't be asked for at once.
+    @State private var removal = CoolifyRemovalGate()
     @State private var reloads = 0
     @SwiftUI.Environment(\.placePalette) private var palette
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -203,6 +198,24 @@ struct ProjectDetail: View {
         Set(resources.compactMap { $0.place?.environmentID }).count > 1
     }
 
+    private var removalError: String? { removal.status.notice }
+
+    /// Says why Delete Project and the environment menus are out while the owner, then Coolify, is asked.
+    private var removalProgress: String? {
+        removal.status.progress(deleting: removalName, with: unlockMethod)
+    }
+
+    private var unlockMethod: UnlockMethod { .current() }
+
+    private var removalName: String {
+        switch removal.phase {
+        case .confirming(.environment(let reference, _)), .removing(.environment(let reference, _)):
+            project.environments.first { $0.reference == reference }.map(environmentName) ?? "the environment"
+        default:
+            project.name
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ProjectHeader(project: project, heats: heats, tint: palette.project(project.id))
@@ -219,10 +232,20 @@ struct ProjectDetail: View {
                 }
                 if let removalError {
                     NoticeBanner(message: removalError)
+                } else if let removalProgress {
+                    NoticeBanner(
+                        message: removalProgress,
+                        tone: .done,
+                        systemImage: removal.isRemoving ? "trash" : unlockMethod.systemImage
+                    )
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, actionError == nil && activity.loadError == nil && removalError == nil ? 0 : 12)
+            .padding(
+                .bottom,
+                actionError == nil && activity.loadError == nil && removalError == nil && removalProgress == nil
+                    ? 0 : 12
+            )
 
             Picker("Show", selection: Binding(get: { currentTab }, set: { page.tab = $0 })) {
                 ForEach(tabs) { tab in
@@ -251,7 +274,8 @@ struct ProjectDetail: View {
                         onAction: { action, resource in onAction(action, resource.route) },
                         onEditEnvironment: canEdit ? { sheet = .editEnvironment($0) } : nil,
                         onAddEnvironment: canEdit ? onAddEnvironment : nil,
-                        onDeleteEnvironment: canEdit ? onDeleteEnvironment : nil
+                        onDeleteEnvironment: canEdit && onRemove != nil ? { await remove($0) } : nil,
+                        isRemoving: removal.isBusy
                     )
                 case .previews:
                     ProjectPreviews(
@@ -315,10 +339,10 @@ struct ProjectDetail: View {
                     )
                 }
                 Button("Delete Project", systemImage: "trash") {
-                    removalError = nil
+                    removal.cancel()
                     showsProjectRemoval = true
                 }
-                .disabled(!canEdit || isRemovingProject)
+                .disabled(!canEdit || onRemove == nil || removal.isBusy)
                 .help("Delete \(project.name)")
             }
         }
@@ -334,20 +358,29 @@ struct ProjectDetail: View {
                 Task { await removeProject() }
             }
         } message: {
-            Text("Coolify deletes \(project.name).")
+            Text(
+                "Coolify deletes \(project.name) and every environment in it. "
+                    + "Hotify asks for \(unlockMethod.promptName) first.")
         }
+        // A delete waiting on the owner belongs to the project it was asked for, and to this page.
+        .onChange(of: project.id) { _, _ in removal.cancel() }
+        .onDisappear { removal.cancel() }
     }
 
     private func removeProject() async {
-        guard !isRemovingProject else { return }
-        isRemovingProject = true
-        defer { isRemovingProject = false }
-        removalError = nil
-        do {
-            try await onDeleteProject()
-        } catch {
-            removalError = error.localizedDescription
-        }
+        guard let onRemove else { return }
+        await removal.remove(.project(uuid: project.id), named: project.name, send: onRemove)
+    }
+
+    private func remove(_ environment: EnvironmentSummary) async {
+        guard let onRemove else { return }
+        await removal.remove(
+            .environment(environment.reference, project: project.id), named: environmentName(environment),
+            send: onRemove)
+    }
+
+    private func environmentName(_ environment: EnvironmentSummary) -> String {
+        environment.name.isEmpty ? "this environment" : "the \(environment.name) environment"
     }
 
     /// Opens an application somewhere other than its front, with the history this page already has.
@@ -483,7 +516,7 @@ private enum ProjectSheet: Identifiable, Hashable {
                     hasLoaded: true
                 )),
             canEdit: true,
-            onDeleteEnvironment: { _ in },
+            onRemove: { _ in },
             onNewService: {}
         )
     }
