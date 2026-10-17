@@ -9,6 +9,14 @@ struct ComposeLaunchPad: View {
 
     private var outline: ComposeOutline { ComposeOutline(model.compose) }
 
+    /// Leaves out the editor, for the Mac sheet's inspector, where the file takes the middle column instead.
+    var showsEditor = true
+
+    @SwiftUI.Environment(\.isProvisioningInspector) private var isInspector
+
+    private static let variablesNote =
+        "Coolify fills SERVICE_PASSWORD_, SERVICE_USER_, and SERVICE_URL_ variables itself, and asks for the rest after it creates the service. For a compose file in a Git repository, create an application instead."
+
     private static var editorHeight: CGFloat {
         #if os(macOS)
         300
@@ -21,20 +29,31 @@ struct ComposeLaunchPad: View {
         @Bindable var model = model
 
         Form {
-            Section {
-                // The editor draws its own well, so the row gives it the whole width and no second box.
-                ComposeEditor(compose: $model.compose, height: Self.editorHeight)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-            } header: {
-                VStack(alignment: .leading, spacing: 0) {
-                    hero
-                    Text("Compose File")
+            if showsEditor {
+                Section {
+                    // The editor draws its own well, so the row gives it the whole width and no second box.
+                    ComposeEditor(compose: $model.compose, height: Self.editorHeight)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                } header: {
+                    VStack(alignment: .leading, spacing: 0) {
+                        hero
+                        Text("Compose File")
+                    }
+                } footer: {
+                    Text(Self.variablesNote)
                 }
-            } footer: {
-                Text(
-                    "Coolify fills SERVICE_PASSWORD_, SERVICE_USER_, and SERVICE_URL_ variables itself, and asks for the rest after it creates the service. For a compose file in a Git repository, create an application instead."
-                )
+            } else {
+                Section {
+                    if outline.containers.isEmpty {
+                        Text("Write or paste the file, and Hotify lists what it runs here.")
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    hero
+                } footer: {
+                    Text(Self.variablesNote)
+                }
             }
 
             if !outline.containers.isEmpty {
@@ -86,11 +105,11 @@ struct ComposeLaunchPad: View {
     }
 
     private var hero: some View {
-        HStack(alignment: .center, spacing: 18) {
-            ComposeMark(size: 72)
+        HStack(alignment: .center, spacing: isInspector ? 14 : 18) {
+            ComposeMark(size: isInspector ? 56 : 72)
             VStack(alignment: .leading, spacing: 6) {
                 Text("Docker Compose")
-                    .font(.display(.title))
+                    .font(.display(isInspector ? .title2 : .title))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)
@@ -108,61 +127,17 @@ struct ComposeLaunchPad: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// The status beside the button where they fit, as on a Mac or iPad, and above it on an iPhone.
     private var createBar: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 14) {
-                createStatus
-                Spacer(minLength: 0)
-                createButton
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                createStatus
-                createButton
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .background(.bar)
-        .animation(.snappy, value: model.isCreating)
-        .animation(.snappy, value: isComposeBlank)
-    }
-
-    private var createStatus: some View {
-        HStack(spacing: 14) {
-            FlameGlyph(heat: model.isCreating ? .warming : .cold, height: 24)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(model.isCreating ? "Creating the service…" : status)
-                    .font(.subheadline.weight(.semibold))
-                    .contentTransition(.interpolate)
-                Text(destinationSummary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var createButton: some View {
-        Button {
+        CreateBar(
+            isCreating: model.isCreating,
+            status: model.isCreating ? "Creating the service…" : status,
+            summary: PlacementSummary.text(model.placement, then: "It stays stopped until you start it."),
+            buttonTitle: "Create Service",
+            canCreate: model.canCreateFromCompose,
+            help: isComposeBlank ? "Write or paste a compose file first" : "Create the service, stopped, and set it up"
+        ) {
             Task { await model.createFromCompose() }
-        } label: {
-            Text("Create Service")
-                .opacity(model.isCreating ? 0 : 1)
-                .overlay {
-                    if model.isCreating {
-                        ProgressView().controlSize(.small)
-                    }
-                }
         }
-        .glassButton(prominent: true)
-        .controlSize(.large)
-        .keyboardShortcut(.defaultAction)
-        .disabled(!model.canCreateFromCompose)
-        .help(isComposeBlank ? "Write or paste a compose file first" : "Create the service, stopped, and set it up")
     }
 
     private var isComposeBlank: Bool {
@@ -171,15 +146,6 @@ struct ComposeLaunchPad: View {
 
     private var status: String {
         isComposeBlank ? "Write or paste a compose file" : "Ready to create"
-    }
-
-    /// Where the service lands, and that it waits there stopped.
-    private var destinationSummary: String {
-        let placement = model.placement
-        guard let server = placement.server, let project = placement.project, let environment = placement.environment
-        else { return "Pick a server, project, and environment." }
-        let place = "\(project.name ?? project.uuid) · \(environment.name ?? "")"
-        return "On \(server.name), in \(place). It stays stopped until you start it."
     }
 }
 
