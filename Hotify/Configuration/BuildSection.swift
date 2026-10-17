@@ -40,7 +40,7 @@ struct BuildSection: View {
             } footer: {
                 let pack = build.buildPack.displayName
                 Text(
-                    "\(pack) runs the install and build commands on the server as it builds the image, and the start command in the container. Leave one empty for \(pack) to choose."
+                    "\(pack) runs install and build on the Coolify server as it builds the image, and start in the container. Leave one empty for \(pack) to choose."
                 )
             }
         }
@@ -51,19 +51,18 @@ struct BuildSection: View {
             Text("Watch Paths")
         } footer: {
             Text(
-                "One pattern per line, such as src/** or !docs/**. A push deploys only when it changes a matching file, and the last match wins. Empty deploys on every push."
+                "One pattern per line, such as src/** or !docs/**. A push deploys only when it changes a matching file, and the last match wins. Leave it empty to deploy on every push."
             )
         }
     }
 
     private var footer: String {
-        var text = "Coolify builds from this folder of the repository, which helps with monorepos."
+        var text = "Coolify builds from the base directory, a folder of the repository, which suits a monorepo."
         if build.showsDockerfileLocation {
             text += " The Dockerfile's path starts there."
         }
         if build.composeLocation != nil {
-            text +=
-                " The compose file's path starts there too. Change that path in Coolify, which reads the services from it."
+            text += " So does the compose file's. Change that in Coolify, which reads the services from the file."
         }
         if build.showsPublishDirectory {
             text += " The publish directory is where the build writes the site."

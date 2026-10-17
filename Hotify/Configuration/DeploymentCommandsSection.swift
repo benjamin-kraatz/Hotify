@@ -4,8 +4,8 @@ import SwiftUI
 /// The commands Coolify runs on the server before and after each deployment of an application, each in a section
 /// of its own. A Docker Compose application also names the service each one runs in.
 ///
-/// They run in the app's container on the Coolify server, never on this device, which the server symbol in each
-/// header keeps apart from automations Hotify runs here.
+/// They run in the app's container on the Coolify server, never on this device. The server symbol in each header
+/// and the first words of each footer keep them apart from the Shortcut automations Hotify runs here.
 struct DeploymentCommandsSection: View {
     @Binding var commands: ApplicationDeploymentCommands
 
@@ -37,7 +37,7 @@ struct DeploymentCommandsSection: View {
 
     private var preFooter: String {
         var text =
-            "Coolify runs this on the server, not on this \(UnlockMethod.deviceName): with sh -c in the app's running container, before the new version starts. If it fails, so does the deployment. With no container running yet, it's skipped."
+            "Coolify runs this on its server, in the app's running container, before the new version starts. If it fails, so does the deployment. With nothing running yet, it's skipped."
         if commands.namesContainers {
             text += commands.preNeedsContainer ? Self.namingWarning("fails the deployment") : Self.naming
         }
@@ -47,7 +47,7 @@ struct DeploymentCommandsSection: View {
 
     private var postFooter: String {
         var text =
-            "Coolify runs this on the server too, in the new container once it's up. If it fails, the deployment still finishes, and its log shows the failure."
+            "Coolify runs this on its server too, in the new container once it's up. If it fails, the deployment still finishes, and its log shows the failure."
         if commands.namesContainers {
             text += commands.postNeedsContainer ? Self.namingWarning("doesn't run") : Self.naming
         }
@@ -55,14 +55,14 @@ struct DeploymentCommandsSection: View {
         return text
     }
 
-    private static let naming = " Name the compose service it runs in, unless the app runs a single container."
+    private static let naming = " Name the compose service it runs in, unless the app has one container."
 
     private static func namingWarning(_ outcome: String) -> String {
-        " Name the compose service it runs in. Without one, it \(outcome) once the app runs more than one container."
+        " Name the compose service it runs in. Without one, it \(outcome) once the app has more than one container."
     }
 
     // Coolify replaces line breaks with spaces before it runs the command.
-    private static let lines = " Coolify joins the lines with spaces, so chain steps with &&."
+    private static let lines = " Line breaks become spaces, so chain steps with &&."
 }
 
 /// The compose service a deployment command runs in, typed or picked from the services Coolify knows by name.
@@ -84,6 +84,7 @@ private struct ServiceField: View {
                 }
                 .menuIndicator(.hidden)
                 .fixedSize()
+                .help("Pick one of the services Coolify knows")
             }
         }
     }

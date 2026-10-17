@@ -1,6 +1,12 @@
 import CoolifyAPI
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
+
 /// Makes a Shortcut automation, or changes one: the Shortcut to run, the instance and resource, and on the Mac the
 /// event that runs it. It opens with what an automation can and can't do here, since that differs by device.
 struct AutomationEditor: View {
@@ -25,7 +31,10 @@ struct AutomationEditor: View {
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testFailed = false
+    /// Counts the results shown, so each new one bounces its symbol.
+    @State private var testArrivals = 0
     @State private var showsInput = false
+    @State private var copiedInput = false
 
     init(automation: ShortcutAutomation?, instanceID: UUID?, previewResources: [ResourceSummary]? = nil) {
         isNew = automation == nil
@@ -60,6 +69,17 @@ struct AutomationEditor: View {
         return draft.problem
     }
 
+    private var runTitle: String {
+        draft.trigger.isAutomatic ? "Test Run" : "Run Now"
+    }
+
+    private var resourceFooter: String {
+        if draft.resource != nil { return "This resource only, even once it's renamed." }
+        return draft.trigger.isAutomatic
+            ? "Any resource on the instance that the event can happen to."
+            : "The instance as a whole, with no resource named."
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -72,8 +92,6 @@ struct AutomationEditor: View {
                             isOn: Binding(get: { menuBar.enabled }, set: { menuBar.enabled = $0 }))
                     }
                     #endif
-                } header: {
-                    Label("Runs on this \(UnlockMethod.deviceName)", systemImage: "bolt.horizontal")
                 }
 
                 Section {
@@ -93,7 +111,7 @@ struct AutomationEditor: View {
                     Text("Type the name exactly as Shortcuts shows it. Hotify can't list your Shortcuts.")
                 }
 
-                Section("Resource") {
+                Section {
                     Picker("Instance", selection: $draft.instanceID) {
                         if instance == nil {
                             Text("Choose…").tag(draft.instanceID)
@@ -114,10 +132,24 @@ struct AutomationEditor: View {
                         }
                     }
                     .disabled(isLoading)
+                    if isLoading {
+                        HStack {
+                            Text("Loading resources…")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
                     if let loadError {
                         Label(loadError, systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.glow)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                } header: {
+                    Text("Resource")
+                } footer: {
+                    Text(resourceFooter)
                 }
 
                 Section {
@@ -129,7 +161,7 @@ struct AutomationEditor: View {
                     }
                     #else
                     LabeledContent("Runs") {
-                        Text(AutomationTrigger.manual.title)
+                        Label(AutomationTrigger.manual.title, systemImage: AutomationTrigger.manual.systemImage)
                     }
                     #endif
                 } header: {
@@ -139,19 +171,18 @@ struct AutomationEditor: View {
                 }
 
                 Section {
-                    DisclosureGroup("What the Shortcut gets", isExpanded: $showsInput) {
-                        Text(samplePayload)
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    DisclosureGroup(isExpanded: $showsInput) {
+                        sampleInput
+                    } label: {
+                        Text("What the Shortcut gets")
                     }
                     Button {
                         Task { await test() }
                     } label: {
                         HStack {
-                            Label(draft.trigger.isAutomatic ? "Test Run" : "Run Now", systemImage: "play")
+                            Label(runTitle, systemImage: "play")
+                            Spacer()
                             if isTesting {
-                                Spacer()
                                 ProgressView()
                                     .controlSize(.small)
                             }
@@ -159,20 +190,31 @@ struct AutomationEditor: View {
                     }
                     .disabled(problem != nil || isTesting || runner == nil)
                     if let testResult {
-                        Label(
-                            testResult,
-                            systemImage: testFailed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
-                        )
-                        .foregroundStyle(testFailed ? Color.glow : Color.ember)
+                        Label {
+                            Text(testResult)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .contentTransition(.opacity)
+                        } icon: {
+                            Image(
+                                systemName: testFailed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+                            )
+                            .foregroundStyle(testFailed ? Color.glow : Color.ember)
+                            .symbolEffect(.bounce, value: testArrivals)
+                        }
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 } footer: {
-                    Text("A test hands over the same fields with \"test\": true, so the Shortcut can tell it apart.")
+                    Text(
+                        draft.trigger.isAutomatic
+                            ? "A test run sends the same fields, with \"test\": true, so the Shortcut can tell it apart."
+                            : "Run Now sends these fields, with \"test\": true, since it ran from here.")
                 }
 
                 if let problem, !draft.trimmedShortcutName.isEmpty || !isNew {
                     Section {
                         Label(problem, systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.glow)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -195,16 +237,45 @@ struct AutomationEditor: View {
                 }
             }
             .task(id: draft.instanceID) { await loadResources() }
-            .onChange(of: draft) { _, _ in testResult = nil }
+            .onChange(of: draft) { _, _ in
+                testResult = nil
+                copiedInput = false
+            }
             .onChange(of: triggers) { _, triggers in
                 if !triggers.contains(draft.trigger), let first = triggers.first { draft.trigger = first }
             }
             .animation(reduceMotion ? nil : .snappy, value: testResult)
             .animation(reduceMotion ? nil : .snappy, value: problem)
+            .animation(reduceMotion ? nil : .snappy, value: isLoading)
+            .animation(reduceMotion ? nil : .snappy, value: loadError)
+            .animation(reduceMotion ? nil : .snappy, value: showsInput)
         }
         #if os(macOS)
-        .frame(minWidth: 460, idealWidth: 520, minHeight: 620)
+        .frame(minWidth: 460, idealWidth: 500, minHeight: 640, idealHeight: 760)
         #endif
+    }
+
+    /// The JSON a test would send, to read or to paste into the Shortcut while building it.
+    private var sampleInput: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            Text(samplePayload)
+                .font(.caption.monospaced())
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .well(cornerRadius: 8)
+                .accessibilityLabel("Sample input")
+                .accessibilityValue(samplePayload)
+            Button(copiedInput ? "Copied" : "Copy", systemImage: copiedInput ? "checkmark" : "doc.on.doc") {
+                copyInput()
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+            .contentTransition(.symbolEffect(.replace))
+            .help("Copy the sample input")
+        }
+        .padding(.vertical, 4)
+        .animation(reduceMotion ? nil : .snappy, value: copiedInput)
     }
 
     private var resourceSelection: Binding<ResourceRoute?> {
@@ -230,13 +301,24 @@ struct AutomationEditor: View {
         return (try? encoder.encode(payload)).map { String(decoding: $0, as: UTF8.self) } ?? payload.json
     }
 
+    private func copyInput() {
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(samplePayload, forType: .string)
+        #else
+        UIPasteboard.general.string = samplePayload
+        #endif
+        copiedInput = true
+    }
+
     private func test() async {
         guard let instance, let runner else { return }
         isTesting = true
         defer { isTesting = false }
         let failure = await runner.runNow(draft, instance: instance)
         testFailed = failure != nil
-        testResult = failure ?? "Sent to Shortcuts. Check there that it did what you wanted."
+        testResult = failure ?? "Handed to Shortcuts. Check there that it did what you wanted."
+        if !reduceMotion { testArrivals += 1 }
     }
 
     private func loadResources() async {

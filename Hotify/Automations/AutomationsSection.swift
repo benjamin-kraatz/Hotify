@@ -2,7 +2,8 @@ import CoolifyAPI
 import SwiftUI
 
 /// The Shortcut Automations part of Settings: the automations of this device, a switch and Run for each, and the way
-/// to make a new one. They run here, unlike a resource's deployment commands, which Coolify runs on its server.
+/// to make a new one. They run here, which the footer says, unlike a resource's deployment commands, which Coolify
+/// runs on its server.
 struct AutomationsSection: View {
     @SwiftUI.Environment(AutomationStore.self) private var automations
     @SwiftUI.Environment(AutomationRunner.self) private var runner: AutomationRunner?
@@ -18,8 +19,9 @@ struct AutomationsSection: View {
                 Text("Add an instance to run a Shortcut for it.")
                     .foregroundStyle(.secondary)
             } else if automations.automations.isEmpty {
-                Text("No automations on this \(UnlockMethod.deviceName) yet.")
+                Text(emptyMessage)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(automations.automations) { automation in
                 row(automation)
@@ -50,17 +52,26 @@ struct AutomationsSection: View {
             Text("The Shortcut itself stays in the Shortcuts app.")
         }
         .animation(reduceMotion ? nil : .snappy, value: automations.automations)
+        .animation(reduceMotion ? nil : .snappy, value: automations.lastRuns)
     }
 
     private var defaultInstanceID: UUID? {
         instances.selected?.id ?? instances.instances.first?.id
     }
 
+    private var emptyMessage: String {
+        #if os(macOS)
+        "No automations on this Mac yet. One runs a Shortcut when a deploy ends, a resource stops, or a backup fails."
+        #else
+        "No automations on this \(AutomationLimits.deviceName) yet. One runs a Shortcut for a resource when you tap Run."
+        #endif
+    }
+
     private var footer: String {
         #if os(macOS)
-        "Hotify runs a Shortcut on this Mac when it sees the event, while it runs. Automations aren't synced."
+        "These run on this Mac while Hotify runs, not on the Coolify server. They aren't synced to other devices."
         #else
-        "On iPhone a Shortcut runs when you tap Run. Automations aren't synced."
+        "These run on this \(AutomationLimits.deviceName) when you tap Run, not on the Coolify server. They aren't synced to other devices."
         #endif
     }
 
@@ -86,6 +97,8 @@ struct AutomationsSection: View {
                     Text(line.text)
                         .font(.caption)
                         .foregroundStyle(line.isProblem ? Color.glow : Color.secondary)
+                        .lineLimit(2)
+                        .contentTransition(.opacity)
                 }
             }
             Spacer(minLength: 8)
@@ -118,7 +131,7 @@ struct AutomationsSection: View {
                     deleting = automation
                 }
             } label: {
-                Label("Automation actions", systemImage: "ellipsis.circle")
+                Label("Actions for \(automation.trimmedShortcutName)", systemImage: "ellipsis.circle")
                     .labelStyle(.iconOnly)
             }
             .menuIndicator(.hidden)
