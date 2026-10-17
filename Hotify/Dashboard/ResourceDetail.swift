@@ -352,6 +352,7 @@ struct ResourceDetail: View {
         }
         .animation(reduceMotion ? nil : .snappy, value: previewPlace == nil)
         .animation(reduceMotion ? nil : .snappy, value: terminal == nil)
+        .focusedSceneValue(\.openTerminal, canOpenTerminal ? OpenTerminalAction { openTerminal() } : nil)
         // A restart or deploy started anywhere puts saved variables and settings to use.
         .onChange(of: pendingAction) { _, action in
             if action == .start || action == .deploy || action == .restart {
@@ -469,11 +470,9 @@ struct ResourceDetail: View {
         // A preview's containers aren't offered yet, so the button waits until production is on screen.
         if terminal == nil, previewPlace == nil {
             ToolbarItem(placement: .primaryAction) {
-                Button("Terminal", systemImage: "apple.terminal") {
-                    terminal = TerminalTarget(route: resource.route, resourceName: resource.name)
-                }
-                .disabled(deploymentClient == nil)
-                .help("Open a shell in \(resource.name)")
+                Button("Terminal", systemImage: "apple.terminal", action: openTerminal)
+                    .disabled(deploymentClient == nil)
+                    .help("Open a shell in \(resource.name)")
             }
         }
         ToolbarItem(placement: .primaryAction) {
@@ -551,6 +550,15 @@ struct ResourceDetail: View {
         ToolbarItem(placement: .primaryAction) {
             ResourceGuideButton(kind: resource.kind)
         }
+    }
+
+    /// Whether the toolbar's Terminal button, and the menu's shortcut, can open one now.
+    private var canOpenTerminal: Bool {
+        deploymentClient != nil && terminal == nil && previewPlace == nil
+    }
+
+    private func openTerminal() {
+        terminal = TerminalTarget(route: resource.route, resourceName: resource.name)
     }
 
     /// Asks Coolify to delete the resource, then leaves the detail column.
