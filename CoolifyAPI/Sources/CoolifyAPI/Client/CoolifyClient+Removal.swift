@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Volumes, Docker cleanup, and connected networks stay off unless a caller turns them on. Coolify's own defaults
 /// would delete all four, so every flag is sent as the word `true` or `false`.
-public struct RemovalOptions: Sendable {
+public struct RemovalOptions: Hashable, Sendable {
     public var configurations: Bool
     public var volumes: Bool
     public var dockerCleanup: Bool
@@ -38,7 +38,7 @@ public struct RemovalOptions: Sendable {
 }
 
 /// The kind of resource a confirmed delete removes.
-public enum RemovalKind: Sendable {
+public enum RemovalKind: Hashable, Sendable {
     case application
     case database
     case service
@@ -52,7 +52,28 @@ public enum RemovalKind: Sendable {
     }
 }
 
+/// One thing a confirmed delete removes, with everything the request needs, so an authorization for it covers that
+/// request and no other.
+public enum RemovalTarget: Hashable, Sendable {
+    case resource(uuid: String, kind: RemovalKind, options: RemovalOptions)
+    case project(uuid: String)
+    /// An environment by name or uuid, in the project with `project`'s uuid.
+    case environment(String, project: String)
+}
+
 extension CoolifyClient {
+    /// Sends the one delete request `target` describes.
+    public func remove(_ target: RemovalTarget) async throws -> QueuedAction {
+        switch target {
+        case .resource(let uuid, let kind, let options):
+            try await deleteResource(uuid, kind: kind, options: options)
+        case .project(let uuid):
+            try await deleteProject(uuid)
+        case .environment(let environment, let project):
+            try await deleteEnvironment(environment, inProject: project)
+        }
+    }
+
     /// Deletes an application. Every flag is sent, so a volume Coolify would remove by default stays.
     public func deleteApplication(
         _ uuid: String, options: RemovalOptions = RemovalOptions()

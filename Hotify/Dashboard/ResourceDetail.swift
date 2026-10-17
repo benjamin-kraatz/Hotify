@@ -222,11 +222,10 @@ struct ResourceDetail: View {
     @State private var showsPreviewDeployment = false
     @State private var showsGitHubAccess = false
     @State private var showsRemoval = false
+    @State private var removal = CoolifyRemovalGate()
     @State private var showsGuide = false
     /// The settings inspector. The Mac shows it beside the tabs, and an iPhone in a sheet.
     @State private var showsSettings = false
-    @State private var isRemoving = false
-    @State private var removalError: String?
     /// A new value gives the confirmation fresh switches, so volumes start off every time it opens.
     @State private var removalPresentation = 0
     /// Move, clone, or migrate, while that sheet is open.
@@ -413,18 +412,21 @@ struct ResourceDetail: View {
         .sheet(isPresented: $showsRemoval) {
             ResourceRemovalDialog(
                 name: resource.name,
-                isDeleting: isRemoving,
-                error: removalError,
+                status: removal.status,
                 onDelete: { options in
                     Task { await remove(options) }
                 },
                 onCancel: {
-                    removalError = nil
+                    removal.cancel()
                     showsRemoval = false
                 }
             )
             .id(removalPresentation)
-            .interactiveDismissDisabled(isRemoving)
+            .interactiveDismissDisabled(removal.isRemoving)
+        }
+        .onChange(of: showsRemoval) { _, isShown in
+            // Closing the dialog any way withdraws a delete the owner has not confirmed yet.
+            if !isShown { removal.cancel() }
         }
         .resourceGuide(isPresented: $showsGuide, kind: resource.kind)
         .inspector(isPresented: $showsSettings) {
@@ -449,9 +451,11 @@ struct ResourceDetail: View {
             versionNotice = nil
             showsRemoval = false
             showsGuide = false
-            removalError = nil
+            // A delete waiting on the owner was for the resource that left. It must not go to the next one.
+            removal.cancel()
             placement = nil
         }
+        .onDisappear { removal.cancel() }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
         }
@@ -562,7 +566,7 @@ struct ResourceDetail: View {
             }
             Divider()
             Button("Delete \(resource.kind.title)…", systemImage: "trash", role: .destructive) {
-                removalError = nil
+                removal.cancel()
                 removalPresentation += 1
                 showsRemoval = true
             }
@@ -600,19 +604,16 @@ struct ResourceDetail: View {
         }
     }
 
-    /// Asks Coolify to delete the resource, then leaves the detail column.
+    /// Asks the owner, then Coolify, to delete the resource, then leaves the detail column if it is still on screen.
     private func remove(_ options: RemovalOptions) async {
-        guard let deploymentClient, !isRemoving else { return }
-        isRemoving = true
-        removalError = nil
-        defer { isRemoving = false }
-        do {
-            _ = try await deploymentClient.deleteResource(resource.route.uuid, kind: removalKind, options: options)
-            showsRemoval = false
-            onDeleted()
-        } catch {
-            removalError = (error as? CoolifyError)?.summary ?? error.localizedDescription
-        }
+        guard let deploymentClient else { return }
+        let route = resource.route
+        let target = RemovalTarget.resource(uuid: route.uuid, kind: removalKind, options: options)
+        guard await removal.remove(target, named: resource.name, with: deploymentClient) == .removed,
+            resource.route == route
+        else { return }
+        showsRemoval = false
+        onDeleted()
     }
 
     private var removalKind: RemovalKind {
