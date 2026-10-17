@@ -43,6 +43,11 @@ public struct CoolifyError: Error, LocalizedError, Sendable, Equatable {
         statusCode == 422
     }
 
+    /// Another operation holds the resource, such as a database import while the database restarts.
+    public var isConflict: Bool {
+        statusCode == 409
+    }
+
     public var errorDescription: String? {
         message
     }
