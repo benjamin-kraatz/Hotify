@@ -9,7 +9,7 @@ enum PlacementIntent: Hashable, Identifiable {
     var id: Self { self }
 }
 
-/// The resource toolbar's Place menu. Each item opens its own sheet.
+/// Move, clone, or migrate, as a submenu of the resource toolbar's More menu. Each item opens its own sheet.
 struct PlaceMenu: View {
     var isEnabled: Bool
     var onChoose: (PlacementIntent) -> Void
@@ -20,9 +20,8 @@ struct PlaceMenu: View {
             Button("Clone…", systemImage: "plus.square.on.square") { onChoose(.clone) }
             Button("Migrate…", systemImage: "arrow.triangle.swap") { onChoose(.migrate) }
         } label: {
-            Label("Place", systemImage: "arrow.left.arrow.right")
+            Label("Move or Clone", systemImage: "arrow.left.arrow.right")
         }
-        .menuIndicator(.hidden)
         .help("Move to another environment, clone, or migrate to another server")
         .disabled(!isEnabled)
     }

@@ -39,6 +39,8 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
     public var dockerComposeDomains: [ComposeDomain]?
     /// Sent flat, as Coolify's `health_check_*` fields.
     public var healthCheck: HealthCheck?
+    /// Sent flat, as Coolify's `limits_*` fields. `ResourceLimits.none` lifts a limit.
+    public var limits: ResourceLimits?
     /// Takes a domain another resource already uses, after Coolify answered 409.
     public var forceDomainOverride: Bool?
     public var gitBranch: String?
@@ -77,6 +79,7 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         isForceHTTPSEnabled: Bool? = nil,
         dockerComposeDomains: [ComposeDomain]? = nil,
         healthCheck: HealthCheck? = nil,
+        limits: ResourceLimits? = nil,
         forceDomainOverride: Bool? = nil,
         gitBranch: String? = nil,
         gitCommitSHA: String? = nil,
@@ -92,6 +95,7 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         self.isForceHTTPSEnabled = isForceHTTPSEnabled
         self.dockerComposeDomains = dockerComposeDomains
         self.healthCheck = healthCheck
+        self.limits = limits
         self.forceDomainOverride = forceDomainOverride
         self.gitBranch = gitBranch
         self.gitCommitSHA = gitCommitSHA
@@ -104,17 +108,18 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
     /// Whether there is anything to send.
     public var isEmpty: Bool {
         name == nil && description == nil && domains == nil && redirect == nil && isForceHTTPSEnabled == nil
-            && dockerComposeDomains == nil && healthCheck == nil && gitBranch == nil && gitCommitSHA == nil
-            && dockerRegistryImageTag == nil && isAutoDeployEnabled == nil && customLabels == nil
-            && isContainerLabelEscapeEnabled == nil
+            && dockerComposeDomains == nil && healthCheck == nil && limits == nil && gitBranch == nil
+            && gitCommitSHA == nil && dockerRegistryImageTag == nil && isAutoDeployEnabled == nil
+            && customLabels == nil && isContainerLabelEscapeEnabled == nil
     }
 
     /// Whether the change only reaches the running app with its next deployment. Coolify writes domains, the
-    /// health check, and proxy labels into the container as it deploys, and builds a new version only then.
+    /// health check, resource limits, and proxy labels into the container as it deploys, and builds a new version
+    /// only then.
     public var needsRedeploy: Bool {
         domains != nil || redirect != nil || isForceHTTPSEnabled != nil || dockerComposeDomains != nil
-            || healthCheck != nil || gitBranch != nil || gitCommitSHA != nil || dockerRegistryImageTag != nil
-            || customLabels != nil || isContainerLabelEscapeEnabled != nil
+            || healthCheck != nil || limits != nil || gitBranch != nil || gitCommitSHA != nil
+            || dockerRegistryImageTag != nil || customLabels != nil || isContainerLabelEscapeEnabled != nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -134,5 +139,6 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         try container.encodeIfPresent(customLabels.map(Base64Text.encode), forKey: .customLabels)
         try container.encodeIfPresent(isContainerLabelEscapeEnabled, forKey: .isContainerLabelEscapeEnabled)
         try healthCheck?.encode(to: encoder)
+        try limits?.encode(to: encoder)
     }
 }
