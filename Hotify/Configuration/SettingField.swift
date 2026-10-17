@@ -54,15 +54,49 @@ struct NumberField: View {
     }
 }
 
+/// A form row for a shell command or a list of patterns: its label above a monospaced field, which grows to `lines`
+/// when given and keeps to one line otherwise.
+struct CommandField: View {
+    var title: String
+    @Binding var text: String
+    var prompt: String = ""
+    var lines: ClosedRange<Int>?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+            field
+                .labelsHidden()
+                .font(.body.monospaced())
+                .autocorrectionDisabled()
+                #if os(iOS)
+            .textInputAutocapitalization(.never)
+                #endif
+        }
+    }
+
+    @ViewBuilder
+    private var field: some View {
+        if let lines {
+            TextField(title, text: $text, prompt: Text(verbatim: prompt), axis: .vertical)
+                .lineLimit(lines)
+        } else {
+            TextField(title, text: $text, prompt: Text(verbatim: prompt))
+        }
+    }
+}
+
 #Preview {
     @Previewable @State var host = "localhost"
     @Previewable @State var port: Int? = 8080
     @Previewable @State var interval: Int?
+    @Previewable @State var command = "pnpm install --frozen-lockfile"
     Form {
         SettingField(title: "Host", text: $host, prompt: "localhost")
         NumberField(title: "Port", value: $port, prompt: "Exposed port")
         NumberField(title: "Interval", value: $interval, prompt: "5", unit: "s")
+        CommandField(title: "Install", text: $command, prompt: "npm ci")
     }
     .formStyle(.grouped)
-    .frame(width: 420, height: 240)
+    .frame(width: 420, height: 320)
 }
