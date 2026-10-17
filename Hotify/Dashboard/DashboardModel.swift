@@ -270,20 +270,9 @@ final class DashboardModel {
                 transitions[target] = nil
             case .gaveUp:
                 transitions[target] = nil
-                actionError = Self.failureMessage(
-                    transition.action, name: current.name, deployed: transition.sawDeployment)
+                actionError = transition.failureMessage(name: current.name)
             }
         }
-    }
-
-    private static func failureMessage(_ action: ResourceAction, name: String, deployed: Bool) -> String {
-        if action == .stop {
-            return "\(name) is still running. Coolify may not have been able to stop it."
-        }
-        if deployed {
-            return "The deployment of \(name) ended, but it isn't running. Open Deployments to see what went wrong."
-        }
-        return "\(name) hasn't come up yet. Check its logs, or look at it in Coolify."
     }
 
     /// What a poll says about the resource an action targets.

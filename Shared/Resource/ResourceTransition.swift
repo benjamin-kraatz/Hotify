@@ -74,4 +74,15 @@ struct ResourceTransition: Codable, Hashable {
         }
         return !sawDeployment && elapsed >= Self.timeout ? .gaveUp : nil
     }
+
+    /// What to tell the user when the transition gave up.
+    func failureMessage(name: String) -> String {
+        if action == .stop {
+            return "\(name) is still running. Coolify may not have been able to stop it."
+        }
+        if sawDeployment {
+            return "The deployment of \(name) ended, but it isn't running. Open Deployments to see what went wrong."
+        }
+        return "\(name) hasn't come up yet. Check its logs, or look at it in Coolify."
+    }
 }
