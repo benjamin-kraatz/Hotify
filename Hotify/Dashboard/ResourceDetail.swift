@@ -228,6 +228,8 @@ struct ResourceDetail: View {
     @State private var placement: PlacementIntent?
     @State private var previewGeneration = 0
     @State private var followedPreviewDeployment: DeploymentLine?
+    /// Open while a shell takes over the column.
+    @State private var terminal: TerminalTarget?
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var tabs: [DetailTab] {
@@ -289,7 +291,10 @@ struct ResourceDetail: View {
 
     /// Names the screen in the toolbar. The resource's own name heads the screen below it.
     private var title: String {
-        switch previewPlace {
+        if terminal != nil {
+            return "Terminal"
+        }
+        return switch previewPlace {
         case .board: "Previews"
         case .preview(let number): "PR #\(number)"
         case nil: openDeployment == nil ? resource.kind.title : "Deployment"
@@ -298,6 +303,10 @@ struct ResourceDetail: View {
 
     /// Where the toolbar's back button leads from the screen on show: one step out, innermost first.
     private var currentBack: DetailBack? {
+        if terminal != nil {
+            // Escape belongs to the shell, for editors and pagers.
+            return DetailBack(title: resource.name, action: { terminal = nil }, takesEscape: false)
+        }
         switch previewPlace {
         case .preview(let number):
             if followedPreviewDeployment != nil {
@@ -316,7 +325,11 @@ struct ResourceDetail: View {
 
     var body: some View {
         ZStack {
-            if previewPlace != nil, case .application(let uuid) = resource.route {
+            if let terminal {
+                TerminalScreen(client: deploymentClient, target: terminal)
+                    .id(terminal)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else if previewPlace != nil, case .application(let uuid) = resource.route {
                 PreviewSpace(
                     resourceName: resource.name,
                     application: uuid,
@@ -338,6 +351,7 @@ struct ResourceDetail: View {
             }
         }
         .animation(reduceMotion ? nil : .snappy, value: previewPlace == nil)
+        .animation(reduceMotion ? nil : .snappy, value: terminal == nil)
         // A restart or deploy started anywhere puts saved variables and settings to use.
         .onChange(of: pendingAction) { _, action in
             if action == .start || action == .deploy || action == .restart {
@@ -408,6 +422,7 @@ struct ResourceDetail: View {
             showsRemoval = false
             removalError = nil
             placement = nil
+            terminal = nil
         }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
@@ -451,6 +466,16 @@ struct ResourceDetail: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         DetailNavigation(title: title, back: currentBack)
+        // A preview's containers aren't offered yet, so the button waits until production is on screen.
+        if terminal == nil, previewPlace == nil {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Terminal", systemImage: "apple.terminal") {
+                    terminal = TerminalTarget(route: resource.route, resourceName: resource.name)
+                }
+                .disabled(deploymentClient == nil)
+                .help("Open a shell in \(resource.name)")
+            }
+        }
         ToolbarItem(placement: .primaryAction) {
             PlaceMenu(isEnabled: deploymentClient != nil) { placement = $0 }
         }
@@ -471,6 +496,7 @@ struct ResourceDetail: View {
                     onDeploy: { showsPreviewDeployment = true },
                     onShow: { place in
                         followedPreviewDeployment = nil
+                        terminal = nil
                         previewPlace = place
                     },
                     onGitHubAccess: { showsGitHubAccess = true }
@@ -729,7 +755,10 @@ struct ResourceDetail: View {
                     ContainerList(
                         containers: resource.containers,
                         client: deploymentClient,
-                        serviceUUID: resource.kind == .service ? resource.route.uuid : nil
+                        serviceUUID: resource.kind == .service ? resource.route.uuid : nil,
+                        onOpenTerminal: { container in
+                            terminal = .container(container, in: resource)
+                        }
                     )
                 case .variables:
                     VariableList(

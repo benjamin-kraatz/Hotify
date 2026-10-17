@@ -4,13 +4,15 @@ import SwiftUI
 struct DetailBack {
     var title: String
     var action: () -> Void
+    /// Off for a screen that needs Escape itself, such as a terminal.
+    var takesEscape = true
 }
 
 /// The leading end of the detail column's toolbar: the way back, when there is one, and on the Mac the screen's title.
 ///
 /// The detail column swaps its screens in place rather than pushing them, so whichever view owns the column's
 /// toolbar says where back leads. List this first in that toolbar. The screen's actions follow it, and on the Mac
-/// they land at the trailing edge. Escape goes back too.
+/// they land at the trailing edge. Escape goes back too, unless the screen keeps it.
 struct DetailNavigation: ToolbarContent {
     /// Names the screen, such as `Application` or `Previews`. The name of the thing itself heads the screen below.
     var title: String
@@ -24,7 +26,7 @@ struct DetailNavigation: ToolbarContent {
                     Label("Back to \(back.title)", systemImage: "chevron.left")
                 }
                 .help("Back to \(back.title)")
-                .keyboardShortcut(.cancelAction)
+                .keyboardShortcut(back.takesEscape ? .cancelAction : nil)
             }
         }
         #if os(macOS)

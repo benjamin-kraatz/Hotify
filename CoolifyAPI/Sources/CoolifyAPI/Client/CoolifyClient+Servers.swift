@@ -24,4 +24,9 @@ extension CoolifyClient {
     public func createPrivateKey(_ draft: PrivateKeyDraft) async throws -> CreatedResource {
         try await post("security/keys", body: draft)
     }
+
+    /// Fetches a private key with its material, for a single use such as installing another key on a server.
+    public func privateKeyMaterial(uuid: String) async throws -> PrivateKeyMaterial {
+        try await get("security/keys/\(CoolifyURL.encodePathComponent(uuid))")
+    }
 }

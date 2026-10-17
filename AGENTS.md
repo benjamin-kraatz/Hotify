@@ -20,6 +20,7 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Placement/` is the move/clone/migrate sheet for a resource that already exists, distinct from provisioning placement, which chooses where a new resource is created.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Volumes/` lists a resource's persistent volumes and file mounts, and schedules a backup of a volume or a directory mount.
+  - `Terminal/` opens a shell in a resource's container over SSH from the device, since Coolify's API has no terminal. It signs in with the device's own ed25519 key, which `DeviceKey` keeps in this device's Keychain behind Face ID, Touch ID, or the passcode, and asks for every session. It pins each server's host key on first contact, and can add the device key to a server once with the key Coolify connects with, which it fetches, uses, and forgets. Servers behind a Cloudflare Tunnel aren't supported yet.
   - `Tasks/` lists the commands an application or a service runs on a schedule, and the history of each run. Run Now starts one immediately.
   - `Removal/` confirms before deleting an application, database, service, project, or environment. Volume deletion stays off until you turn it on.
   - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS, including the team's S3 backup stores.
@@ -41,22 +42,25 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `HTTP/` has URL normalization and errors.
   - `Decoding/` has the lenient decoding helpers.
   - `Templates/` reads Coolify's template catalog from its CDN, since the API has no template endpoint, and outlines a template's compose file.
+  - `Terminal/` builds the shell lines the terminal runs over SSH: Coolify's container label filters, its login shell, and adding a key to `authorized_keys`. It also picks the SSH address a device can reach.
   - `Models/` has one file per Coolify type.
+- `HotifySSH/` is a local Swift package the app depends on, built on Apple's swift-nio-ssh. It signs in with an ed25519 key, checks the host key against the trusted one, runs commands, and opens PTY sessions. It knows nothing about Coolify.
 
 `Hotify/`, `HotifyWidgets/`, and `Shared/` are synchronized folders in Xcode. New files join their targets on their own, so do not edit `project.pbxproj` to add them.
 
 ## Build and test
 
 ```sh
-# Package tests. Run these after any change in CoolifyAPI/.
+# Package tests. Run these after any change in CoolifyAPI/ or HotifySSH/.
 cd CoolifyAPI && swift test
+cd HotifySSH && swift test
 
 # App build. Run this after any change in Hotify/.
 xcodebuild -project Hotify.xcodeproj -scheme Hotify -destination 'platform=macOS' build
 
 # Format, then lint. CI does not check formatting, so run these before you commit. The config is in .swift-format.
-swift format format -i --recursive --parallel Hotify HotifyWidgets Shared CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
-swift format lint --strict --recursive --parallel Hotify HotifyWidgets Shared CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
+swift format format -i --recursive --parallel Hotify HotifyWidgets Shared CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift HotifySSH/Sources HotifySSH/Tests HotifySSH/Package.swift
+swift format lint --strict --recursive --parallel Hotify HotifyWidgets Shared CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift HotifySSH/Sources HotifySSH/Tests HotifySSH/Package.swift
 ```
 
 GitHub Actions (`.github/workflows/ci.yml`) validates releases and publishes tags. Xcode Cloud owns app builds on main and iOS/macOS distribution from tags. GitHub tagging does not wait for Xcode Cloud builds. Run the local checks above when changing app or API code.
