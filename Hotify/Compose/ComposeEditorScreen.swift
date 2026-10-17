@@ -1,7 +1,7 @@
 import CoolifyAPI
 import SwiftUI
 
-/// A service's compose file on a screen of its own, in the detail column. It edits the Settings tab's draft, so going
+/// A service's compose file on a screen of its own, in the detail column. It edits the settings' draft, so going
 /// back keeps the edits, and its Save is the Settings Save.
 ///
 /// A compose file can hold passwords, so it stays behind the variable lock like the variables themselves.

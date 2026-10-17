@@ -1,7 +1,7 @@
 import CoolifyAPI
 import SwiftUI
 
-/// Deployments, containers, logs, variables, and settings for one application, database, or service. Polls while it
+/// An overview, deployments, containers, logs, variables, and settings for one application, database, or service. Polls while it
 /// is on screen.
 struct ResourceDetailScreen: View {
     var client: CoolifyClient?
@@ -139,6 +139,8 @@ struct ResourceDetailScreen: View {
             rollback.prepare(client, route: resource.route)
             Task { await previews.load() }
             Task { await rollback.load() }
+            // The overview lists the keys, so they load before the Variables tab opens.
+            Task { await variables.load() }
             await model.setLogSource(logSource)
             while !Task.isCancelled {
                 await model.refresh()
@@ -221,6 +223,9 @@ struct ResourceDetail: View {
     @State private var showsGitHubAccess = false
     @State private var showsRemoval = false
     @State private var removal = CoolifyRemovalGate()
+    @State private var showsGuide = false
+    /// The settings inspector. The Mac shows it beside the tabs, and an iPhone in a sheet.
+    @State private var showsSettings = false
     /// A new value gives the confirmation fresh switches, so volumes start off every time it opens.
     @State private var removalPresentation = 0
     /// Move, clone, or migrate, while that sheet is open.
@@ -233,9 +238,9 @@ struct ResourceDetail: View {
 
     private var tabs: [DetailTab] {
         switch resource.kind {
-        case .application: [.logs, .deployments, .tasks, .storage, .variables, .settings]
-        case .service: [.logs, .containers, .tasks, .storage, .variables, .settings]
-        case .database: [.logs, .backups, .storage, .variables, .settings]
+        case .application: [.overview, .logs, .deployments, .tasks, .storage, .variables]
+        case .service: [.overview, .logs, .containers, .tasks, .storage, .variables]
+        case .database: [.overview, .logs, .backups, .storage, .variables]
         }
     }
 
@@ -262,15 +267,26 @@ struct ResourceDetail: View {
         }
     }
 
-    /// Until the user picks a tab, an app that is building or stopped opens on its deployments, which say why.
+    /// Until the user picks a tab, an app that is building opens on its deployments, and the rest on the overview.
     private var currentTab: DetailTab {
         if let tab, tabs.contains(tab) {
             return tab
         }
-        if resource.kind == .application, resource.isDeploying || resource.heat == .cold {
+        if resource.kind == .application, resource.isDeploying {
             return .deployments
         }
         return tabs[0]
+    }
+
+    private var tabCounts: [DetailTab: Int] {
+        var counts: [DetailTab: Int] = [:]
+        if resource.kind == .service {
+            counts[.containers] = resource.containers.count
+        }
+        if variables.hasLoaded {
+            counts[.variables] = variables.variables.filter { !$0.isPreview }.count
+        }
+        return counts
     }
 
     /// The Mac opens a deployment in the column, in place of the timeline. An iPhone has room for only half of it
@@ -281,6 +297,19 @@ struct ResourceDetail: View {
         #else
         false
         #endif
+    }
+
+    /// Swaps the column to the compose editor. The settings close first: the editor carries their Save itself, and an
+    /// iPhone's settings sheet would cover it.
+    private func openComposeEditor() {
+        showsSettings = false
+        editsCompose = true
+    }
+
+    /// Only a service has a compose file of its own.
+    private var composeEditorAction: (() -> Void)? {
+        guard resource.kind == .service else { return nil }
+        return openComposeEditor
     }
 
     /// The deployment whose build output is in the column, which takes the back button until it closes.
@@ -301,7 +330,11 @@ struct ResourceDetail: View {
     /// Where the toolbar's back button leads from the screen on show: one step out, innermost first.
     private var currentBack: DetailBack? {
         if editsCompose {
-            return DetailBack(title: resource.name) { editsCompose = false }
+            // Back to the settings the editor opened from, which closed to give it the column.
+            return DetailBack(title: resource.name) {
+                editsCompose = false
+                showsSettings = true
+            }
         }
         switch previewPlace {
         case .preview(let number):
@@ -319,7 +352,8 @@ struct ResourceDetail: View {
         }
     }
 
-    var body: some View {
+    /// What fills the column: the previews, a service's compose file, or the resource itself.
+    private var column: some View {
         ZStack {
             if previewPlace != nil, case .application(let uuid) = resource.route {
                 PreviewSpace(
@@ -352,89 +386,124 @@ struct ResourceDetail: View {
         }
         .animation(reduceMotion ? nil : .snappy, value: previewPlace == nil)
         .animation(reduceMotion ? nil : .snappy, value: editsCompose)
-        // A restart or deploy started anywhere puts saved variables and settings to use.
-        .onChange(of: pendingAction) { _, action in
-            if action == .start || action == .deploy || action == .restart {
-                variables.hasUnappliedChanges = false
-                configuration.hasUnappliedChanges = false
-            }
-        }
-        .navigationTitle(title)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .replacesSystemBack(currentBack != nil)
-        .toolbar { toolbarContent }
-        .sheet(isPresented: $showsPreviewDeployment) {
-            if case .application(let uuid) = resource.route {
-                let generation = previewGeneration
-                PreviewDeploymentSheet(
-                    client: deploymentClient, application: uuid, previews: previews, resourceName: resource.name
-                ) {
-                    queued, number in
-                    guard generation == previewGeneration else { return }
-                    followedPreviewDeployment = previewsModel.noteQueued(queued, number: number)
-                    previewPlace = .preview(number)
+    }
+
+    var body: some View {
+        column
+            // A restart or deploy started anywhere puts saved variables and settings to use.
+            .onChange(of: pendingAction) { _, action in
+                if action == .start || action == .deploy || action == .restart {
+                    variables.hasUnappliedChanges = false
+                    configuration.hasUnappliedChanges = false
                 }
-                .id(uuid)
             }
-        }
-        .sheet(isPresented: $showsGitHubAccess) {
-            GitHubAccessSheet(repository: previewsModel.repository) {
-                Task { await previewsModel.load() }
+            .navigationTitle(title)
+            #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .replacesSystemBack(currentBack != nil)
+            .toolbar { toolbarContent }
+            .sheet(isPresented: $showsPreviewDeployment) {
+                if case .application(let uuid) = resource.route {
+                    let generation = previewGeneration
+                    PreviewDeploymentSheet(
+                        client: deploymentClient, application: uuid, previews: previews, resourceName: resource.name
+                    ) {
+                        queued, number in
+                        guard generation == previewGeneration else { return }
+                        followedPreviewDeployment = previewsModel.noteQueued(queued, number: number)
+                        previewPlace = .preview(number)
+                    }
+                    .id(uuid)
+                }
             }
-        }
-        .sheet(
-            isPresented: $showsDeployVersion,
-            onDismiss: {
-                // A dialog can't show while the sheet leaves, so the handed-over rollback asks afterwards.
-                rollbackCandidate = rollbackAfterSheet
-                rollbackAfterSheet = nil
+            .sheet(isPresented: $showsGitHubAccess) {
+                GitHubAccessSheet(repository: previewsModel.repository) {
+                    Task { await previewsModel.load() }
+                }
             }
-        ) {
-            if case .application(let uuid) = resource.route {
-                DeployVersionSheet(
-                    model: DeployVersionModel(client: deploymentClient, application: uuid),
-                    resourceName: resource.name,
-                    keptImages: rollbackModel.images,
-                    onRollBack: { image in
-                        rollbackAfterSheet = RollbackCandidate(image: image, resourceName: resource.name)
+            .sheet(
+                isPresented: $showsDeployVersion,
+                onDismiss: {
+                    // A dialog can't show while the sheet leaves, so the handed-over rollback asks afterwards.
+                    rollbackCandidate = rollbackAfterSheet
+                    rollbackAfterSheet = nil
+                }
+            ) {
+                if case .application(let uuid) = resource.route {
+                    DeployVersionSheet(
+                        model: DeployVersionModel(client: deploymentClient, application: uuid),
+                        resourceName: resource.name,
+                        keptImages: rollbackModel.images,
+                        onRollBack: { image in
+                            rollbackAfterSheet = RollbackCandidate(image: image, resourceName: resource.name)
+                        },
+                        onDeployed: { deployed, version in deployedVersion(deployed, version) }
+                    )
+                    .id(uuid)
+                }
+            }
+            .sheet(item: $placement) { intent in
+                PlacementSheet(intent: intent, resource: resource, client: deploymentClient)
+            }
+            .sheet(isPresented: $showsRemoval) {
+                ResourceRemovalDialog(
+                    name: resource.name,
+                    status: removal.status,
+                    onDelete: { options in
+                        Task { await remove(options) }
                     },
-                    onDeployed: { deployed, version in deployedVersion(deployed, version) }
+                    onCancel: {
+                        removal.cancel()
+                        showsRemoval = false
+                    }
                 )
-                .id(uuid)
+                .id(removalPresentation)
+                .interactiveDismissDisabled(removal.isRemoving)
             }
-        }
-        .sheet(item: $placement) { intent in
-            PlacementSheet(intent: intent, resource: resource, client: deploymentClient)
-        }
-        .onChange(of: resource.route) { _, _ in
-            previewGeneration += 1
-            showsPreviewDeployment = false
-            selectedDeployment = nil
-            previewPlace = nil
-            followedPreviewDeployment = nil
-            rollbackCandidate = nil
-            sheetRollbackCandidate = nil
-            showsDeployVersion = false
-            rollbackAfterSheet = nil
-            versionNotice = nil
-            showsRemoval = false
-            // A delete waiting on the owner was for the resource that left. It must not go to the next one.
-            removal.cancel()
-            placement = nil
-            editsCompose = false
-        }
-        .onDisappear { removal.cancel() }
-        .stopConfirmation(for: $stopCandidate) { _ in
-            onAction(.stop)
-        }
-        .task { followOpening() }
-        .onChange(of: rollbackModel.hasLoaded) { _, _ in askRollbackIfWanted() }
-        .rollbackConfirmation(for: $rollbackCandidate) { image in
-            rollBack(to: image)
-        }
-        #if os(iOS)
+            .onChange(of: showsRemoval) { _, isShown in
+                // Closing the dialog any way withdraws a delete the owner has not confirmed yet.
+                if !isShown { removal.cancel() }
+            }
+            .resourceGuide(isPresented: $showsGuide, kind: resource.kind)
+            .inspector(isPresented: $showsSettings) {
+                ConfigurationView(
+                    model: configuration,
+                    resource: resource,
+                    pendingAction: pendingAction,
+                    onAction: onAction,
+                    onEditCompose: composeEditorAction
+                )
+                .inspectorColumnWidth(min: 300, ideal: 340, max: 480)
+            }
+            .onChange(of: resource.route) { _, _ in
+                previewGeneration += 1
+                showsPreviewDeployment = false
+                selectedDeployment = nil
+                previewPlace = nil
+                followedPreviewDeployment = nil
+                rollbackCandidate = nil
+                sheetRollbackCandidate = nil
+                showsDeployVersion = false
+                rollbackAfterSheet = nil
+                versionNotice = nil
+                showsRemoval = false
+                showsGuide = false
+                // A delete waiting on the owner was for the resource that left. It must not go to the next one.
+                removal.cancel()
+                placement = nil
+                editsCompose = false
+            }
+            .onDisappear { removal.cancel() }
+            .stopConfirmation(for: $stopCandidate) { _ in
+                onAction(.stop)
+            }
+            .task { followOpening() }
+            .onChange(of: rollbackModel.hasLoaded) { _, _ in askRollbackIfWanted() }
+            .rollbackConfirmation(for: $rollbackCandidate) { image in
+                rollBack(to: image)
+            }
+            #if os(iOS)
         .sheet(item: $selectedDeployment) { deployment in
             NavigationStack {
                 DeploymentDetail(
@@ -468,16 +537,11 @@ struct ResourceDetail: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         DetailNavigation(title: title, back: currentBack)
-        ToolbarItem(placement: .primaryAction) {
-            PlaceMenu(isEnabled: deploymentClient != nil) { placement = $0 }
-        }
-        #if os(macOS)
-        if let menuBar, menuBar.enabled {
-            ToolbarItem(placement: .primaryAction) {
-                MenuBarWatchButton(model: menuBar, resource: resource)
+        if previewPlace == nil {
+            ToolbarItem(placement: Self.lifecyclePlacement) {
+                ResourceLifecycleControl(resource: resource, pendingAction: pendingAction, onAction: act)
             }
         }
-        #endif
         if resource.kind == .application {
             ToolbarItem(placement: .primaryAction) {
                 PreviewsMenu(
@@ -516,34 +580,66 @@ struct ResourceDetail: View {
             }
         }
         ToolbarItem(placement: .primaryAction) {
-            Button("Delete", systemImage: "trash") {
+            moreMenu
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button("Settings", systemImage: Self.settingsSymbol) {
+                showsSettings.toggle()
+            }
+            .help(showsSettings ? "Hide the settings" : "Show the settings")
+            .keyboardShortcut("i", modifiers: [.command, .option])
+        }
+    }
+
+    /// What is used less: moving or cloning, the menu bar, the guide, and deleting.
+    private var moreMenu: some View {
+        Menu {
+            PlaceMenu(isEnabled: deploymentClient != nil) { placement = $0 }
+            #if os(macOS)
+            if let menuBar, menuBar.enabled {
+                MenuBarWatchButton(model: menuBar, resource: resource)
+            }
+            #endif
+            Button("What Do These Mean?", systemImage: "questionmark.circle") {
+                showsGuide = true
+            }
+            Divider()
+            Button("Delete \(resource.kind.title)…", systemImage: "trash", role: .destructive) {
                 removal.cancel()
                 removalPresentation += 1
                 showsRemoval = true
             }
             .disabled(deploymentClient == nil)
-            .help("Delete \(resource.name)")
-            .popover(isPresented: $showsRemoval, arrowEdge: .bottom) {
-                ResourceRemovalDialog(
-                    name: resource.name,
-                    status: removal.status,
-                    onDelete: { options in
-                        Task { await remove(options) }
-                    },
-                    onCancel: {
-                        removal.cancel()
-                        showsRemoval = false
-                    }
-                )
-                .id(removalPresentation)
-            }
-            .onChange(of: showsRemoval) { _, isShown in
-                // Closing the dialog any way withdraws a delete the owner has not confirmed yet.
-                if !isShown { removal.cancel() }
-            }
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
         }
-        ToolbarItem(placement: .primaryAction) {
-            ResourceGuideButton(kind: resource.kind)
+        .menuIndicator(.hidden)
+        .help("Move, clone, watch, guide, or delete")
+    }
+
+    /// The Mac keeps the actions at the toolbar's trailing edge. An iPhone puts them under the thumb.
+    private static var lifecyclePlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .primaryAction
+        #else
+        .bottomBar
+        #endif
+    }
+
+    private static var settingsSymbol: String {
+        #if os(macOS)
+        "sidebar.trailing"
+        #else
+        "slider.horizontal.3"
+        #endif
+    }
+
+    /// Stop asks first. Every other action goes straight out.
+    private func act(_ action: ResourceAction) {
+        if action == .stop {
+            stopCandidate = resource
+        } else {
+            onAction(action)
         }
     }
 
@@ -649,7 +745,7 @@ struct ResourceDetail: View {
         onVersionChanged()
     }
 
-    /// The resource itself: its header, actions, and tabs.
+    /// The resource itself: its header and tabs. Its actions are in the toolbar, its settings in the inspector.
     private var production: some View {
         VStack(alignment: .leading, spacing: 0) {
             ResourceHeader(
@@ -657,18 +753,11 @@ struct ResourceDetail: View {
                 pendingAction: pendingAction,
                 lastDeploymentFailed: lastDeploymentFailed,
                 onOpenProject: onOpenProject,
-                onShowSource: resource.kind == .application ? { tab = .settings } : nil,
-                onAction: { action in
-                    if action == .stop {
-                        stopCandidate = resource
-                    } else {
-                        onAction(action)
-                    }
-                }
+                onShowSource: resource.kind == .application ? { showsSettings = true } : nil
             )
             .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 18)
+            .padding(.top, 18)
+            .padding(.bottom, 14)
 
             VStack(spacing: 8) {
                 if let loadError {
@@ -687,20 +776,28 @@ struct ResourceDetail: View {
             .padding(.horizontal, 20)
             .padding(.bottom, hasBanner ? 12 : 0)
 
-            if tabs.count > 1 {
-                Picker("Show", selection: Binding(get: { currentTab }, set: { tab = $0 })) {
-                    ForEach(tabs) { tab in
-                        Text(tab.title).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 20)
-                .padding(.bottom, 14)
-            }
+            DetailTabBar(
+                tabs: tabs,
+                selection: Binding(get: { currentTab }, set: { tab = $0 }),
+                counts: tabCounts
+            )
+            .padding(.bottom, currentTab == .overview ? 0 : 14)
 
             Group {
                 switch currentTab {
+                case .overview:
+                    ResourceOverview(
+                        resource: resource,
+                        deployments: deployments,
+                        logLines: logLines,
+                        pausedMessage: pausedMessage,
+                        variables: variables,
+                        onOpen: { tab = $0 },
+                        onSelectDeployment: { deployment in
+                            tab = .deployments
+                            selectedDeployment = deployment
+                        }
+                    )
                 case .deployments:
                     // Its own container, so the slide only runs between the timeline and a deployment.
                     // Switching tabs inserts the container, which fades like every other tab.
@@ -755,14 +852,6 @@ struct ResourceDetail: View {
                         pendingAction: pendingAction,
                         onAction: onAction
                     )
-                case .settings:
-                    ConfigurationView(
-                        model: configuration,
-                        resource: resource,
-                        pendingAction: pendingAction,
-                        onAction: onAction,
-                        onEditCompose: resource.kind == .service ? { editsCompose = true } : nil
-                    )
                 case .logs:
                     LogView(
                         lines: logLines,
@@ -793,6 +882,7 @@ struct ResourceDetail: View {
 
 /// The views under the detail header.
 enum DetailTab: Identifiable, Hashable {
+    case overview
     case backups
     case storage
     case deployments
@@ -800,12 +890,12 @@ enum DetailTab: Identifiable, Hashable {
     case containers
     case logs
     case variables
-    case settings
 
     var id: Self { self }
 
     var title: String {
         switch self {
+        case .overview: "Overview"
         case .backups: "Backups"
         case .storage: "Storage"
         case .deployments: "Deployments"
@@ -813,7 +903,6 @@ enum DetailTab: Identifiable, Hashable {
         case .containers: "Containers"
         case .logs: "Logs"
         case .variables: "Variables"
-        case .settings: "Settings"
         }
     }
 }
