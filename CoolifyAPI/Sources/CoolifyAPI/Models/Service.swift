@@ -58,6 +58,9 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
     public var environmentID: Int?
     /// Tag names when the payload includes them. Absent means none were loaded.
     public var tags: [String] = []
+    /// The compose file as the user wrote it, in plain YAML. Coolify hides it from a token without the `root` or
+    /// `read:sensitive` permission, so `nil` means it could not be read, not that there is none.
+    public var dockerComposeRaw: String?
 
     public var id: String { uuid }
 
@@ -71,6 +74,7 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
         case databases
         case environmentID = "environmentId"
         case tags
+        case dockerComposeRaw
     }
 
     public init(from decoder: Decoder) throws {
@@ -84,5 +88,8 @@ public struct Service: Decodable, Sendable, Identifiable, Hashable, HasResourceS
         databases = try? container.decodeIfPresent([ServiceApplication].self, forKey: .databases)
         environmentID = container.flexInt(.environmentID)
         tags = container.flexTagNames(.tags)
+        // Plain text on the way out, though it goes in as base64. Decoding it would garble a file that happens to
+        // read as base64.
+        dockerComposeRaw = try? container.decodeIfPresent(String.self, forKey: .dockerComposeRaw)
     }
 }

@@ -155,11 +155,15 @@ struct ServiceSetup: View {
 
     private var hero: some View {
         HStack(alignment: .center, spacing: 16) {
-            TemplateLogo(
-                name: displayName,
-                url: model.template?.logoURL(instanceRoot: model.instanceRoot),
-                size: 56
-            )
+            if model.isFromCompose {
+                ComposeMark(size: 56)
+            } else {
+                TemplateLogo(
+                    name: displayName,
+                    url: model.template?.logoURL(instanceRoot: model.instanceRoot),
+                    size: 56
+                )
+            }
             VStack(alignment: .leading, spacing: 5) {
                 Text(model.serviceName)
                     .font(.display(.title))

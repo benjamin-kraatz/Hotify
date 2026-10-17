@@ -9,6 +9,8 @@ struct ContainerList: View {
     var serviceUUID: String?
     /// The service's name, which the restore sheet shows beside the container's.
     var serviceName: String?
+    /// Opens a shell in a running container. `nil` leaves the action out.
+    var onOpenTerminal: ((ContainerSummary) -> Void)?
 
     @State private var actions = ContainerActions()
     @State private var stopTarget: ContainerSummary?
@@ -71,6 +73,7 @@ struct ContainerList: View {
                             canAct: client != nil && !actions.isBusy,
                             onEdit: { editing = container },
                             onRestore: canRestore(container) ? { restoring = container } : nil,
+                            onOpenTerminal: onOpenTerminal.map { open in { open(container) } },
                             onStart: { run(.start, container) },
                             onRestart: { run(.restart, container) },
                             onStop: { stopTarget = container }
@@ -176,6 +179,7 @@ private struct ContainerRow: View {
     var onEdit: () -> Void
     /// `nil` for a container that cannot take a restore.
     var onRestore: (() -> Void)?
+    var onOpenTerminal: (() -> Void)?
     var onStart: () -> Void
     var onRestart: () -> Void
     var onStop: () -> Void
@@ -262,6 +266,10 @@ private struct ContainerRow: View {
                     Button("Restore Backup…", systemImage: "arrow.counterclockwise", action: onRestore)
                 }
             }
+            if let onOpenTerminal {
+                Button("Open Terminal", systemImage: "apple.terminal", action: onOpenTerminal)
+                    .disabled(!isUp)
+            }
         }
         .animation(.snappy(duration: 0.15), value: isHovered)
         .animation(.snappy, value: heat)
@@ -286,6 +294,11 @@ private struct ContainerRow: View {
                     }
                 }
                 commandButton("Edit", systemImage: "pencil", help: "Edit this container", action: onEdit)
+                if let onOpenTerminal, isUp {
+                    commandButton(
+                        "Open Terminal", systemImage: "apple.terminal", help: "Open a shell in this container",
+                        action: onOpenTerminal)
+                }
             }
             .disabled(!canAct)
             // Stays enabled while another command runs, so a restore in progress can always be opened.
