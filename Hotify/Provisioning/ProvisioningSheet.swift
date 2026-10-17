@@ -1,7 +1,7 @@
 import CoolifyAPI
 import SwiftUI
 
-/// From template to running service in one sheet: choose, place, set up, start. A database skips setup, since
+/// From template, or a compose file the user writes, to running service in one sheet: choose, place, set up, start. A database skips setup, since
 /// Coolify starts it as it creates it. An application does too, and can deploy as soon as it exists.
 ///
 /// Each step is a screen pushed onto the sheet's navigation stack, so going back from a template is the system's
@@ -139,6 +139,14 @@ struct ProvisioningSheet: View {
                     model.name = template.slug
                 }
                 path.append(.template(template))
+            },
+            onCompose: {
+                model.createProblem = nil
+                // A template's slug filled in for another choice is no name for this one.
+                if catalog.template(model.name) != nil {
+                    model.name = ""
+                }
+                path.append(.compose)
             }
         )
     }
@@ -154,6 +162,14 @@ struct ProvisioningSheet: View {
             .navigationBarTitleDisplayMode(.inline)
                 #endif
                 // Creating is under way, and its result decides where the sheet goes next.
+                .navigationBarBackButtonHidden(model.isCreating)
+        case .compose:
+            ComposeLaunchPad(model: model, instanceRoot: model.instanceRoot)
+                .provisioningStep(.place)
+                .navigationTitle("Docker Compose")
+                #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+                #endif
                 .navigationBarBackButtonHidden(model.isCreating)
         case .setUp:
             ServiceSetup(model: model, onClose: onClose)
@@ -230,6 +246,8 @@ struct ProvisioningSheet: View {
 enum ProvisioningRoute: Hashable {
     /// One template up close, where the service is placed, named, and created.
     case template(ServiceTemplate)
+    /// A compose file the user writes, where the service is placed, named, and created like a template's.
+    case compose
     /// The created service's domains and settings, before its first start.
     case setUp
     /// The first start, watched until the service runs.
@@ -244,7 +262,8 @@ enum ProvisioningRoute: Hashable {
     case applicationStart
 }
 
-/// What the sheet creates. Coolify's one-click services, a database, or an application.
+/// What the sheet creates. A service from Coolify's one-click templates or a compose file, a database, or an
+/// application.
 enum NewResourceKind: CaseIterable, Identifiable, Hashable {
     case service
     case database

@@ -226,6 +226,8 @@ struct ResourceDetail: View {
     @State private var removalPresentation = 0
     /// Move, clone, or migrate, while that sheet is open.
     @State private var placement: PlacementIntent?
+    /// Set while a service's compose file takes over the column. Its edits live in `configuration`, so closing keeps them.
+    @State private var editsCompose = false
     @State private var previewGeneration = 0
     @State private var followedPreviewDeployment: DeploymentLine?
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -289,7 +291,8 @@ struct ResourceDetail: View {
 
     /// Names the screen in the toolbar. The resource's own name heads the screen below it.
     private var title: String {
-        switch previewPlace {
+        if editsCompose { return "Compose File" }
+        return switch previewPlace {
         case .board: "Previews"
         case .preview(let number): "PR #\(number)"
         case nil: openDeployment == nil ? resource.kind.title : "Deployment"
@@ -298,6 +301,9 @@ struct ResourceDetail: View {
 
     /// Where the toolbar's back button leads from the screen on show: one step out, innermost first.
     private var currentBack: DetailBack? {
+        if editsCompose {
+            return DetailBack(title: resource.name) { editsCompose = false }
+        }
         switch previewPlace {
         case .preview(let number):
             if followedPreviewDeployment != nil {
@@ -332,12 +338,21 @@ struct ResourceDetail: View {
                     onDeploy: { showsPreviewDeployment = true }
                 )
                 .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else if editsCompose, resource.kind == .service {
+                ComposeEditorScreen(
+                    model: configuration,
+                    resource: resource,
+                    pendingAction: pendingAction,
+                    onAction: onAction
+                )
+                .transition(.move(edge: .trailing).combined(with: .opacity))
             } else {
                 production
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
         }
         .animation(reduceMotion ? nil : .snappy, value: previewPlace == nil)
+        .animation(reduceMotion ? nil : .snappy, value: editsCompose)
         // A restart or deploy started anywhere puts saved variables and settings to use.
         .onChange(of: pendingAction) { _, action in
             if action == .start || action == .deploy || action == .restart {
@@ -408,6 +423,7 @@ struct ResourceDetail: View {
             showsRemoval = false
             removalError = nil
             placement = nil
+            editsCompose = false
         }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
@@ -743,7 +759,8 @@ struct ResourceDetail: View {
                         model: configuration,
                         resource: resource,
                         pendingAction: pendingAction,
-                        onAction: onAction
+                        onAction: onAction,
+                        onEditCompose: resource.kind == .service ? { editsCompose = true } : nil
                     )
                 case .logs:
                     LogView(

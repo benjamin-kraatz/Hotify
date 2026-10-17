@@ -143,8 +143,8 @@ struct TemplateLaunchPad: View {
     }
 }
 
-/// A container a template runs, with its image. Cold, since nothing runs yet.
-private struct ContainerLine: View {
+/// A container a new service runs, with its image. Cold, since nothing runs yet.
+struct ContainerLine: View {
     var name: String
     var image: String?
 
