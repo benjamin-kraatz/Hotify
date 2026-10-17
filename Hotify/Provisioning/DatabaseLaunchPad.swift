@@ -8,6 +8,8 @@ struct DatabaseLaunchPad: View {
     var model: DatabaseProvisioningModel
     var instanceRoot: URL?
 
+    @SwiftUI.Environment(\.isProvisioningInspector) private var isInspector
+
     var body: some View {
         @Bindable var model = model
 
@@ -69,11 +71,12 @@ struct DatabaseLaunchPad: View {
     }
 
     private var hero: some View {
-        HStack(alignment: .center, spacing: 18) {
-            TemplateLogo(name: engine.displayName, url: engine.logoURL(instanceRoot: instanceRoot), size: 72)
+        HStack(alignment: .center, spacing: isInspector ? 14 : 18) {
+            TemplateLogo(
+                name: engine.displayName, url: engine.logoURL(instanceRoot: instanceRoot), size: isInspector ? 56 : 72)
             VStack(alignment: .leading, spacing: 6) {
                 Text(engine.displayName)
-                    .font(.display(.title))
+                    .font(.display(isInspector ? .title2 : .title))
                     .foregroundStyle(.primary)
                 Text(engine.slogan)
                     .font(.subheadline)
@@ -90,48 +93,16 @@ struct DatabaseLaunchPad: View {
     }
 
     private var createBar: some View {
-        HStack(spacing: 14) {
-            FlameGlyph(heat: model.isCreating ? .warming : .cold, height: 24)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(model.problem ?? (model.isCreating ? "Creating \(model.displayName)…" : "Ready to create"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(model.problem == nil ? AnyShapeStyle(.primary) : AnyShapeStyle(.glow))
-                    .contentTransition(.interpolate)
-                Text(destinationSummary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            Spacer(minLength: 0)
-            Button {
-                Task { await model.create(engine) }
-            } label: {
-                Text("Create and Start")
-                    .opacity(model.isCreating ? 0 : 1)
-                    .overlay {
-                        if model.isCreating {
-                            ProgressView().controlSize(.small)
-                        }
-                    }
-            }
-            .glassButton(prominent: true)
-            .controlSize(.large)
-            .keyboardShortcut(.defaultAction)
-            .disabled(!model.canCreate)
+        CreateBar(
+            isCreating: model.isCreating,
+            status: model.problem ?? (model.isCreating ? "Creating \(model.displayName)…" : "Ready to create"),
+            isProblem: model.problem != nil,
+            summary: PlacementSummary.text(model.placement, then: "It starts right away."),
+            buttonTitle: "Create and Start",
+            canCreate: model.canCreate
+        ) {
+            Task { await model.create(engine) }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .background(.bar)
-        .animation(.snappy, value: model.isCreating)
-    }
-
-    private var destinationSummary: String {
-        let placement = model.placement
-        guard let server = placement.server, let project = placement.project, let environment = placement.environment
-        else { return "Pick a server, project, and environment." }
-        return
-            "On \(server.name), in \(project.name ?? project.uuid) · \(environment.name ?? ""). It starts right away."
     }
 }
 

@@ -1,12 +1,15 @@
 import CoolifyAPI
 import SwiftUI
 
-/// From template, or a compose file the user writes, to running service in one sheet: choose, place, set up, start. A database skips setup, since
-/// Coolify starts it as it creates it. An application does too, and can deploy as soon as it exists.
+/// From template, or a compose file the user writes, to running service in one sheet: create, set up, start. A
+/// database skips setup, since Coolify starts it as it creates it. An application does too, and can deploy as soon
+/// as it exists.
 ///
-/// Each step is a screen pushed onto the sheet's navigation stack, so going back from a template is the system's
-/// own back button and swipe. The service only exists in Coolify once the user creates it on the second step.
-/// From there the screens hide their way back, and closing the sheet keeps or deletes the service on purpose.
+/// On the Mac and iPad, choosing, placing, and naming share one screen of three columns, so nothing is created on a
+/// screen of its own. On iPhone the gallery pushes the screen that creates what was chosen, and going back is the
+/// system's own back button and swipe. Setup and the first start are screens pushed onto the sheet's navigation
+/// stack. The service only exists in Coolify once the user creates it. From there the screens hide their way back,
+/// and closing the sheet keeps or deletes the service on purpose.
 struct ProvisioningSheet: View {
     var client: CoolifyClient?
     var instanceID: UUID?
@@ -19,8 +22,10 @@ struct ProvisioningSheet: View {
     @State private var model: ProvisioningModel
     @State private var databases: DatabaseProvisioningModel
     @State private var applications: ApplicationProvisioningModel
-    @State private var kind = NewResourceKind.service
     @State private var path: [ProvisioningRoute] = []
+    #if os(iOS)
+    @SwiftUI.Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
 
     init(
         client: CoolifyClient?,
@@ -40,9 +45,22 @@ struct ProvisioningSheet: View {
         _applications = State(initialValue: ApplicationProvisioningModel(placement: model.placement))
     }
 
+    private var models: NewResourceModels {
+        NewResourceModels(services: model, databases: databases, applications: applications)
+    }
+
+    /// Three columns where there is room for them. An iPhone, or an iPad in a narrow split, gets the list.
+    private var usesWorkbench: Bool {
+        #if os(macOS)
+        true
+        #else
+        sizeClass == .regular
+        #endif
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
-            gallery
+            root
                 .navigationDestination(for: ProvisioningRoute.self) { route in
                     destination(route)
                 }
@@ -62,13 +80,12 @@ struct ProvisioningSheet: View {
         .onChange(of: applications.created) { _, created in
             if created != nil { path.append(.applicationStart) }
         }
-        // Only the gallery closes with a swipe. On a template the user may have named and placed the service, which
-        // a stray swipe would lose. Once the service exists, closing has to keep or delete it, which setup asks about.
-        .interactiveDismissDisabled(
-            !path.isEmpty || model.isCreating || databases.isCreating || applications.isCreating
-        )
+        // Only the first screen closes with a swipe. On a launch pad the user may have named and placed the service,
+        // which a stray swipe would lose. Once the service exists, closing has to keep or delete it, which setup asks
+        // about.
+        .interactiveDismissDisabled(!path.isEmpty || models.isCreating)
         #if os(macOS)
-        .frame(minWidth: 680, idealWidth: 860, minHeight: 600, idealHeight: 780)
+        .frame(minWidth: 1020, idealWidth: 1200, minHeight: 600, idealHeight: 740)
         #endif
         .task {
             model.prepare(client, instanceID: instanceID, hint: hint)
@@ -81,74 +98,38 @@ struct ProvisioningSheet: View {
     }
 
     @ViewBuilder
-    private var gallery: some View {
-        Group {
-            switch kind {
-            case .service: templates
-            case .database:
-                DatabaseGallery(instanceRoot: model.instanceRoot) { engine in
-                    databases.createProblem = nil
-                    path.append(.database(engine))
+    private var root: some View {
+        if usesWorkbench {
+            ProvisioningWorkbench(
+                models: models, catalog: catalog, instanceRoot: model.instanceRoot, onCancel: { onClose(nil) }
+            )
+            .navigationTitle("New Resource")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+        } else {
+            CatalogGallery(
+                shelves: catalog.shelves,
+                instanceRoot: model.instanceRoot,
+                isLoading: catalog.isLoading,
+                loadError: catalog.loadError,
+                onRetry: { Task { await catalog.refresh() } },
+                onSelect: { entry in
+                    models.choose(entry, catalog: catalog)
+                    path.append(entry.route)
                 }
-            case .application:
-                ApplicationGallery { source in
-                    applications.createProblem = nil
-                    applications.source = source
-                    path.append(.application(source))
+            )
+            .navigationTitle("New Resource")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onClose(nil) }
+                        .disabled(models.isCreating)
                 }
             }
         }
-        // In the content, not the toolbar: a Mac sheet's toolbar leaves out a principal item.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Picker("Create", selection: $kind) {
-                ForEach(NewResourceKind.allCases) { kind in
-                    Text(kind.title).tag(kind)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(.bar)
-        }
-        .provisioningStep(.choose, steps: kind.steps)
-        .navigationTitle("New Resource")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { onClose(nil) }
-                    .disabled(model.isCreating || databases.isCreating || applications.isCreating)
-            }
-        }
-    }
-
-    private var templates: some View {
-        TemplateGallery(
-            shelves: catalog.shelves,
-            instanceRoot: model.instanceRoot,
-            isLoading: catalog.isLoading,
-            loadError: catalog.loadError,
-            onRetry: { Task { await catalog.refresh() } },
-            onSelect: { template in
-                model.createProblem = nil
-                // Keep a name the user typed. One that is a template's slug was filled in here.
-                if model.name.isEmpty || catalog.template(model.name) != nil {
-                    model.name = template.slug
-                }
-                path.append(.template(template))
-            },
-            onCompose: {
-                model.createProblem = nil
-                // A template's slug filled in for another choice is no name for this one.
-                if catalog.template(model.name) != nil {
-                    model.name = ""
-                }
-                path.append(.compose)
-            }
-        )
     }
 
     @ViewBuilder
@@ -156,7 +137,7 @@ struct ProvisioningSheet: View {
         switch route {
         case .template(let template):
             TemplateLaunchPad(template: template, model: model, instanceRoot: model.instanceRoot)
-                .provisioningStep(.place)
+                .provisioningStep(.create)
                 .navigationTitle(template.displayName)
                 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -165,7 +146,7 @@ struct ProvisioningSheet: View {
                 .navigationBarBackButtonHidden(model.isCreating)
         case .compose:
             ComposeLaunchPad(model: model, instanceRoot: model.instanceRoot)
-                .provisioningStep(.place)
+                .provisioningStep(.create)
                 .navigationTitle("Docker Compose")
                 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -186,7 +167,7 @@ struct ProvisioningSheet: View {
             .provisioningStep(.start, isFinished: model.ignition.phase == .running)
         case .database(let engine):
             DatabaseLaunchPad(engine: engine, model: databases, instanceRoot: model.instanceRoot)
-                .provisioningStep(.place, steps: NewResourceKind.database.steps)
+                .provisioningStep(.create, steps: ProvisioningStep.instant)
                 .navigationTitle(engine.displayName)
                 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -206,10 +187,10 @@ struct ProvisioningSheet: View {
             }
             .task { await databases.watch() }
             .provisioningStep(
-                .start, isFinished: databases.ignition.phase == .running, steps: NewResourceKind.database.steps)
+                .start, isFinished: databases.ignition.phase == .running, steps: ProvisioningStep.instant)
         case .application(let source):
             ApplicationLaunchPad(source: source, model: applications, instanceRoot: model.instanceRoot)
-                .provisioningStep(.place, steps: NewResourceKind.application.steps)
+                .provisioningStep(.create, steps: ProvisioningStep.instant)
                 .navigationTitle(source.title)
                 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -229,7 +210,7 @@ struct ProvisioningSheet: View {
             .provisioningStep(
                 .start,
                 isFinished: !applications.instantDeploy || applications.ignition.phase == .running,
-                steps: NewResourceKind.application.steps
+                steps: ProvisioningStep.instant
             )
         }
     }
@@ -244,7 +225,7 @@ struct ProvisioningSheet: View {
 
 /// A screen on the provisioning sheet's navigation stack.
 enum ProvisioningRoute: Hashable {
-    /// One template up close, where the service is placed, named, and created.
+    /// One template up close, where the service is placed, named, and created. Pushed on iPhone.
     case template(ServiceTemplate)
     /// A compose file the user writes, where the service is placed, named, and created like a template's.
     case compose
@@ -260,32 +241,6 @@ enum ProvisioningRoute: Hashable {
     case application(NewApplicationSource)
     /// A new application's first deploy, or the screen that opens it when it was left stopped.
     case applicationStart
-}
-
-/// What the sheet creates. A service from Coolify's one-click templates or a compose file, a database, or an
-/// application.
-enum NewResourceKind: CaseIterable, Identifiable, Hashable {
-    case service
-    case database
-    case application
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .service: "Service"
-        case .database: "Database"
-        case .application: "Application"
-        }
-    }
-
-    /// A database or an application skips setup. Coolify can start either one as it creates it.
-    var steps: [ProvisioningStep] {
-        switch self {
-        case .service: ProvisioningStep.allCases
-        case .database, .application: [.choose, .place, .start]
-        }
-    }
 }
 
 extension View {
