@@ -38,8 +38,12 @@ final class TerminalModel {
     private(set) var offersAddress = false
     /// Set once the shell ends, while its output stays on screen.
     private(set) var ending: String?
-    /// Changes for every shell, so each starts on a clean canvas.
+    /// Whether the last shell ended on its own, with an exit status, rather than with the connection.
+    private(set) var exitedCleanly = false
+    /// How many shells have run on the canvas. The second and later start under a divider.
     private(set) var session = 0
+    /// The last round trip to the server, from the probes that keep the connection alive.
+    private(set) var latency: Duration?
 
     private let client: CoolifyClient?
     private let hostKeys: HostKeyStore
@@ -48,6 +52,7 @@ final class TerminalModel {
     private var connection: SSHConnection?
     private var terminal: SSHTerminal?
     private var reader: Task<Void, Never>?
+    private var keepalive: Task<Void, Never>?
     private var size = (columns: 80, rows: 24)
     /// Output that arrived before the canvas was ready for it.
     private var pending: [UInt8] = []
@@ -86,6 +91,36 @@ final class TerminalModel {
 
     /// Whether the install step can work: Coolify named the key it connects with.
     var canInstall: Bool { client != nil && server?.privateKeyUUID != nil }
+
+    /// How the connection is doing, for the flame in the header. Lit while a shell runs, amber on the way there
+    /// and when the connection dropped, cold once the shell exited on its own or nothing is connected.
+    var linkHeat: Heat {
+        switch phase {
+        case .locating, .unlocking, .connecting:
+            return .warming
+        case .running:
+            if ending == nil { return .lit }
+            return exitedCleanly ? .cold : .troubled
+        case .choosing:
+            return .warming
+        case .unavailable, .failed, .trustHost, .needsKey:
+            return .cold
+        }
+    }
+
+    /// A word for the flame, such as `Connected`.
+    var linkLabel: String {
+        switch phase {
+        case .locating: "Looking up the server"
+        case .unlocking: "Waiting for \(UnlockMethod.current().title)"
+        case .connecting, .choosing: "Connecting"
+        case .running: ending == nil ? "Connected" : (exitedCleanly ? "Shell exited" : "Connection dropped")
+        case .unavailable: "Unavailable"
+        case .failed: "Not connected"
+        case .trustHost: "Waiting for trust"
+        case .needsKey: "Key not accepted"
+        }
+    }
 
     func start() async {
         guard let client else {
@@ -248,10 +283,11 @@ final class TerminalModel {
             )
             self.terminal = terminal
             identity = nil
-            pending = []
             ending = nil
+            exitedCleanly = false
             session += 1
             phase = .running
+            startKeepalive(on: connection)
             reader = Task { [weak self] in
                 var status: Int?
                 for await output in terminal.output {
@@ -304,6 +340,9 @@ final class TerminalModel {
     func stop() {
         reader?.cancel()
         reader = nil
+        keepalive?.cancel()
+        keepalive = nil
+        latency = nil
         terminal?.close()
         terminal = nil
         identity = nil
@@ -349,6 +388,11 @@ final class TerminalModel {
         if let name = target.containerName {
             containers = containers.filter { $0.name == name }
         }
+        // A reconnect goes back into the container the last shell ran in, without asking again.
+        if let last = container, let same = containers.first(where: { $0.name == last.name }) {
+            await open(same)
+            return
+        }
         switch containers.count {
         case 0:
             if let said = Self.firstLine(result.errorOutput), result.exitStatus != 0 {
@@ -375,14 +419,61 @@ final class TerminalModel {
     private func finish(status: Int?) async {
         guard terminal != nil else { return }
         terminal = nil
+        keepalive?.cancel()
+        keepalive = nil
+        latency = nil
         let name = server?.name ?? "The server"
+        exitedCleanly = status != nil
         switch status {
         case 0?: ending = "The shell exited."
         case let code?: ending = "The shell exited with status \(code)."
         case nil: ending = "The connection to \(name) closed."
         }
+        deliver(Self.divider(ending ?? ""))
         await connection?.close()
         connection = nil
+    }
+
+    /// Probes the server now and then, so the connection stays up through NAT tables and idle timeouts, and the
+    /// header can show the round trip. A server that stops answering closes the connection, which ends the shell.
+    private func startKeepalive(on connection: SSHConnection) {
+        keepalive?.cancel()
+        keepalive = Task { [weak self] in
+            // One probe right away, so the header has a number before the first interval is up.
+            if let first = try? await connection.probe(timeout: .seconds(10)) {
+                self?.latency = first
+            }
+            for await roundTrip in connection.keepAlive(every: .seconds(15), timeout: .seconds(10)) {
+                self?.latency = roundTrip
+            }
+        }
+    }
+
+    /// Back on screen after the app was away. iOS cuts the socket while the app sleeps, so the shell may be gone
+    /// without the connection having said so yet. One probe finds out, and a dead shell reconnects on its own,
+    /// since coming back to the terminal says what you want.
+    func resumeAfterBackground() async {
+        guard phase == .running else { return }
+        if ending == nil, let connection {
+            if (try? await connection.probe(timeout: .seconds(4))) == nil {
+                await connection.close()
+                // The reader notices the close and finishes the session. Give it a moment.
+                for _ in 0..<40 where ending == nil && terminal != nil {
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+            }
+        }
+        if ending != nil, !exitedCleanly {
+            await connect()
+        }
+    }
+
+    /// Marks where one shell ended in the scrollback, so the next one starts below it. Leaves the alternate screen,
+    /// resets modes and attributes, and shows the cursor, in case the shell died inside an editor or a pager.
+    static func divider(_ message: String) -> [UInt8] {
+        let time = Date.now.formatted(date: .omitted, time: .shortened)
+        let line = "\u{1b}[?1049l\u{1b}[!p\u{1b}[0m\u{1b}[?25h\r\n\u{1b}[2m── \(message) \(time) ──\u{1b}[0m\r\n"
+        return Array(line.utf8)
     }
 
     private var owner: ContainerOwner {
