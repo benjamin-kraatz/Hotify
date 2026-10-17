@@ -7,13 +7,14 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
 - `Hotify/` is the app target.
   - `App/` has the entry point.
   - `Design/` has the app's look: the stokable flame and its fire, heat edges, wells, and the filter field.
-  - `Configuration/` is a resource's Settings tab: its name and description, an application's source (branch, pinned commit, deploy on push, or image tag), its domains, a database's public port, its health check, and an application's proxy labels and CPU and memory limits, in one form with one Save.
+  - `Configuration/` is a resource's Settings tab: its name and description, an application's source (branch, pinned commit, deploy on push, or image tag), its build settings, the pre- and post-deployment commands Coolify runs on the server, its domains, a database's public port, its health check, and an application's proxy labels and CPU and memory limits, in one form with one Save.
   - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource. A service's Containers tab can start, stop, or restart one container, or edit its domains or a database container's public port. A server opens its own page.
   - `Servers/` validates a server, runs its Docker cleanup, restarts its proxy, edits its proxy redirect and configuration, records a Cloudflare Tunnel, opens its shared variables, and adds, renames, and deletes a Docker network destination. A server can be added, edited, and deleted. It takes the detail column.
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
-  - `Notifications/` tells you, on the Mac, when a deploy fails or finishes, a resource stops or turns unhealthy, a backup fails or runs late, or a server drops. It checks each instance whose notifications are on every 30 seconds while Hotify runs, and a click opens the place through a `hotify://` link. `LocalActions` remembers what this device started, which tells your own deploys from a push. On iPhone, `DeploymentActivities` follows each deploy started there as a Live Activity, while Hotify may run, and ends it with the result.
+  - `Automations/` runs a Shortcut on this device, through the `shortcuts://run-shortcut` URL, with the event as JSON text that holds no token or log. On the Mac a resource's deploy, outage, or backup can run one, through the same 30-second instance watch as notifications but without needing them on. iPhone only runs one when you tap Run. Automations stay in the device's own defaults, never in iCloud or the App Group.
+  - `Notifications/` tells you, on the Mac, when a deploy fails or finishes, a resource stops or turns unhealthy, a backup fails or runs late, or a server drops. It checks each instance whose notifications are on, or that a Mac automation waits on, every 30 seconds while Hotify runs, and a click opens the place through a `hotify://` link. `LocalActions` remembers what this device started, which tells your own deploys from a push. On iPhone, `DeploymentActivities` follows each deploy started there as a Live Activity, while Hotify may run, and ends it with the result.
   - `Projects/` shows one project: its resources by environment, the previews of all its applications, and the variables the project, its environments, the team, and a server share. It opens from the project's head in the dashboard and takes the detail column. A resource opened from it offers the way back. It also holds the colors you give projects and environments: `PlaceColors` keeps them per instance, on the device and in iCloud key-value storage, since Coolify has no such field.
   - `Versions/` changes which version of an application runs. The toolbar's Versions menu rolls back to an image Coolify kept, and Roll Back to This does the same from a deployment. Deploy a Version deploys any commit or image tag, once or pinned, and lists a GitHub branch's recent commits to pick from.
   - `Provisioning/` creates services from Coolify's one-click templates, and databases of any engine Coolify offers: a gallery, then placement, setup for a service, and the first start, in one New Resource sheet that opens from a project page's New Resource button, its ⇧⌘N in the Project menu, or an empty dashboard. From a project, the sheet starts in that project, on the server that runs most of it. A new database's connection strings hold its password, so they stay behind `VariableLock`. The sheet also creates applications from a public repository, a Dockerfile, a Docker image, a GitHub App, or a deploy key.
@@ -50,6 +51,9 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
 ```sh
 # Package tests. Run these after any change in CoolifyAPI/.
 cd CoolifyAPI && swift test
+
+# Instance watch and Shortcut automation checks. Run these after any change in Automations/ or Notifications/.
+./scripts/test_automations.sh
 
 # App build. Run this after any change in Hotify/.
 xcodebuild -project Hotify.xcodeproj -scheme Hotify -destination 'platform=macOS' build
