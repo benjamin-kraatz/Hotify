@@ -234,6 +234,8 @@ struct ResourceDetail: View {
     @State private var editsCompose = false
     @State private var previewGeneration = 0
     @State private var followedPreviewDeployment: DeploymentLine?
+    /// Open while a shell takes over the column.
+    @State private var terminal: TerminalTarget?
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var tabs: [DetailTab] {
@@ -319,6 +321,7 @@ struct ResourceDetail: View {
 
     /// Names the screen in the toolbar. The resource's own name heads the screen below it.
     private var title: String {
+        if terminal != nil { return "Terminal" }
         if editsCompose { return "Compose File" }
         return switch previewPlace {
         case .board: "Previews"
@@ -329,6 +332,10 @@ struct ResourceDetail: View {
 
     /// Where the toolbar's back button leads from the screen on show: one step out, innermost first.
     private var currentBack: DetailBack? {
+        if terminal != nil {
+            // Escape belongs to the shell, for editors and pagers.
+            return DetailBack(title: resource.name, action: { terminal = nil }, takesEscape: false)
+        }
         if editsCompose {
             // Back to the settings the editor opened from, which closed to give it the column.
             return DetailBack(title: resource.name) {
@@ -352,10 +359,14 @@ struct ResourceDetail: View {
         }
     }
 
-    /// What fills the column: the previews, a service's compose file, or the resource itself.
+    /// What fills the column: a terminal, the previews, a service's compose file, or the resource itself.
     private var column: some View {
         ZStack {
-            if previewPlace != nil, case .application(let uuid) = resource.route {
+            if let terminal {
+                TerminalScreen(client: deploymentClient, target: terminal)
+                    .id(terminal)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else if previewPlace != nil, case .application(let uuid) = resource.route {
                 PreviewSpace(
                     resourceName: resource.name,
                     application: uuid,
@@ -386,6 +397,8 @@ struct ResourceDetail: View {
         }
         .animation(reduceMotion ? nil : .snappy, value: previewPlace == nil)
         .animation(reduceMotion ? nil : .snappy, value: editsCompose)
+        .animation(reduceMotion ? nil : .snappy, value: terminal == nil)
+        .focusedSceneValue(\.openTerminal, canOpenTerminal ? OpenTerminalAction { openTerminal() } : nil)
     }
 
     var body: some View {
@@ -493,6 +506,7 @@ struct ResourceDetail: View {
                 removal.cancel()
                 placement = nil
                 editsCompose = false
+                terminal = nil
             }
             .onDisappear { removal.cancel() }
             .stopConfirmation(for: $stopCandidate) { _ in
@@ -552,6 +566,7 @@ struct ResourceDetail: View {
                     onDeploy: { showsPreviewDeployment = true },
                     onShow: { place in
                         followedPreviewDeployment = nil
+                        terminal = nil
                         previewPlace = place
                     },
                     onGitHubAccess: { showsGitHubAccess = true }
@@ -579,6 +594,14 @@ struct ResourceDetail: View {
                 }
             }
         }
+        // A preview's containers aren't offered yet, so the button waits until production is on screen.
+        if terminal == nil, previewPlace == nil, !editsCompose {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Terminal", systemImage: "apple.terminal", action: openTerminal)
+                    .disabled(deploymentClient == nil)
+                    .help("Open a shell in \(resource.name)")
+            }
+        }
         ToolbarItem(placement: .primaryAction) {
             moreMenu
         }
@@ -589,6 +612,15 @@ struct ResourceDetail: View {
             .help(showsSettings ? "Hide the settings" : "Show the settings")
             .keyboardShortcut("i", modifiers: [.command, .option])
         }
+    }
+
+    /// Whether the toolbar's Terminal button, and the menu's shortcut, can open one now.
+    private var canOpenTerminal: Bool {
+        deploymentClient != nil && terminal == nil && previewPlace == nil && !editsCompose
+    }
+
+    private func openTerminal() {
+        terminal = TerminalTarget(route: resource.route, resourceName: resource.name)
     }
 
     /// What is used less: moving or cloning, the menu bar, the guide, and deleting.
@@ -843,7 +875,10 @@ struct ResourceDetail: View {
                     ContainerList(
                         containers: resource.containers,
                         client: deploymentClient,
-                        serviceUUID: resource.kind == .service ? resource.route.uuid : nil
+                        serviceUUID: resource.kind == .service ? resource.route.uuid : nil,
+                        onOpenTerminal: { container in
+                            terminal = .container(container, in: resource)
+                        }
                     )
                 case .variables:
                     VariableList(

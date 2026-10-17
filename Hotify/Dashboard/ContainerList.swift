@@ -6,6 +6,8 @@ struct ContainerList: View {
     var containers: [ContainerSummary]
     var client: CoolifyClient?
     var serviceUUID: String?
+    /// Opens a shell in a running container. `nil` leaves the action out.
+    var onOpenTerminal: ((ContainerSummary) -> Void)?
 
     @State private var actions = ContainerActions()
     @State private var stopTarget: ContainerSummary?
@@ -50,6 +52,7 @@ struct ContainerList: View {
                             busyCommand: container.uuid.isEmpty ? nil : actions.command(runningOn: container.uuid),
                             canAct: client != nil && !actions.isBusy,
                             onEdit: { editing = container },
+                            onOpenTerminal: onOpenTerminal.map { open in { open(container) } },
                             onStart: { run(.start, container) },
                             onRestart: { run(.restart, container) },
                             onStop: { stopTarget = container }
@@ -138,6 +141,7 @@ private struct ContainerRow: View {
     var busyCommand: ContainerCommand?
     var canAct: Bool
     var onEdit: () -> Void
+    var onOpenTerminal: (() -> Void)?
     var onStart: () -> Void
     var onRestart: () -> Void
     var onStop: () -> Void
@@ -221,6 +225,10 @@ private struct ContainerRow: View {
                 Button("Edit…", systemImage: "pencil", action: onEdit)
                     .disabled(!canAct)
             }
+            if let onOpenTerminal {
+                Button("Open Terminal", systemImage: "apple.terminal", action: onOpenTerminal)
+                    .disabled(!isUp)
+            }
         }
         .animation(.snappy(duration: 0.15), value: isHovered)
         .animation(.snappy, value: heat)
@@ -243,6 +251,11 @@ private struct ContainerRow: View {
                 }
             }
             commandButton("Edit", systemImage: "pencil", help: "Edit this container", action: onEdit)
+            if let onOpenTerminal, isUp {
+                commandButton(
+                    "Open Terminal", systemImage: "apple.terminal", help: "Open a shell in this container",
+                    action: onOpenTerminal)
+            }
         }
         .disabled(!canAct)
         .controlSize(.small)

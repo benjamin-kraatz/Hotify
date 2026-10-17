@@ -55,6 +55,7 @@ struct SettingsView: View {
             } footer: {
                 Text(footer)
             }
+            TerminalSettingsSection()
             BackupStorageSection()
             #if os(iOS)
             Section {
