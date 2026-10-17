@@ -1,10 +1,11 @@
 import Foundation
 
 extension CoolifyClient {
-    /// Creates a one-click service from a template. It stays stopped unless `draft.instantDeploy` is set.
+    /// Creates a service from a template or a compose file. It stays stopped unless `draft.instantDeploy` is set.
     ///
     /// Coolify answers 409 with `CoolifyError.conflicts` when a requested domain is taken, and 404 when this instance
-    /// does not know the template yet.
+    /// does not know the template yet. A compose file it refuses comes back as 422 with the reason under
+    /// `docker_compose_raw`, except YAML it cannot parse at all, which Coolify 4.4 lets fail as a 500.
     public func createService(_ draft: ServiceDraft) async throws -> CreatedService {
         try await post("services", body: draft)
     }
@@ -18,6 +19,9 @@ extension CoolifyClient {
     }
 
     /// Changes a service. Coolify parses its compose file again afterwards, so new variables appear.
+    ///
+    /// Not atomic: Coolify stores the name, description, and compose file before it checks `urls`, so a 409 or 422
+    /// about a domain leaves the rest saved.
     public func updateService(_ uuid: String, _ update: ServiceUpdate) async throws -> CreatedService {
         try await patch("services/\(CoolifyURL.encodePathComponent(uuid))", body: update)
     }

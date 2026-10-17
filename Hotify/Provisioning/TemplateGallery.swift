@@ -2,6 +2,7 @@ import CoolifyAPI
 import SwiftUI
 
 /// Every one-click template, on shelves by what it is for, with a popular shelf first and search across all of them.
+/// Above them, the way to bring a compose file of one's own, which works even when the catalog does not load.
 struct TemplateGallery: View {
     var shelves: [TemplateShelf]
     var instanceRoot: URL?
@@ -9,6 +10,8 @@ struct TemplateGallery: View {
     var loadError: String?
     var onRetry: () -> Void = {}
     var onSelect: (ServiceTemplate) -> Void = { _ in }
+    /// Opens a service from the user's own compose file. `nil` leaves the card out.
+    var onCompose: (() -> Void)?
 
     @State private var query = ""
     @State private var shelf: TemplateCategory?
@@ -43,6 +46,9 @@ struct TemplateGallery: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
                 header
+                if let onCompose, trimmedQuery.isEmpty {
+                    ComposeEntry(action: onCompose)
+                }
                 #if os(macOS)
                 if !shelves.isEmpty {
                     searchField
@@ -52,12 +58,14 @@ struct TemplateGallery: View {
                     shelfPicker
                     content
                 }
+                // In the flow, under the compose card, so a catalog that is still loading or did not load never
+                // covers the way to a compose file of one's own.
+                emptyState
                 footnote
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 20)
         }
-        .overlay { emptyState }
         #if os(iOS)
         .searchable(text: $query, prompt: searchPrompt)
         #endif
@@ -70,7 +78,7 @@ struct TemplateGallery: View {
             Text("New service")
                 .font(.display(.title2))
             Text(
-                "Pick one of Coolify's one-click services. Hotify creates it on your server, lets you set it up, and starts it."
+                "Pick one of Coolify's one-click services, or bring your own compose file. Hotify creates it on your server, lets you set it up, and starts it."
             )
             .font(.subheadline)
             .foregroundStyle(.secondary)
@@ -224,6 +232,7 @@ struct TemplateGallery: View {
                 Button("Try Again", action: onRetry)
                     .glassButton(prominent: true)
             }
+            .frame(maxWidth: .infinity, minHeight: 240)
         } else if shelves.isEmpty {
             VStack(spacing: 14) {
                 FlameGlyph(heat: .warming, height: 44)
@@ -231,14 +240,59 @@ struct TemplateGallery: View {
                     .font(.headline)
                     .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, minHeight: 240)
             .opacity(isLoading ? 1 : 0)
         } else if !trimmedQuery.isEmpty, results.isEmpty {
             ContentUnavailableView.search(text: trimmedQuery)
+                .frame(maxWidth: .infinity, minHeight: 240)
         }
     }
 
     private static func byName(_ lhs: ServiceTemplate, _ rhs: ServiceTemplate) -> Bool {
         lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+    }
+}
+
+/// The wide card that starts a service from the user's own compose file.
+private struct ComposeEntry: View {
+    var action: () -> Void
+
+    @State private var isHovered = false
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                ComposeMark(size: 44)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Your own Docker Compose")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("Write or paste a compose file, and run it as a service.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.forward")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.ember)
+                    .offset(x: isHovered && !reduceMotion ? 2 : 0)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.ember.opacity(isHovered ? 0.1 : 0.06), in: .rect(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(.ember.opacity(isHovered ? 0.35 : 0.18), lineWidth: 1)
+            }
+            .contentShape(.rect(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.snappy(duration: 0.2), value: isHovered)
+        .help("Write or paste a compose file and run it as a service")
+        .accessibilityHint("Opens an editor for a compose file")
     }
 }
 
@@ -267,7 +321,8 @@ private struct ShelfLabelStyle: LabelStyle {
                 ServiceTemplate(
                     slug: "umami", slogan: "Simple, privacy-friendly website analytics.", category: "analytics"),
                 ServiceTemplate(slug: "gitea-with-postgresql", slogan: "Painless self-hosted Git.", category: "git"),
-            ])
+            ]),
+            onCompose: {}
         )
     }
     .frame(width: 820, height: 700)
@@ -275,7 +330,15 @@ private struct ShelfLabelStyle: LabelStyle {
 
 #Preview("Loading") {
     NavigationStack {
-        TemplateGallery(shelves: [], isLoading: true)
+        TemplateGallery(shelves: [], isLoading: true, onCompose: {})
     }
     .frame(width: 820, height: 500)
+}
+
+#Preview("Catalog failed") {
+    NavigationStack {
+        TemplateGallery(
+            shelves: [], loadError: "cdn.coollabs.io did not answer in time.", onRetry: {}, onCompose: {})
+    }
+    .frame(width: 820, height: 560)
 }

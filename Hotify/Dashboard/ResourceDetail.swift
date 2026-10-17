@@ -230,6 +230,8 @@ struct ResourceDetail: View {
     @State private var removalPresentation = 0
     /// Move, clone, or migrate, while that sheet is open.
     @State private var placement: PlacementIntent?
+    /// Set while a service's compose file takes over the column. Its edits live in `configuration`, so closing keeps them.
+    @State private var editsCompose = false
     @State private var previewGeneration = 0
     @State private var followedPreviewDeployment: DeploymentLine?
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -297,6 +299,19 @@ struct ResourceDetail: View {
         #endif
     }
 
+    /// Swaps the column to the compose editor. The settings close first: the editor carries their Save itself, and an
+    /// iPhone's settings sheet would cover it.
+    private func openComposeEditor() {
+        showsSettings = false
+        editsCompose = true
+    }
+
+    /// Only a service has a compose file of its own.
+    private var composeEditorAction: (() -> Void)? {
+        guard resource.kind == .service else { return nil }
+        return openComposeEditor
+    }
+
     /// The deployment whose build output is in the column, which takes the back button until it closes.
     private var openDeployment: DeploymentLine? {
         Self.opensDeploymentInColumn && currentTab == .deployments ? selectedDeployment : nil
@@ -304,7 +319,8 @@ struct ResourceDetail: View {
 
     /// Names the screen in the toolbar. The resource's own name heads the screen below it.
     private var title: String {
-        switch previewPlace {
+        if editsCompose { return "Compose File" }
+        return switch previewPlace {
         case .board: "Previews"
         case .preview(let number): "PR #\(number)"
         case nil: openDeployment == nil ? resource.kind.title : "Deployment"
@@ -313,6 +329,13 @@ struct ResourceDetail: View {
 
     /// Where the toolbar's back button leads from the screen on show: one step out, innermost first.
     private var currentBack: DetailBack? {
+        if editsCompose {
+            // Back to the settings the editor opened from, which closed to give it the column.
+            return DetailBack(title: resource.name) {
+                editsCompose = false
+                showsSettings = true
+            }
+        }
         switch previewPlace {
         case .preview(let number):
             if followedPreviewDeployment != nil {
@@ -329,7 +352,8 @@ struct ResourceDetail: View {
         }
     }
 
-    var body: some View {
+    /// What fills the column: the previews, a service's compose file, or the resource itself.
+    private var column: some View {
         ZStack {
             if previewPlace != nil, case .application(let uuid) = resource.route {
                 PreviewSpace(
@@ -347,124 +371,139 @@ struct ResourceDetail: View {
                     onDeploy: { showsPreviewDeployment = true }
                 )
                 .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else if editsCompose, resource.kind == .service {
+                ComposeEditorScreen(
+                    model: configuration,
+                    resource: resource,
+                    pendingAction: pendingAction,
+                    onAction: onAction
+                )
+                .transition(.move(edge: .trailing).combined(with: .opacity))
             } else {
                 production
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
         }
         .animation(reduceMotion ? nil : .snappy, value: previewPlace == nil)
-        // A restart or deploy started anywhere puts saved variables and settings to use.
-        .onChange(of: pendingAction) { _, action in
-            if action == .start || action == .deploy || action == .restart {
-                variables.hasUnappliedChanges = false
-                configuration.hasUnappliedChanges = false
+        .animation(reduceMotion ? nil : .snappy, value: editsCompose)
+    }
+
+    var body: some View {
+        column
+            // A restart or deploy started anywhere puts saved variables and settings to use.
+            .onChange(of: pendingAction) { _, action in
+                if action == .start || action == .deploy || action == .restart {
+                    variables.hasUnappliedChanges = false
+                    configuration.hasUnappliedChanges = false
+                }
             }
-        }
-        .navigationTitle(title)
-        #if os(iOS)
+            .navigationTitle(title)
+            #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .replacesSystemBack(currentBack != nil)
-        .toolbar { toolbarContent }
-        .sheet(isPresented: $showsPreviewDeployment) {
-            if case .application(let uuid) = resource.route {
-                let generation = previewGeneration
-                PreviewDeploymentSheet(
-                    client: deploymentClient, application: uuid, previews: previews, resourceName: resource.name
-                ) {
-                    queued, number in
-                    guard generation == previewGeneration else { return }
-                    followedPreviewDeployment = previewsModel.noteQueued(queued, number: number)
-                    previewPlace = .preview(number)
+            #endif
+            .replacesSystemBack(currentBack != nil)
+            .toolbar { toolbarContent }
+            .sheet(isPresented: $showsPreviewDeployment) {
+                if case .application(let uuid) = resource.route {
+                    let generation = previewGeneration
+                    PreviewDeploymentSheet(
+                        client: deploymentClient, application: uuid, previews: previews, resourceName: resource.name
+                    ) {
+                        queued, number in
+                        guard generation == previewGeneration else { return }
+                        followedPreviewDeployment = previewsModel.noteQueued(queued, number: number)
+                        previewPlace = .preview(number)
+                    }
+                    .id(uuid)
                 }
-                .id(uuid)
             }
-        }
-        .sheet(isPresented: $showsGitHubAccess) {
-            GitHubAccessSheet(repository: previewsModel.repository) {
-                Task { await previewsModel.load() }
+            .sheet(isPresented: $showsGitHubAccess) {
+                GitHubAccessSheet(repository: previewsModel.repository) {
+                    Task { await previewsModel.load() }
+                }
             }
-        }
-        .sheet(
-            isPresented: $showsDeployVersion,
-            onDismiss: {
-                // A dialog can't show while the sheet leaves, so the handed-over rollback asks afterwards.
-                rollbackCandidate = rollbackAfterSheet
-                rollbackAfterSheet = nil
+            .sheet(
+                isPresented: $showsDeployVersion,
+                onDismiss: {
+                    // A dialog can't show while the sheet leaves, so the handed-over rollback asks afterwards.
+                    rollbackCandidate = rollbackAfterSheet
+                    rollbackAfterSheet = nil
+                }
+            ) {
+                if case .application(let uuid) = resource.route {
+                    DeployVersionSheet(
+                        model: DeployVersionModel(client: deploymentClient, application: uuid),
+                        resourceName: resource.name,
+                        keptImages: rollbackModel.images,
+                        onRollBack: { image in
+                            rollbackAfterSheet = RollbackCandidate(image: image, resourceName: resource.name)
+                        },
+                        onDeployed: { deployed, version in deployedVersion(deployed, version) }
+                    )
+                    .id(uuid)
+                }
             }
-        ) {
-            if case .application(let uuid) = resource.route {
-                DeployVersionSheet(
-                    model: DeployVersionModel(client: deploymentClient, application: uuid),
-                    resourceName: resource.name,
-                    keptImages: rollbackModel.images,
-                    onRollBack: { image in
-                        rollbackAfterSheet = RollbackCandidate(image: image, resourceName: resource.name)
+            .sheet(item: $placement) { intent in
+                PlacementSheet(intent: intent, resource: resource, client: deploymentClient)
+            }
+            .sheet(isPresented: $showsRemoval) {
+                ResourceRemovalDialog(
+                    name: resource.name,
+                    status: removal.status,
+                    onDelete: { options in
+                        Task { await remove(options) }
                     },
-                    onDeployed: { deployed, version in deployedVersion(deployed, version) }
+                    onCancel: {
+                        removal.cancel()
+                        showsRemoval = false
+                    }
                 )
-                .id(uuid)
+                .id(removalPresentation)
+                .interactiveDismissDisabled(removal.isRemoving)
             }
-        }
-        .sheet(item: $placement) { intent in
-            PlacementSheet(intent: intent, resource: resource, client: deploymentClient)
-        }
-        .sheet(isPresented: $showsRemoval) {
-            ResourceRemovalDialog(
-                name: resource.name,
-                status: removal.status,
-                onDelete: { options in
-                    Task { await remove(options) }
-                },
-                onCancel: {
-                    removal.cancel()
-                    showsRemoval = false
-                }
-            )
-            .id(removalPresentation)
-            .interactiveDismissDisabled(removal.isRemoving)
-        }
-        .onChange(of: showsRemoval) { _, isShown in
-            // Closing the dialog any way withdraws a delete the owner has not confirmed yet.
-            if !isShown { removal.cancel() }
-        }
-        .resourceGuide(isPresented: $showsGuide, kind: resource.kind)
-        .inspector(isPresented: $showsSettings) {
-            ConfigurationView(
-                model: configuration,
-                resource: resource,
-                pendingAction: pendingAction,
-                onAction: onAction
-            )
-            .inspectorColumnWidth(min: 300, ideal: 340, max: 480)
-        }
-        .onChange(of: resource.route) { _, _ in
-            previewGeneration += 1
-            showsPreviewDeployment = false
-            selectedDeployment = nil
-            previewPlace = nil
-            followedPreviewDeployment = nil
-            rollbackCandidate = nil
-            sheetRollbackCandidate = nil
-            showsDeployVersion = false
-            rollbackAfterSheet = nil
-            versionNotice = nil
-            showsRemoval = false
-            showsGuide = false
-            // A delete waiting on the owner was for the resource that left. It must not go to the next one.
-            removal.cancel()
-            placement = nil
-        }
-        .onDisappear { removal.cancel() }
-        .stopConfirmation(for: $stopCandidate) { _ in
-            onAction(.stop)
-        }
-        .task { followOpening() }
-        .onChange(of: rollbackModel.hasLoaded) { _, _ in askRollbackIfWanted() }
-        .rollbackConfirmation(for: $rollbackCandidate) { image in
-            rollBack(to: image)
-        }
-        #if os(iOS)
+            .onChange(of: showsRemoval) { _, isShown in
+                // Closing the dialog any way withdraws a delete the owner has not confirmed yet.
+                if !isShown { removal.cancel() }
+            }
+            .resourceGuide(isPresented: $showsGuide, kind: resource.kind)
+            .inspector(isPresented: $showsSettings) {
+                ConfigurationView(
+                    model: configuration,
+                    resource: resource,
+                    pendingAction: pendingAction,
+                    onAction: onAction,
+                    onEditCompose: composeEditorAction
+                )
+                .inspectorColumnWidth(min: 300, ideal: 340, max: 480)
+            }
+            .onChange(of: resource.route) { _, _ in
+                previewGeneration += 1
+                showsPreviewDeployment = false
+                selectedDeployment = nil
+                previewPlace = nil
+                followedPreviewDeployment = nil
+                rollbackCandidate = nil
+                sheetRollbackCandidate = nil
+                showsDeployVersion = false
+                rollbackAfterSheet = nil
+                versionNotice = nil
+                showsRemoval = false
+                showsGuide = false
+                // A delete waiting on the owner was for the resource that left. It must not go to the next one.
+                removal.cancel()
+                placement = nil
+                editsCompose = false
+            }
+            .onDisappear { removal.cancel() }
+            .stopConfirmation(for: $stopCandidate) { _ in
+                onAction(.stop)
+            }
+            .task { followOpening() }
+            .onChange(of: rollbackModel.hasLoaded) { _, _ in askRollbackIfWanted() }
+            .rollbackConfirmation(for: $rollbackCandidate) { image in
+                rollBack(to: image)
+            }
+            #if os(iOS)
         .sheet(item: $selectedDeployment) { deployment in
             NavigationStack {
                 DeploymentDetail(

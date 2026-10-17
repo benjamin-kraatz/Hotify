@@ -28,6 +28,8 @@ struct ResourceConfiguration: Hashable {
     var escapesDollarSigns = true
     var isPublic = false
     var publicPort: Int?
+    /// A service's compose file, exactly as written. `nil` for anything else, and when Coolify kept it from the token.
+    var compose: String?
 }
 
 /// The addresses of one container or compose service.
@@ -77,6 +79,7 @@ extension ResourceConfiguration {
         kind = .service
         name = service.name
         description = service.description ?? ""
+        compose = service.dockerComposeRaw
         hasContainerDomains = true
         containers = (service.applications ?? []).map { container in
             ContainerDomains(
@@ -162,11 +165,13 @@ extension ResourceConfiguration {
         return update
     }
 
-    /// Only the containers whose domains changed. Coolify leaves the others as they are.
+    /// Only the containers whose domains changed. Coolify leaves the others as they are. The compose file goes as
+    /// typed, never trimmed, since its whitespace is its structure.
     func serviceUpdate(from saved: Self, force: Bool) -> ServiceUpdate {
         var update = ServiceUpdate()
         if trimmedName != saved.trimmedName { update.name = trimmedName }
         if trimmedDescription != saved.trimmedDescription { update.description = trimmedDescription }
+        if let compose, compose != saved.compose { update.dockerComposeRaw = compose }
         let before = Dictionary(saved.containers.map { ($0.name, Self.joined($0.domains)) }) { first, _ in first }
         let changed = containers.filter { Self.joined($0.domains) != before[$0.name] }
         if !changed.isEmpty {
@@ -212,6 +217,9 @@ extension ResourceConfiguration {
         }
         if let problem = source?.problem {
             return problem
+        }
+        if let compose, let blocking = ComposeCheck(compose).findings.first(where: { $0.severity == .blocking }) {
+            return blocking.message
         }
         let addresses = hasContainerDomains ? containers.flatMap(\.domains) : domains
         if let bad = addresses.map({ $0.trimmingCharacters(in: .whitespaces) }).first(where: {
