@@ -110,7 +110,9 @@ struct InstanceWatch {
                 title: now.name,
                 subtitle: Self.placeLine(now.place),
                 body: now.heat == .cold ? "Stopped running." : "Turned unhealthy.",
-                link: ResourceLink(instanceID: instanceID, route: route).url
+                link: ResourceLink(instanceID: instanceID, route: route).url,
+                route: route,
+                place: now.place
             )
         }
     }
@@ -172,30 +174,44 @@ struct InstanceWatch {
         let link = { (place: ResourceLink.Place) in
             seen.route.map { ResourceLink(instanceID: instanceID, route: $0, place: place).url }
         }
+        let identity = { (notice: Notice) in
+            var notice = notice
+            notice.route = seen.route
+            notice.place = seen.place
+            notice.deploymentID = id
+            notice.pullRequest = seen.pullRequest
+            notice.commit = deployment.commit
+            notice.commitMessage = deployment.commitMessage
+            notice.eventKey = "deployment/\(id)"
+            return notice
+        }
         switch deployment.status {
         case "failed":
-            return Notice(
-                instanceID: instanceID,
-                event: .deploymentFailed,
-                title: seen.name,
-                subtitle: placeLine(seen.place),
-                body: (seen.pullRequest > 0 ? "Preview #\(seen.pullRequest) failed." : "Deployment failed.") + detail,
-                link: link(.deployment(id, explains: false)),
-                explainLink: link(.deployment(id, explains: true)),
-                // A preview's failure leaves production as it was, so there is nothing to roll back.
-                rollbackLink: seen.pullRequest > 0 ? nil : link(.rollback)
-            )
+            return identity(
+                Notice(
+                    instanceID: instanceID,
+                    event: .deploymentFailed,
+                    title: seen.name,
+                    subtitle: placeLine(seen.place),
+                    body: (seen.pullRequest > 0 ? "Preview #\(seen.pullRequest) failed." : "Deployment failed.")
+                        + detail,
+                    link: link(.deployment(id, explains: false)),
+                    explainLink: link(.deployment(id, explains: true)),
+                    // A preview's failure leaves production as it was, so there is nothing to roll back.
+                    rollbackLink: seen.pullRequest > 0 ? nil : link(.rollback)
+                ))
         case "finished":
             // A deploy noted here a little before Coolify listed it counts as this device's.
             let isLocal = seen.route.map { LocalActions.deployed($0, since: seen.firstSeen.addingTimeInterval(-180)) }
-            return Notice(
-                instanceID: instanceID,
-                event: isLocal == true ? .deploymentFinished : .deploymentFinishedElsewhere,
-                title: seen.name,
-                subtitle: placeLine(seen.place),
-                body: (seen.pullRequest > 0 ? "Preview #\(seen.pullRequest) is ready." : "Deployed.") + detail,
-                link: link(.deployment(id, explains: false))
-            )
+            return identity(
+                Notice(
+                    instanceID: instanceID,
+                    event: isLocal == true ? .deploymentFinished : .deploymentFinishedElsewhere,
+                    title: seen.name,
+                    subtitle: placeLine(seen.place),
+                    body: (seen.pullRequest > 0 ? "Preview #\(seen.pullRequest) is ready." : "Deployed.") + detail,
+                    link: link(.deployment(id, explains: false))
+                ))
         default:
             // Cancelled, or a status Hotify doesn't know. Neither is news.
             return nil
@@ -227,14 +243,16 @@ struct InstanceWatch {
                         Notice(
                             instanceID: instanceID, event: .backupFailed, title: name,
                             subtitle: Self.placeLine(summary?.place),
-                            body: "Backup failed." + (run.message.map { "\n\($0)" } ?? ""), link: link))
+                            body: "Backup failed." + (run.message.map { "\n\($0)" } ?? ""), link: link,
+                            route: .database(database.uuid), place: summary?.place, eventKey: "backup/\(run.uuid)"))
                 }
                 if seen.isOverdue, !before.isOverdue {
                     notices.append(
                         Notice(
                             instanceID: instanceID, event: .backupFailed, title: name,
                             subtitle: Self.placeLine(summary?.place),
-                            body: "No good backup since the schedule's last run was due.", link: link))
+                            body: "No good backup since the schedule's last run was due.", link: link,
+                            route: .database(database.uuid), place: summary?.place))
                 }
             }
         }

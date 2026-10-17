@@ -17,6 +17,7 @@ struct SettingsView: View {
             MenuBarSettings()
             NotificationSettingsSection()
             #endif
+            AutomationsSection()
             Section {
                 Toggle(
                     isOn: Binding(
@@ -95,6 +96,7 @@ struct SettingsView: View {
         .environment(MenuBarModel(preview: true))
         .environment(NotificationSettings(defaults: nil))
         .environment(InstanceStore(instances: []))
+        .environment(AutomationStore(defaults: nil))
         .environment(VariableLock(isRequired: true))
 }
 
@@ -103,5 +105,6 @@ struct SettingsView: View {
         .environment(MenuBarModel(preview: true))
         .environment(NotificationSettings(defaults: nil))
         .environment(InstanceStore(instances: []))
+        .environment(AutomationStore(defaults: nil))
         .environment(VariableLock(isRequired: false))
 }
