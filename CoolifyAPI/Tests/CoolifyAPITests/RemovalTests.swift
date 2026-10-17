@@ -100,6 +100,77 @@ final class RemovalTests: XCTestCase {
     }
 }
 
+final class RemovalTargetTests: XCTestCase {
+    func testResourceTargetSendsItsKindAndOptions() async throws {
+        let requests = RemovalRequestLog()
+        let client = try makeRemovalClient { request in
+            requests.append(request)
+            return (200, Data(), [:])
+        }
+        _ = try await client.remove(
+            .resource(
+                uuid: "db/9", kind: .database,
+                options: RemovalOptions(configurations: false, volumes: true, dockerCleanup: true)))
+        let sent = requests.all
+        XCTAssertEqual(sent.count, 1)
+        XCTAssertEqual(sent.first?.httpMethod, "DELETE")
+        XCTAssertTrue(sent.first.map(removalWire)?.contains("/api/v1/databases/db%2F9?") == true)
+        XCTAssertEqual(
+            sent.first.map(removalQuery),
+            [
+                URLQueryItem(name: "delete_configurations", value: "false"),
+                URLQueryItem(name: "delete_volumes", value: "true"),
+                URLQueryItem(name: "docker_cleanup", value: "true"),
+                URLQueryItem(name: "delete_connected_networks", value: "false"),
+            ]
+        )
+    }
+
+    func testProjectTargetDeletesOnlyTheProject() async throws {
+        let requests = RemovalRequestLog()
+        let client = try makeRemovalClient { request in
+            requests.append(request)
+            return (200, Data(), [:])
+        }
+        _ = try await client.remove(.project(uuid: "proj/1"))
+        XCTAssertEqual(requests.all.map(\.httpMethod), ["DELETE"])
+        XCTAssertEqual(requests.all.map(removalWire), ["http://coolify.example:8000/api/v1/projects/proj%2F1"])
+    }
+
+    func testEnvironmentTargetDeletesInItsProject() async throws {
+        let requests = RemovalRequestLog()
+        let client = try makeRemovalClient { request in
+            requests.append(request)
+            return (200, Data(), [:])
+        }
+        _ = try await client.remove(.environment("staging", project: "proj/1"))
+        XCTAssertEqual(requests.all.map(\.httpMethod), ["DELETE"])
+        XCTAssertEqual(
+            requests.all.map(removalWire),
+            ["http://coolify.example:8000/api/v1/projects/proj%2F1/environments/staging"]
+        )
+    }
+
+    func testTargetsDifferByEveryPart() {
+        let base = RemovalTarget.resource(uuid: "a", kind: .application, options: RemovalOptions())
+        XCTAssertNotEqual(base, .resource(uuid: "b", kind: .application, options: RemovalOptions()))
+        XCTAssertNotEqual(base, .resource(uuid: "a", kind: .service, options: RemovalOptions()))
+        XCTAssertNotEqual(base, .resource(uuid: "a", kind: .application, options: RemovalOptions(volumes: true)))
+        XCTAssertNotEqual(RemovalTarget.environment("a", project: "p"), .environment("a", project: "q"))
+    }
+}
+
+private final class RemovalRequestLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests: [URLRequest] = []
+
+    func append(_ request: URLRequest) {
+        lock.withLock { requests.append(request) }
+    }
+
+    var all: [URLRequest] { lock.withLock { requests } }
+}
+
 private func makeRemovalClient(
     responder: @escaping @Sendable (URLRequest) throws -> (Int, Data, [String: String])
 ) throws -> CoolifyClient {

@@ -220,8 +220,7 @@ struct ResourceDetail: View {
     @State private var showsPreviewDeployment = false
     @State private var showsGitHubAccess = false
     @State private var showsRemoval = false
-    @State private var isRemoving = false
-    @State private var removalError: String?
+    @State private var removal = CoolifyRemovalGate()
     /// A new value gives the confirmation fresh switches, so volumes start off every time it opens.
     @State private var removalPresentation = 0
     /// Move, clone, or migrate, while that sheet is open.
@@ -421,10 +420,12 @@ struct ResourceDetail: View {
             rollbackAfterSheet = nil
             versionNotice = nil
             showsRemoval = false
-            removalError = nil
+            // A delete waiting on the owner was for the resource that left. It must not go to the next one.
+            removal.cancel()
             placement = nil
             editsCompose = false
         }
+        .onDisappear { removal.cancel() }
         .stopConfirmation(for: $stopCandidate) { _ in
             onAction(.stop)
         }
@@ -516,7 +517,7 @@ struct ResourceDetail: View {
         }
         ToolbarItem(placement: .primaryAction) {
             Button("Delete", systemImage: "trash") {
-                removalError = nil
+                removal.cancel()
                 removalPresentation += 1
                 showsRemoval = true
             }
@@ -525,17 +526,20 @@ struct ResourceDetail: View {
             .popover(isPresented: $showsRemoval, arrowEdge: .bottom) {
                 ResourceRemovalDialog(
                     name: resource.name,
-                    isDeleting: isRemoving,
-                    error: removalError,
+                    status: removal.status,
                     onDelete: { options in
                         Task { await remove(options) }
                     },
                     onCancel: {
-                        removalError = nil
+                        removal.cancel()
                         showsRemoval = false
                     }
                 )
                 .id(removalPresentation)
+            }
+            .onChange(of: showsRemoval) { _, isShown in
+                // Closing the dialog any way withdraws a delete the owner has not confirmed yet.
+                if !isShown { removal.cancel() }
             }
         }
         ToolbarItem(placement: .primaryAction) {
@@ -543,19 +547,16 @@ struct ResourceDetail: View {
         }
     }
 
-    /// Asks Coolify to delete the resource, then leaves the detail column.
+    /// Asks the owner, then Coolify, to delete the resource, then leaves the detail column if it is still on screen.
     private func remove(_ options: RemovalOptions) async {
-        guard let deploymentClient, !isRemoving else { return }
-        isRemoving = true
-        removalError = nil
-        defer { isRemoving = false }
-        do {
-            _ = try await deploymentClient.deleteResource(resource.route.uuid, kind: removalKind, options: options)
-            showsRemoval = false
-            onDeleted()
-        } catch {
-            removalError = (error as? CoolifyError)?.summary ?? error.localizedDescription
-        }
+        guard let deploymentClient else { return }
+        let route = resource.route
+        let target = RemovalTarget.resource(uuid: route.uuid, kind: removalKind, options: options)
+        guard await removal.remove(target, named: resource.name, with: deploymentClient) == .removed,
+            resource.route == route
+        else { return }
+        showsRemoval = false
+        onDeleted()
     }
 
     private var removalKind: RemovalKind {
