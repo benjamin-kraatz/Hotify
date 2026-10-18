@@ -17,82 +17,89 @@ struct AlertSecretField: View {
 
     /// Missing in previews, which show stored values as they are.
     @SwiftUI.Environment(VariableLock.self) private var lock: VariableLock?
+    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isRevealed = false
 
     private var isOpen: Bool { lock?.isOpen ?? true }
+    private var showsStored: Bool { stored != nil && isRevealed && isOpen }
 
     private var prompt: String {
-        if stored != nil { return "Saved in Coolify. Type to replace it." }
-        if isWithheld { return "Kept by Coolify. Type to replace it." }
+        if stored != nil { return "Saved in Coolify" }
+        if isWithheld { return "Kept by Coolify" }
         return example
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if isRemoved {
-                LabeledContent(title) {
+            LabeledContent {
+                if isRemoved {
                     HStack(spacing: 8) {
-                        Text("Removed when you save")
+                        Text("Removed on save")
                             .foregroundStyle(.secondary)
                         Button("Undo") { isRemoved = false }
+                            .buttonStyle(.borderless)
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        SecureField(title, text: $text, prompt: Text(verbatim: prompt))
+                            .labelsHidden()
+                            .multilineTextAlignment(.trailing)
+                            .autocorrectionDisabled()
+                            #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .textContentType(.none)
+                            #endif
+                        if stored != nil {
+                            Button(
+                                showsStored ? "Hide saved \(title)" : "Show saved \(title)",
+                                systemImage: showsStored ? "eye.slash" : "eye"
+                            ) {
+                                Task { await toggleReveal() }
+                            }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.borderless)
+                            .contentTransition(.symbolEffect(.replace))
+                            .help(showsStored ? "Hide the saved value" : "Show the saved value")
+                        }
+                        if stored != nil || isWithheld {
+                            Button("Remove \(title)", systemImage: "trash") {
+                                text = ""
+                                isRevealed = false
+                                isRemoved = true
+                            }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.borderless)
+                            .help("Remove the saved value when you save")
+                        }
                     }
                 }
-            } else {
-                HStack(spacing: 8) {
-                    SecureField(title, text: $text, prompt: Text(prompt))
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .textContentType(.none)
-                        #endif
-                    if stored != nil {
-                        Button(
-                            isRevealed && isOpen ? "Hide saved value" : "Show saved value",
-                            systemImage: isRevealed && isOpen ? "eye.slash" : "eye"
-                        ) {
-                            Task { await toggleReveal() }
-                        }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.borderless)
-                        .help(isRevealed && isOpen ? "Hide the saved value" : "Show the saved value")
-                    }
-                    if stored != nil || isWithheld {
-                        Button("Remove \(title)", systemImage: "trash") {
-                            text = ""
-                            isRevealed = false
-                            isRemoved = true
-                        }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.borderless)
-                        .help("Remove the saved value when you save")
-                    }
-                }
-                if let stored, isRevealed, isOpen {
-                    Text(verbatim: stored)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                        .accessibilityLabel("Saved \(title)")
-                        .accessibilityValue(stored)
+            } label: {
+                Text(title)
+                if let problem {
+                    Text(problem)
+                        .foregroundStyle(.glow)
                 }
             }
-            if let problem {
-                Text(problem)
-                    .font(.caption)
-                    .foregroundStyle(.glow)
+            if let stored, showsStored, !isRemoved {
+                Text(verbatim: stored)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .accessibilityLabel("Saved \(title)")
+                    .accessibilityValue(stored)
             }
         }
         .onChange(of: isOpen) { _, isOpen in
             if !isOpen { isRevealed = false }
         }
-        .animation(.snappy, value: isRevealed && isOpen)
-        .animation(.snappy, value: isRemoved)
+        .animation(reduceMotion ? nil : .snappy, value: showsStored)
+        .animation(reduceMotion ? nil : .snappy, value: isRemoved)
     }
 
     private func toggleReveal() async {
-        if isRevealed && isOpen {
+        if showsStored {
             isRevealed = false
             return
         }
@@ -132,7 +139,15 @@ struct AlertSecretField: View {
             isRemoved: .constant(false),
             problem: "Required while Pushover is on."
         )
+        AlertSecretField(
+            title: "User key",
+            example: "Your Pushover user key",
+            stored: nil,
+            isWithheld: true,
+            text: .constant(""),
+            isRemoved: .constant(true)
+        )
     }
     .formStyle(.grouped)
-    .frame(width: 480, height: 320)
+    .frame(width: 480, height: 360)
 }

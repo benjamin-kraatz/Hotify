@@ -67,9 +67,9 @@ struct CoolifyAlertsSection: View {
 
     private var explanation: String {
         #if os(macOS)
-        "Coolify sends these alerts itself, so they keep coming while Hotify is closed. They reach everyone the team sets up, not only this Mac. Hotify’s own notifications are under Notifications."
+        "Coolify sends these from the instance, so they arrive while Hotify is closed, and they go to the whole team, not only this Mac. Hotify’s own notifications are under Notifications."
         #else
-        "Coolify sends these alerts itself, so they keep coming while Hotify is closed. They reach everyone the team sets up, not only this device."
+        "Coolify sends these from the instance, so they arrive while Hotify is closed, and they go to the whole team, not only this device."
         #endif
     }
 
@@ -100,7 +100,8 @@ struct CoolifyAlertsSection: View {
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
-                .help("Read the alert settings from Coolify again")
+                .help("Read the settings from Coolify again")
+                .accessibilityLabel("Reload alert settings")
             }
         }
         .accessibilityElement(children: .contain)
@@ -154,6 +155,7 @@ struct CoolifyAlertsSection: View {
                         .font(.caption)
                         .foregroundStyle(failure == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.glow))
                         .lineLimit(2)
+                        .contentTransition(.opacity)
                 }
                 Spacer(minLength: 8)
                 if settings != nil {
@@ -168,15 +170,16 @@ struct CoolifyAlertsSection: View {
         .buttonStyle(.plain)
         .disabled(settings == nil)
         .accessibilityElement(children: .combine)
-        .accessibilityHint(settings == nil ? "" : "Opens its alert settings")
+        .accessibilityHint(settings == nil ? "" : "Opens its settings")
     }
 
+    /// One line under the channel's name: off, or on with how it sends and how many events it carries.
     private func status(_ settings: NotificationChannelSettings?, failure: String?) -> String {
         if let failure { return failure }
         guard let settings else { return "Not read yet" }
         guard settings.isEnabled else { return "Off" }
         let count = settings.subscribedEvents.count
-        let events = count == 0 ? "no events chosen" : count == 1 ? "1 event" : "\(count) events"
+        let events = count == 0 ? "no events yet" : count == 1 ? "1 event" : "\(count) events"
         if settings.channel == .email {
             let draft = AlertChannelDraft(settings: settings)
             return "On · \(draft.emailTransport.title) · \(events)"

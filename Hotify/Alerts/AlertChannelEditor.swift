@@ -11,6 +11,8 @@ struct AlertChannelEditor: View {
     @SwiftUI.Environment(\.dismiss) private var dismiss
     @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var draft: AlertChannelDraft
+    /// The way email last went out in this sheet, so turning it back on picks that up again.
+    @State private var lastTransport: AlertChannelDraft.EmailTransport
     @State private var isSaving = false
     @State private var saveError: String?
     @State private var fieldErrors: [String: String] = [:]
@@ -23,7 +25,10 @@ struct AlertChannelEditor: View {
     ) {
         self.instanceName = instanceName
         self.onSave = onSave
-        _draft = State(initialValue: AlertChannelDraft(settings: settings))
+        let draft = AlertChannelDraft(settings: settings)
+        _draft = State(initialValue: draft)
+        let transport = draft.emailTransport == .off ? draft.emailTransports.first { $0 != .off } : draft.emailTransport
+        _lastTransport = State(initialValue: transport ?? .off)
     }
 
     private var channel: NotificationChannel { draft.channel }
@@ -32,33 +37,22 @@ struct AlertChannelEditor: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                switchSection
-                if channel.fields.contains(where: \.isHidden), !draft.settings.revealsSensitiveValues {
-                    Section {
-                        Label(
-                            "This token can’t read the addresses and keys Coolify saved. Blank fields keep them.",
-                            systemImage: "eye.slash"
-                        )
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                destinationSections
-                eventSections
+            VStack(spacing: 0) {
                 if let saveError {
-                    Section {
-                        Label(saveError, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.glow)
-                            .textSelection(.enabled)
-                        if let other = fieldErrors[""] {
-                            Text(other)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                    NoticeBanner(message: [saveError, fieldErrors[""]].compactMap { $0 }.joined(separator: " "))
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
                 }
+                Form {
+                    switchSection
+                    destinationSections
+                    eventSections
+                }
+                .formStyle(.grouped)
             }
-            .formStyle(.grouped)
+            #if os(iOS)
+            .background(Color(.systemGroupedBackground))
+            #endif
             .navigationTitle(channel.title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -67,6 +61,9 @@ struct AlertChannelEditor: View {
             .onChange(of: draft) { _, _ in
                 saveError = nil
                 fieldErrors = [:]
+            }
+            .onChange(of: draft.emailTransport) { _, transport in
+                if transport != .off { lastTransport = transport }
             }
             .confirmationDialog(
                 "Discard your changes to \(channel.title)?",
@@ -78,11 +75,13 @@ struct AlertChannelEditor: View {
             }
             .animation(reduceMotion ? nil : .snappy, value: draft.isEnabled)
             .animation(reduceMotion ? nil : .snappy, value: draft.emailTransport)
+            .animation(reduceMotion ? nil : .snappy, value: draft.toggles)
+            .animation(reduceMotion ? nil : .snappy, value: draft.cleared)
             .animation(reduceMotion ? nil : .snappy, value: saveError)
         }
         .interactiveDismissDisabled(draft.hasChanges)
         #if os(macOS)
-        .frame(minWidth: 460, idealWidth: 520, minHeight: 560, idealHeight: 680)
+        .frame(minWidth: 480, idealWidth: 540, minHeight: 560, idealHeight: 700)
         #endif
     }
 
@@ -107,59 +106,82 @@ struct AlertChannelEditor: View {
                 }
                 .disabled(!canSave)
                 .keyboardShortcut(.defaultAction)
+                .help(saveHelp)
             }
         }
     }
 
-    // MARK: Sections
+    private var saveHelp: String {
+        if !draft.hasChanges { return "Nothing has changed yet" }
+        if !problems.isEmpty { return "Fix the marked fields first" }
+        return "Send the changes to Coolify"
+    }
+
+    // MARK: The switch
 
     private var switchSection: some View {
         Section {
-            HStack(spacing: 12) {
-                AlertChannelIcon(channel: channel, isOn: draft.isEnabled)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(channel.title)
-                        .font(.headline)
-                    Text("Sent by Coolify on \(instanceName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            Toggle(isOn: channel == .email ? emailIsOn : isEnabled) {
+                HStack(spacing: 12) {
+                    AlertChannelIcon(channel: channel, isOn: draft.isEnabled)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(channel == .email ? "Send alerts by email" : "Send alerts to \(channel.title)")
+                        Text(channel.destination)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
-            if channel == .email {
+            if channel == .email, draft.emailTransport != .off {
                 Picker("Send with", selection: $draft.emailTransport) {
-                    ForEach(draft.emailTransports) { transport in
+                    ForEach(draft.emailTransports.filter { $0 != .off }) { transport in
                         Text(transport.title).tag(transport)
                     }
                 }
-            } else {
-                Toggle(isOn: Binding(get: { draft.isEnabled }, set: { draft.setEnabled($0) })) {
-                    Text("Send alerts to \(channel.title)")
-                    Text(channel.destination)
-                }
             }
         } footer: {
-            if channel == .email {
-                Text(emailFooter)
-            }
+            Text(switchFooter)
         }
     }
 
-    private var emailFooter: String {
-        switch draft.emailTransport {
-        case .off: "Coolify sends no alert email for this team."
-        case .instance:
-            "Uses the mail server in Coolify’s instance settings. Only an instance admin can change that server."
-        case .smtp: "Coolify sends through your own mail server."
-        case .resend: "Coolify sends through your Resend account."
-        }
+    private var isEnabled: Binding<Bool> {
+        Binding(get: { draft.isEnabled }, set: { draft.setEnabled($0) })
     }
+
+    private var emailIsOn: Binding<Bool> {
+        Binding(
+            get: { draft.emailTransport != .off },
+            set: { isOn in draft.emailTransport = isOn ? lastTransport : .off }
+        )
+    }
+
+    private var switchFooter: String {
+        var lines = ["Coolify on \(instanceName) sends these to the whole team."]
+        if channel == .email {
+            switch draft.emailTransport {
+            case .off: break
+            case .instance:
+                lines.append(
+                    "It uses the mail server in the instance settings, which only an instance admin can change.")
+            case .smtp: lines.append("It sends through your own mail server.")
+            case .resend: lines.append("It sends through your Resend account.")
+            }
+        }
+        if !draft.settings.revealsSensitiveValues {
+            lines.append(
+                "This token can’t read the values Coolify saved, so those fields start blank. Blank keeps them.")
+        }
+        return lines.joined(separator: " ")
+    }
+
+    // MARK: Where it sends
 
     @ViewBuilder
     private var destinationSections: some View {
         switch channel {
         case .email:
             if draft.emailTransport != .off {
-                fieldSection(["smtp_recipients"], footer: "Separate addresses with commas.")
+                fieldSection(["smtp_recipients"], header: "Recipients", footer: "Separate addresses with commas.")
             }
             if draft.emailTransport == .smtp || draft.emailTransport == .resend {
                 fieldSection(["smtp_from_address", "smtp_from_name"], header: "Sender")
@@ -170,7 +192,8 @@ struct AlertChannelEditor: View {
                         "smtp_host", "smtp_port", "smtp_encryption", "smtp_username", "smtp_password",
                         "smtp_timeout", "smtp_ehlo_domain",
                     ],
-                    header: "Mail Server"
+                    header: "Mail Server",
+                    footer: "Username, password, timeout, and EHLO domain can stay blank."
                 )
             }
             if draft.emailTransport == .resend {
@@ -209,29 +232,74 @@ struct AlertChannelEditor: View {
         }
     }
 
-    private var eventSections: some View {
-        ForEach(AlertEventGroup.allCases) { group in
+    // MARK: Events
+
+    /// The groups with at least one event this Coolify version offers on the channel.
+    private var eventGroups: [(group: AlertEventGroup, events: [NotificationChannelEvent])] {
+        AlertEventGroup.allCases.compactMap { group in
             let events = group.events.filter { draft.toggles[channel.eventKey($0)] != nil }
-            if !events.isEmpty {
-                Section {
-                    ForEach(events) { event in
-                        Toggle(event.title, isOn: toggle(channel.eventKey(event)))
-                        if let thread = channel.threadKey(event), draft.isOn(channel.eventKey(event)),
-                            draft.texts[thread] != nil
-                        {
-                            fieldRows([thread])
-                                .padding(.leading, 20)
-                        }
+            return events.isEmpty ? nil : (group, events)
+        }
+    }
+
+    /// The first group that shows a topic field, which is where the field is explained.
+    private var firstGroupWithTopic: AlertEventGroup? {
+        eventGroups.first { _, events in events.contains { showsTopic($0) } }?.group
+    }
+
+    private var eventSections: some View {
+        let groups = eventGroups
+        return ForEach(groups, id: \.group) { group, events in
+            Section {
+                ForEach(events) { event in
+                    Toggle(event.title, isOn: toggle(channel.eventKey(event)))
+                    if showsTopic(event), let thread = channel.threadKey(event) {
+                        fieldRows([thread])
+                            .padding(.leading, 20)
                     }
-                } header: {
+                }
+            } header: {
+                if group == groups.first?.group {
+                    HStack {
+                        Text(group.title)
+                        Spacer()
+                        eventPicks
+                    }
+                } else {
                     Text(group.title)
-                } footer: {
-                    if group == .servers, channel == .telegram {
-                        Text("A topic ID posts that event to one thread of a forum chat.")
-                    }
+                }
+            } footer: {
+                if group == firstGroupWithTopic {
+                    Text("A topic ID posts the event to one topic of a forum chat. Blank posts to the main chat.")
                 }
             }
         }
+    }
+
+    /// Flips every event the channel offers at once. Only the ones that change are sent.
+    private var eventPicks: some View {
+        Menu("Select") {
+            Button("All Events") { pickEvents { _ in true } }
+            Button("Problems Only") { pickEvents(\.isProblem) }
+            Button("None") { pickEvents { _ in false } }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.borderless)
+        .fixedSize()
+        .textCase(nil)
+        .accessibilityLabel("Select events")
+        .help("Turn every event on, keep the problems, or turn them all off")
+    }
+
+    private func pickEvents(_ isOn: (NotificationChannelEvent) -> Bool) {
+        for event in NotificationChannelEvent.allCases where draft.toggles[channel.eventKey(event)] != nil {
+            draft.toggles[channel.eventKey(event)] = isOn(event)
+        }
+    }
+
+    private func showsTopic(_ event: NotificationChannelEvent) -> Bool {
+        guard let thread = channel.threadKey(event), draft.texts[thread] != nil else { return false }
+        return draft.isOn(channel.eventKey(event))
     }
 
     // MARK: Fields
@@ -268,16 +336,19 @@ struct AlertChannelEditor: View {
                 problem: problem
             )
         } else if case .choice(let options) = field.kind {
-            VStack(alignment: .leading, spacing: 4) {
-                Picker(label.title, selection: text(field.key)) {
-                    if (draft.texts[field.key] ?? "").isEmpty {
-                        Text("Not set").tag("")
-                    }
-                    ForEach(options, id: \.self) { option in
-                        Text(AlertFieldLabel.encryptionTitle(option)).tag(option)
-                    }
+            Picker(selection: text(field.key)) {
+                if (draft.texts[field.key] ?? "").isEmpty {
+                    Text("Not set").tag("")
                 }
-                problemText(problem)
+                ForEach(options, id: \.self) { option in
+                    Text(AlertFieldLabel.encryptionTitle(option)).tag(option)
+                }
+            } label: {
+                Text(label.title)
+                if let problem {
+                    Text(problem)
+                        .foregroundStyle(.glow)
+                }
             }
         } else {
             AlertTextFieldRow(
@@ -288,15 +359,6 @@ struct AlertChannelEditor: View {
                 isRemoved: removed(field.key),
                 problem: problem
             )
-        }
-    }
-
-    @ViewBuilder
-    private func problemText(_ problem: String?) -> some View {
-        if let problem {
-            Text(problem)
-                .font(.caption)
-                .foregroundStyle(.glow)
         }
     }
 
@@ -343,7 +405,9 @@ struct AlertChannelEditor: View {
     }
 }
 
-/// A plain setting: text, an address, or a number. A withheld one starts blank, which keeps it, and can be removed.
+/// A plain setting: text, an address, or a number, with its label beside it, as iOS shows only the prompt of a
+/// bare field. A withheld one starts blank, which keeps it, and can be removed. The recipients list takes the whole
+/// row, since it grows past one line.
 private struct AlertTextFieldRow: View {
     var field: NotificationSettingField
     var label: AlertFieldLabel
@@ -352,53 +416,97 @@ private struct AlertTextFieldRow: View {
     @Binding var isRemoved: Bool
     var problem: String?
 
+    private var isWide: Bool { field.key == "smtp_recipients" }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if isRemoved {
-                LabeledContent(label.title) {
+        if isWide {
+            VStack(alignment: .leading, spacing: 4) {
+                if isRemoved {
+                    removedRow
+                } else {
+                    HStack(alignment: .top, spacing: 8) {
+                        TextField(label.title, text: $text, prompt: Text(verbatim: prompt), axis: .vertical)
+                            .lineLimit(1...4)
+                            .labelsHidden()
+                            .autocorrectionDisabled()
+                            #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                            #endif
+                        removeButton
+                    }
+                }
+                if let problem {
+                    Text(problem)
+                        .font(.caption)
+                        .foregroundStyle(.glow)
+                }
+            }
+        } else {
+            LabeledContent {
+                if isRemoved {
+                    removedRow
+                } else {
                     HStack(spacing: 8) {
-                        Text("Removed when you save")
-                            .foregroundStyle(.secondary)
-                        Button("Undo") { isRemoved = false }
+                        TextField(label.title, text: $text, prompt: Text(verbatim: prompt))
+                            .labelsHidden()
+                            .multilineTextAlignment(.trailing)
+                            .autocorrectionDisabled()
+                            #if os(iOS)
+                        .textInputAutocapitalization(field.key == "smtp_from_name" ? .words : .never)
+                        .keyboardType(keyboard)
+                            #endif
+                        removeButton
                     }
                 }
-            } else {
-                HStack(spacing: 8) {
-                    TextField(
-                        label.title,
-                        text: $text,
-                        prompt: Text(isWithheld ? "Kept by Coolify. Type to replace it." : label.prompt)
-                    )
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(field.key == "smtp_from_name" ? .words : .never)
-                    .keyboardType(keyboard)
-                    #endif
-                    if isWithheld {
-                        Button("Remove \(label.title)", systemImage: "trash") {
-                            isRemoved = true
-                        }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.borderless)
-                        .help("Remove the saved value when you save")
-                    }
+            } label: {
+                Text(label.title)
+                if let problem {
+                    Text(problem)
+                        .foregroundStyle(.glow)
                 }
             }
-            if let problem {
-                Text(problem)
-                    .font(.caption)
-                    .foregroundStyle(.glow)
+        }
+    }
+
+    private var prompt: String {
+        isWithheld ? "Kept by Coolify" : label.prompt
+    }
+
+    private var removedRow: some View {
+        HStack(spacing: 8) {
+            Text("Removed on save")
+                .foregroundStyle(.secondary)
+            Button("Undo") { isRemoved = false }
+                .buttonStyle(.borderless)
+        }
+    }
+
+    @ViewBuilder
+    private var removeButton: some View {
+        if isWithheld {
+            Button("Remove \(label.title)", systemImage: "trash") {
+                isRemoved = true
             }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .help("Remove the saved value when you save")
         }
     }
 
     #if os(iOS)
     private var keyboard: UIKeyboardType {
         switch field.kind {
-        case .email: .emailAddress
-        case .url, .hostname: .URL
-        case .integer: .numberPad
-        default: field.key == "smtp_recipients" ? .emailAddress : .default
+        case .email: return .emailAddress
+        case .url, .hostname: return .URL
+        case .integer: return .numberPad
+        default: break
+        }
+        switch field.key {
+        case "smtp_host": return .URL
+        // A group's chat ID is a negative number, which the number pad can't type.
+        case "telegram_chat_id": return .numbersAndPunctuation
+        default: return field.key.hasPrefix("telegram_notifications_") ? .numberPad : .default
         }
     }
     #endif
@@ -455,6 +563,8 @@ private struct AlertTextFieldRow: View {
                 "telegram_chat_id": .null,
                 "deployment_failure_telegram_notifications": .bool(true),
                 "telegram_notifications_deployment_failure_thread_id": .null,
+                "backup_failure_telegram_notifications": .bool(false),
+                "telegram_notifications_backup_failure_thread_id": .null,
             ]
         ),
         instanceName: "Production",

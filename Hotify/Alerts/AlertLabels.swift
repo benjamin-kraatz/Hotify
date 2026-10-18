@@ -27,12 +27,12 @@ extension NotificationChannel {
     /// Where the alerts land, said once under the channel's switch.
     var destination: String {
         switch self {
-        case .email: "Coolify emails the recipients you list."
-        case .discord: "Coolify posts to a Discord channel through its webhook."
-        case .slack: "Coolify posts to a Slack channel through an incoming webhook."
-        case .telegram: "Coolify's bot posts to a Telegram chat."
-        case .pushover: "Coolify pushes to your devices through Pushover."
-        case .webhook: "Coolify sends each alert as JSON to your URL."
+        case .email: "Emails the recipients you list."
+        case .discord: "Posts to a Discord channel through its webhook."
+        case .slack: "Posts to a Slack channel through an incoming webhook."
+        case .telegram: "A bot posts to a Telegram chat."
+        case .pushover: "Pushes to your devices through Pushover."
+        case .webhook: "Sends each alert as JSON to your URL."
         }
     }
 }
@@ -93,6 +93,17 @@ extension NotificationChannelEvent {
         }
     }
 
+    /// Whether the event says something went wrong, as against finished, came back, or could be updated.
+    var isProblem: Bool {
+        switch self {
+        case .deploymentFailure, .statusChange, .restartLimitReached, .backupFailure, .scheduledTaskFailure,
+            .dockerCleanupFailure, .serverUnreachable, .serverDiskUsage:
+            true
+        case .deploymentSuccess, .backupSuccess, .scheduledTaskSuccess, .dockerCleanupSuccess, .serverReachable,
+            .serverPatch, .traefikOutdated:
+            false
+        }
+    }
 }
 
 /// The label and example a channel setting shows in a form.
@@ -110,7 +121,7 @@ struct AlertFieldLabel {
         case "smtp_encryption": (title, prompt) = ("Encryption", "")
         case "smtp_username": (title, prompt) = ("Username", "Optional")
         case "smtp_password": (title, prompt) = ("Password", "Optional")
-        case "smtp_timeout": (title, prompt) = ("Timeout in seconds", "Default")
+        case "smtp_timeout": (title, prompt) = ("Timeout", "Seconds")
         case "smtp_ehlo_domain": (title, prompt) = ("EHLO domain", "System default")
         case "resend_api_key": (title, prompt) = ("Resend API key", "re_…")
         case "discord_webhook_url": (title, prompt) = ("Webhook URL", "https://discord.com/api/webhooks/…")
@@ -118,8 +129,8 @@ struct AlertFieldLabel {
         case "slack_webhook_url": (title, prompt) = ("Webhook URL", "https://hooks.slack.com/services/…")
         case "telegram_token": (title, prompt) = ("Bot token", "123456:ABC-DEF…")
         case "telegram_chat_id": (title, prompt) = ("Chat ID", "-1001234567890")
-        case "pushover_user_key": (title, prompt) = ("User key", "Your Pushover user key")
-        case "pushover_api_token": (title, prompt) = ("API token", "The application's token")
+        case "pushover_user_key": (title, prompt) = ("User key", "From your Pushover account")
+        case "pushover_api_token": (title, prompt) = ("API token", "From your Pushover application")
         case "webhook_url": (title, prompt) = ("URL", "https://example.com/coolify-alerts")
         default:
             if key.hasPrefix("telegram_notifications_") {
