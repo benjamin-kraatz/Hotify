@@ -7,10 +7,12 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/hotify_automation_tests.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
-swiftc -swift-version 6 -enable-upcoming-feature ApproachableConcurrency -parse-as-library -emit-library -emit-module -module-name CoolifyAPI \
+# find hands swiftc each source as one argument, so a checkout path with a space in it stays whole.
+find "$repo/CoolifyAPI/Sources/CoolifyAPI" -name '*.swift' -exec \
+    swiftc -swift-version 6 -enable-upcoming-feature ApproachableConcurrency -parse-as-library -emit-library -emit-module -module-name CoolifyAPI \
     -emit-module-path "$work/CoolifyAPI.swiftmodule" -o "$work/libCoolifyAPI.dylib" \
     -Xlinker -install_name -Xlinker @rpath/libCoolifyAPI.dylib \
-    $(find "$repo/CoolifyAPI/Sources/CoolifyAPI" -name '*.swift')
+    {} +
 
 swiftc -parse-as-library -enable-bare-slash-regex -default-isolation MainActor -enable-upcoming-feature ApproachableConcurrency -I "$work" -L "$work" -lCoolifyAPI \
     -Xlinker -rpath -Xlinker "$work" -o "$work/automation-tests" \
