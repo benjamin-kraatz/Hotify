@@ -87,7 +87,7 @@ struct NotificationSettingsPane: View {
     }
 
     private var schedule: String {
-        "Hotify checks every 30 seconds while it runs. Show in Menu Bar keeps it running after you close its windows."
+        "Hotify checks every 30 seconds while it runs. Show in Menu Bar keeps it running after you close its windows. To hear from Coolify itself while Hotify is closed, set up Coolify Alerts."
     }
 }
 

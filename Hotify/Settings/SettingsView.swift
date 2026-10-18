@@ -54,6 +54,8 @@ private struct SettingsPaneView: View {
                 #else
                 EmptyView()
                 #endif
+            case .alerts:
+                form { CoolifyAlertsSection() }
             case .automations:
                 form { AutomationsSection() }
             case .terminal:
