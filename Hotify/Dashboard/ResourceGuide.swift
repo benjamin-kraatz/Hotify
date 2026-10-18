@@ -198,40 +198,32 @@ private struct GuideRow<Icon: View>: View {
     }
 }
 
-/// A toolbar button that opens `ResourceGuide`: a sheet on iPhone and iPad, a popover on the Mac.
-struct ResourceGuideButton: View {
-    var kind: ResourceKind
-
-    @State private var isShowing = false
-
-    var body: some View {
-        Button("What do these mean?", systemImage: "questionmark.circle") {
-            isShowing = true
-        }
-        .help("What the flames and buttons mean")
-        #if os(macOS)
-        .popover(isPresented: $isShowing, arrowEdge: .bottom) {
-            ResourceGuide(kind: kind)
-            .frame(width: 400, height: 560)
-        }
-        #else
-        .sheet(isPresented: $isShowing) {
+extension View {
+    /// Shows `ResourceGuide` in a sheet with a Done button. It opens from the detail toolbar's More menu, where a
+    /// popover would have nothing to point at.
+    func resourceGuide(isPresented: Binding<Bool>, kind: ResourceKind) -> some View {
+        sheet(isPresented: isPresented) {
             NavigationStack {
                 ResourceGuide(kind: kind)
-                .navigationTitle("Guide")
+                    .navigationTitle("Guide")
+                    #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") {
-                            isShowing = false
+                    #endif
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                isPresented.wrappedValue = false
+                            }
                         }
                     }
-                }
             }
+            #if os(macOS)
+            .frame(width: 420, height: 580)
+            #else
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+            #endif
         }
-        #endif
     }
 }
 

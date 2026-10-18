@@ -5,6 +5,7 @@ struct LockCard: View {
     var method: UnlockMethod
     var failure: String?
     var isAuthenticating: Bool
+    var title = "Values are locked"
     /// What unlocking is for, shown until an attempt fails.
     var prompt = "Confirm it’s you to see and change them."
     var onUnlock: () -> Void
@@ -19,7 +20,7 @@ struct LockCard: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Values are locked")
+                Text(title)
                     .font(.headline)
                 Text(failure ?? prompt)
                     .font(.callout)

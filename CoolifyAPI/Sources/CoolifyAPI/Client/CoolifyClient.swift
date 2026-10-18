@@ -9,6 +9,8 @@ public struct CoolifyClient: Sendable, CustomStringConvertible {
 
     let token: String
     let session: URLSession
+    /// Carries backup uploads. A session passed to `init` carries them too, so tests see every request.
+    let uploadSession: URLSession
 
     public init(instanceURL: URL, token: String, session: URLSession? = nil) throws {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -18,6 +20,7 @@ public struct CoolifyClient: Sendable, CustomStringConvertible {
         self.apiBaseURL = try CoolifyURL.apiBase(from: instanceURL)
         self.token = trimmed
         self.session = session ?? Self.makeSession()
+        self.uploadSession = session ?? Self.sharedUploadSession
     }
 
     public init(instanceURL: String, token: String, session: URLSession? = nil) throws {
@@ -28,6 +31,10 @@ public struct CoolifyClient: Sendable, CustomStringConvertible {
     }
 
     public static func makeSession() -> URLSession {
+        URLSession(configuration: makeConfiguration())
+    }
+
+    private static func makeConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 60
@@ -35,8 +42,17 @@ public struct CoolifyClient: Sendable, CustomStringConvertible {
         configuration.httpCookieAcceptPolicy = .never
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: configuration)
+        return configuration
     }
+
+    /// One session for every client's uploads. The default session gives a request 60 seconds in all, which a chunk of
+    /// a backup on a slow uplink can outlast.
+    private static let sharedUploadSession: URLSession = {
+        let configuration = makeConfiguration()
+        configuration.timeoutIntervalForRequest = 120
+        configuration.timeoutIntervalForResource = 30 * 60
+        return URLSession(configuration: configuration)
+    }()
 
     /// Yields immediately, then again after each interval, until the consumer stops iterating.
     ///

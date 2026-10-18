@@ -56,6 +56,8 @@ private struct SettingsPaneView: View {
                 #endif
             case .automations:
                 form { AutomationsSection() }
+            case .terminal:
+                form { TerminalSettingsSection() }
             case .privacy:
                 form { VariableLockSettings() }
             case .backupStorage:

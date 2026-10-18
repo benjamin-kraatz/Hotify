@@ -5,6 +5,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     case menuBar
     case notifications
     case automations
+    case terminal
     case privacy
     case backupStorage
     case about
@@ -16,7 +17,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         #if os(macOS)
         allCases
         #else
-        [.automations, .privacy, .backupStorage, .about]
+        [.automations, .terminal, .privacy, .backupStorage, .about]
         #endif
     }
 
@@ -25,6 +26,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .menuBar: "Menu Bar"
         case .notifications: "Notifications"
         case .automations: "Automations"
+        case .terminal: "Terminal"
         case .privacy: "Privacy"
         case .backupStorage: "Backup Storage"
         case .about: "About"
@@ -36,6 +38,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .menuBar: "menubar.rectangle"
         case .notifications: "bell.badge"
         case .automations: "square.2.layers.3d"
+        case .terminal: "terminal"
         case .privacy: "lock.shield"
         case .backupStorage: "externaldrive.connected.to.line.below"
         case .about: "flame"
