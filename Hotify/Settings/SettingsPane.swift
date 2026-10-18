@@ -4,6 +4,7 @@ import SwiftUI
 enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     case menuBar
     case notifications
+    case alerts
     case automations
     case terminal
     case privacy
@@ -12,12 +13,13 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
 
     var id: Self { self }
 
-    /// The panes this device has. The menu bar and notifications are the Mac's, since only it keeps watching.
+    /// The panes this device has. The menu bar and notifications are the Mac's, since only it keeps watching. Coolify
+    /// Alerts are on every device, since the instance sends them.
     static var available: [Self] {
         #if os(macOS)
         allCases
         #else
-        [.automations, .terminal, .privacy, .backupStorage, .about]
+        [.alerts, .automations, .terminal, .privacy, .backupStorage, .about]
         #endif
     }
 
@@ -25,6 +27,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .menuBar: "Menu Bar"
         case .notifications: "Notifications"
+        case .alerts: "Coolify Alerts"
         case .automations: "Automations"
         case .terminal: "Terminal"
         case .privacy: "Privacy"
@@ -37,6 +40,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .menuBar: "menubar.rectangle"
         case .notifications: "bell.badge"
+        case .alerts: "megaphone"
         case .automations: "square.2.layers.3d"
         case .terminal: "terminal"
         case .privacy: "lock.shield"

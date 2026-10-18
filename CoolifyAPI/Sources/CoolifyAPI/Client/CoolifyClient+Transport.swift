@@ -99,7 +99,7 @@ extension CoolifyClient {
             "POST", path: path, body: form.body, contentType: form.contentType, session: uploadSession)
     }
 
-    private func send(
+    func send(
         _ method: String,
         path: String,
         query: [URLQueryItem] = [],
