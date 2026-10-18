@@ -57,8 +57,6 @@ struct BackupStorageSection: View {
                     editing = StorageEditorTarget(storage: nil)
                 }
             }
-        } header: {
-            Text("Backup Storage")
         } footer: {
             Text(footer)
         }

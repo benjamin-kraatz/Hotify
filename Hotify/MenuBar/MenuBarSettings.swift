@@ -26,8 +26,6 @@ struct MenuBarSettings: View {
                         .foregroundStyle(.ember)
                 }
             }
-        } header: {
-            Text("Menu Bar")
         }
 
         if model.enabled {

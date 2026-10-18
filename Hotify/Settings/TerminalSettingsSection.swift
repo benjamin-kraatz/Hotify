@@ -51,8 +51,6 @@ struct TerminalSettingsSection: View {
                 Text("Ask before pasting several lines")
                 Text("A shell runs each pasted line. Hotify shows what the clipboard holds before it goes in.")
             }
-        } header: {
-            Text("Terminal")
         } footer: {
             #if os(macOS)
             Text("⌘+ and ⌘- change the text size while you work. Find is ⌘F, and ⌘K clears the scrollback.")

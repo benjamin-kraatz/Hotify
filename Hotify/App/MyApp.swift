@@ -24,6 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @State private var placeColors: PlaceColors
     /// The notification center keeps only a weak reference to its delegate.
     @State private var notificationRouter = NotificationRouter()
+    /// Kept on this device only. The Mac runs them as changes come in, iPhone when you tap Run.
+    @State private var automations: AutomationRunner
     #if os(macOS)
     @State private var notificationSettings = NotificationSettings()
     @State private var notificationWatcher = NotificationWatcher()
@@ -56,10 +58,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let router = NotificationRouter()
         UNUserNotificationCenter.current().delegate = router
         _notificationRouter = State(initialValue: router)
+        #if DEBUG
+        // Fixture automations stay in memory, apart from the ones saved for real instances.
+        let automations = AutomationRunner(store: AutomationStore(defaults: fixtureStore == nil ? .standard : nil))
+        #else
+        let automations = AutomationRunner(store: AutomationStore())
+        #endif
+        _automations = State(initialValue: automations)
         #if os(macOS)
         let settings = NotificationSettings()
         let watcher = NotificationWatcher()
-        watcher.start(store: store, settings: settings)
+        watcher.start(store: store, settings: settings, automations: automations)
         _notificationSettings = State(initialValue: settings)
         _notificationWatcher = State(initialValue: watcher)
         #else
@@ -116,7 +125,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .environment(instanceStore)
                 .environment(menuBar)
                 .environment(notificationSettings)
+                .environment(automations)
+                .environment(automations.store)
         }
+        // The content fixes its width, so the window takes it and only its height is free.
+        .windowResizability(.contentSize)
 
         MenuBarExtra(isInserted: Binding(get: { menuBar.enabled }, set: { menuBar.enabled = $0 })) {
             MenuBarView().environment(menuBar)
@@ -157,6 +170,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .environment(databaseRestores)
             .environment(menuBar)
             .environment(placeColors)
+            .environment(automations)
+            .environment(automations.store)
             #if os(iOS)
         .environment(deploymentActivities)
         .tint(.ember)

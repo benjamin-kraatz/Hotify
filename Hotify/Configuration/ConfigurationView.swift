@@ -1,11 +1,11 @@
 import CoolifyAPI
 import SwiftUI
 
-/// The Settings tab of a resource: its name and description, an application's source, a service's compose file, its
-/// domains, a database's public port, its health check, an application's proxy labels and resource limits, and its
-/// tags, in one form with one Save. The compose file is edited on a screen of its own, into the same draft and Save.
-/// Nothing restarts or deploys on save. A bar offers that afterwards. Tags are saved on their own, as they are added or
-/// removed.
+/// The Settings tab of a resource: its name and description, an application's source and build, a service's compose
+/// file, its domains, a database's public port, its health check, an application's proxy labels, resource limits, and
+/// deployment commands, and its tags, in one form with one Save. The compose file is edited on a screen of its own,
+/// into the same draft and Save. Nothing restarts or deploys on save. A bar offers that afterwards. Tags are saved on
+/// their own, as they are added or removed.
 struct ConfigurationView: View {
     var model: ConfigurationModel
     var resource: ResourceSummary
@@ -51,6 +51,22 @@ struct ConfigurationView: View {
         return Binding(
             get: { model.draft?.limits ?? limits },
             set: { model.draft?.limits = $0 }
+        )
+    }
+
+    private var build: Binding<ApplicationBuild>? {
+        guard let build = model.draft?.build else { return nil }
+        return Binding(
+            get: { model.draft?.build ?? build },
+            set: { model.draft?.build = $0 }
+        )
+    }
+
+    private var deploymentCommands: Binding<ApplicationDeploymentCommands>? {
+        guard let commands = model.draft?.deploymentCommands else { return nil }
+        return Binding(
+            get: { model.draft?.deploymentCommands ?? commands },
+            set: { model.draft?.deploymentCommands = $0 }
         )
     }
 
@@ -118,6 +134,10 @@ struct ConfigurationView: View {
                 SourceSection(source: source)
             }
 
+            if let build {
+                BuildSection(build: build)
+            }
+
             if resource.kind == .service {
                 ComposeSection(compose: model.draft?.compose, isChanged: model.hasComposeChanges, onEdit: onEditCompose)
             }
@@ -155,6 +175,10 @@ struct ConfigurationView: View {
                     Text("A Docker Compose app runs its compose file as written. Set its limits there.")
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            if let deploymentCommands {
+                DeploymentCommandsSection(commands: deploymentCommands)
             }
 
             TagsSection(model: tags)
@@ -246,6 +270,8 @@ struct ConfigurationView: View {
                 healthCheck: HealthCheck(
                     isEnabled: true, kind: .http, method: "GET", path: "/health", returnCode: 200, interval: 30),
                 limits: ApplicationLimits(limits: ResourceLimits(cpus: "1.5", memory: "512m")),
+                deploymentCommands: ApplicationDeploymentCommands(
+                    commands: DeploymentCommands(postDeployment: "./bin/warm-cache")),
                 customLabels: """
                     traefik.http.middlewares.hotify-compress.compress=true
                     traefik.http.routers.hotify.middlewares=hotify-compress
@@ -265,6 +291,34 @@ struct ConfigurationView: View {
                 Tag(uuid: "3", name: "staging"),
             ]
         )
+    )
+    .frame(width: 560, height: 960)
+}
+
+#Preview("Nixpacks application") {
+    ConfigurationView(
+        model: ConfigurationModel(
+            saved: ResourceConfiguration(
+                kind: .application,
+                name: "storefront",
+                description: "",
+                // Not on github.com, so the preview doesn't ask GitHub for commits.
+                source: ApplicationSource(
+                    kind: .git(repository: "https://gitlab.example.com/shop/storefront.git"), branch: "main"),
+                domains: ["https://shop.example.com"],
+                healthCheck: HealthCheck(),
+                limits: ApplicationLimits(limits: ResourceLimits()),
+                build: ApplicationBuild(
+                    buildPack: .nixpacks,
+                    settings: BuildSettings(
+                        installCommand: "pnpm install --frozen-lockfile", buildCommand: "pnpm build",
+                        baseDirectory: "/apps/storefront", watchPaths: "apps/storefront/**")),
+                deploymentCommands: ApplicationDeploymentCommands(
+                    commands: DeploymentCommands(preDeployment: "pnpm db:migrate"))
+            )
+        ),
+        resource: ResourceSummary(route: .application("shop"), name: "storefront", status: "running:healthy"),
+        onAction: { _ in }
     )
     .frame(width: 560, height: 960)
 }

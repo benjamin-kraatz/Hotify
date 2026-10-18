@@ -22,6 +22,11 @@ struct ResourceConfiguration: Hashable {
     /// An application's CPU and memory limits. `nil` for anything else, and for a Docker Compose application, whose
     /// compose file runs without them.
     var limits: ApplicationLimits?
+    /// How an application builds from its repository. `nil` for anything else, and for an application with nothing to
+    /// build, such as a Docker image.
+    var build: ApplicationBuild?
+    /// The commands Coolify runs on the server around an application's deployments. `nil` for anything else.
+    var deploymentCommands: ApplicationDeploymentCommands?
     /// An application's proxy labels. Empty when it has none. Unused for a database or a service.
     var customLabels = ""
     /// Whether Coolify writes `$` as `$$`. Off lets the labels expand environment variables.
@@ -48,6 +53,8 @@ extension ResourceConfiguration {
         name = application.name
         description = application.description ?? ""
         source = ApplicationSource(application: application)
+        build = ApplicationBuild(application: application)
+        deploymentCommands = ApplicationDeploymentCommands(application: application)
         redirect = application.redirect ?? .both
         forcesHTTPS = application.settings?.isForceHTTPSEnabled ?? true
         healthCheck = Self.cleaned(application.healthCheck)
@@ -141,6 +148,12 @@ extension ResourceConfiguration {
         if let source, let before = saved.source {
             source.write(changesFrom: before, into: &update)
         }
+        if let build, let before = saved.build {
+            update.build = build.changes(from: before)
+        }
+        if let deploymentCommands, let before = saved.deploymentCommands {
+            update.deploymentCommands = deploymentCommands.changes(from: before)
+        }
         // An empty string clears labels that were present. Leaving them empty sends nothing.
         if customLabels != saved.customLabels { update.customLabels = customLabels }
         if escapesDollarSigns != saved.escapesDollarSigns {
@@ -215,7 +228,7 @@ extension ResourceConfiguration {
         if trimmedName.isEmpty {
             return "A name is required."
         }
-        if let problem = source?.problem {
+        if let problem = source?.problem ?? build?.problem {
             return problem
         }
         if let compose, let blocking = ComposeCheck(compose).findings.first(where: { $0.severity == .blocking }) {
@@ -236,7 +249,7 @@ extension ResourceConfiguration {
         if let problem = healthCheck.flatMap({ Self.problem(in: $0, kind: kind) }) {
             return problem
         }
-        return limits?.problem
+        return limits?.problem ?? deploymentCommands?.problem
     }
 
     static func isWebAddress(_ text: String) -> Bool {
