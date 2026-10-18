@@ -7,8 +7,9 @@ import AppKit
 import UIKit
 #endif
 
-/// Makes a Shortcut automation, or changes one: the Shortcut to run, the instance and resource, and on the Mac the
-/// event that runs it. It opens with what an automation can and can't do here, since that differs by device.
+/// Makes a Shortcut automation, or changes one. It reads as one sentence at the top, filled in by three steps under
+/// it: when it runs, where, and which Shortcut. A test run and what the Shortcut receives follow, and what an
+/// automation can and can't do on this device waits at the end, since that differs by device.
 struct AutomationEditor: View {
     @SwiftUI.Environment(\.dismiss) private var dismiss
     @SwiftUI.Environment(InstanceStore.self) private var instances
@@ -31,9 +32,8 @@ struct AutomationEditor: View {
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testFailed = false
-    /// Counts the results shown, so each new one bounces its symbol.
-    @State private var testArrivals = 0
     @State private var showsInput = false
+    @State private var showsLimits = false
     @State private var copiedInput = false
 
     init(automation: ShortcutAutomation?, instanceID: UUID?, previewResources: [ResourceSummary]? = nil) {
@@ -50,10 +50,9 @@ struct AutomationEditor: View {
         instances.instances.first { $0.id == draft.instanceID }
     }
 
-    /// The events the chosen resource can have. Any resource can have all of them.
-    private var triggers: [AutomationTrigger] {
-        guard let kind = draft.resource?.route?.kind else { return AutomationTrigger.available }
-        return AutomationTrigger.available.filter { $0.applies(to: kind) }
+    /// The resources the chosen event can happen to. Only applications deploy, and only databases back up.
+    private var eligibleResources: [ResourceSummary] {
+        resources.filter { draft.trigger.applies(to: $0.kind) }
     }
 
     private var keepsRunning: Bool {
@@ -73,152 +72,60 @@ struct AutomationEditor: View {
         draft.trigger.isAutomatic ? "Test Run" : "Run Now"
     }
 
-    private var resourceFooter: String {
+    private var whereFooter: String {
         if draft.resource != nil { return "This resource only, even once it's renamed." }
         return draft.trigger.isAutomatic
-            ? "Any resource on the instance that the event can happen to."
+            ? "\(AutomationSentence.anyResource(for: draft.trigger).capitalized) on the instance that the event can happen to."
             : "The instance as a whole, with no resource named."
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    AutomationLimits(keepsRunning: keepsRunning)
-                    #if os(macOS)
-                    if let menuBar, !menuBar.enabled {
-                        Toggle(
-                            "Show Hotify in the menu bar",
-                            isOn: Binding(get: { menuBar.enabled }, set: { menuBar.enabled = $0 }))
-                    }
-                    #endif
-                }
-
-                Section {
-                    TextField("Shortcut", text: $draft.shortcutName, prompt: Text("Name in the Shortcuts app"))
-                        .autocorrectionDisabled()
-                    HStack {
-                        Button("New Shortcut", systemImage: "plus") { openURL(ShortcutLink.create) }
-                        Spacer()
-                        Button("Open in Shortcuts", systemImage: "arrow.up.forward.app") {
-                            openURL(ShortcutLink.open(draft.shortcutName) ?? ShortcutLink.app)
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                } header: {
-                    Text("Shortcut")
-                } footer: {
-                    Text("Type the name exactly as Shortcuts shows it. Hotify can't list your Shortcuts.")
-                }
-
-                Section {
-                    Picker("Instance", selection: $draft.instanceID) {
-                        if instance == nil {
-                            Text("Choose…").tag(draft.instanceID)
-                        }
-                        ForEach(instances.instances) { instance in
-                            Text(instance.name).tag(instance.id)
-                        }
-                    }
-                    Picker("Resource", selection: resourceSelection) {
-                        Text("Any resource").tag(Optional<ResourceRoute>.none)
-                        if let saved = draft.resource, let route = saved.route,
-                            !resources.contains(where: { $0.route == route })
-                        {
-                            Label(saved.name, systemImage: route.kind.systemImage).tag(Optional(route))
-                        }
-                        ForEach(resources) { resource in
-                            Label(resource.name, systemImage: resource.kind.systemImage).tag(Optional(resource.route))
-                        }
-                    }
-                    .disabled(isLoading)
-                    if isLoading {
-                        HStack {
-                            Text("Loading resources…")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                    }
-                    if let loadError {
-                        Label(loadError, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.glow)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                } header: {
-                    Text("Resource")
-                } footer: {
-                    Text(resourceFooter)
-                }
-
-                Section {
-                    #if os(macOS)
-                    Picker("Runs", selection: $draft.trigger) {
-                        ForEach(triggers) { trigger in
-                            Label(trigger.title, systemImage: trigger.systemImage).tag(trigger)
-                        }
-                    }
-                    #else
-                    LabeledContent("Runs") {
-                        Label(AutomationTrigger.manual.title, systemImage: AutomationTrigger.manual.systemImage)
-                    }
-                    #endif
-                } header: {
-                    Text("When")
-                } footer: {
-                    Text(draft.trigger.detail)
-                }
-
-                Section {
-                    DisclosureGroup(isExpanded: $showsInput) {
-                        sampleInput
-                    } label: {
-                        Text("What the Shortcut gets")
-                    }
-                    Button {
-                        Task { await test() }
-                    } label: {
-                        HStack {
-                            Label(runTitle, systemImage: "play")
-                            Spacer()
-                            if isTesting {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                        }
-                    }
-                    .disabled(problem != nil || isTesting || runner == nil)
-                    if let testResult {
-                        Label {
-                            Text(testResult)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 26) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        AutomationSentence(automation: draft, instanceName: instance?.name)
+                        if let problem, !draft.trimmedShortcutName.isEmpty || !isNew {
+                            Label(problem, systemImage: "exclamationmark.triangle.fill")
+                                .font(.callout)
+                                .foregroundStyle(.glow)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .contentTransition(.opacity)
-                        } icon: {
-                            Image(
-                                systemName: testFailed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
-                            )
-                            .foregroundStyle(testFailed ? Color.glow : Color.ember)
-                            .symbolEffect(.bounce, value: testArrivals)
+                                .transition(.opacity)
                         }
-                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
-                } footer: {
-                    Text(
-                        draft.trigger.isAutomatic
-                            ? "A test run sends the same fields, with \"test\": true, so the Shortcut can tell it apart."
-                            : "Run Now sends these fields, with \"test\": true, since it ran from here.")
-                }
 
-                if let problem, !draft.trimmedShortcutName.isEmpty || !isNew {
-                    Section {
-                        Label(problem, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.glow)
-                            .fixedSize(horizontal: false, vertical: true)
+                    step(1, "When", caption: whenCaption) {
+                        AutomationTriggerPicker(selection: $draft.trigger)
                     }
+
+                    step(2, "Where", caption: whereFooter) {
+                        wherePicker
+                    }
+
+                    step(3, "Run", caption: "Type the name exactly as Shortcuts shows it. Hotify can't list them.") {
+                        shortcutField
+                    }
+
+                    tryIt
+
+                    #if os(macOS)
+                    if let menuBar, !menuBar.enabled, draft.trigger.isAutomatic {
+                        keepRunningNotice(menuBar)
+                    }
+                    #endif
+
+                    DisclosureGroup(isExpanded: $showsLimits) {
+                        AutomationLimits(keepsRunning: keepsRunning)
+                            .padding(.top, 10)
+                    } label: {
+                        Label("How this runs on this \(AutomationLimits.deviceName)", systemImage: "info.circle")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .padding(.horizontal, 2)
                 }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
             }
-            .formStyle(.grouped)
             .navigationTitle(isNew ? "New Automation" : "Edit Automation")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -241,19 +148,232 @@ struct AutomationEditor: View {
                 testResult = nil
                 copiedInput = false
             }
-            .onChange(of: triggers) { _, triggers in
-                if !triggers.contains(draft.trigger), let first = triggers.first { draft.trigger = first }
+            .onChange(of: draft.trigger) { _, trigger in
+                // The resource that was chosen can't have the new event, so the automation widens to any that can.
+                if let kind = draft.resource?.route?.kind, !trigger.applies(to: kind) { draft.resource = nil }
             }
             .animation(reduceMotion ? nil : .snappy, value: testResult)
             .animation(reduceMotion ? nil : .snappy, value: problem)
             .animation(reduceMotion ? nil : .snappy, value: isLoading)
             .animation(reduceMotion ? nil : .snappy, value: loadError)
             .animation(reduceMotion ? nil : .snappy, value: showsInput)
+            .animation(reduceMotion ? nil : .snappy, value: showsLimits)
+            .animation(reduceMotion ? nil : .snappy, value: keepsRunning)
         }
         #if os(macOS)
-        .frame(minWidth: 460, idealWidth: 500, minHeight: 640, idealHeight: 760)
+        .frame(minWidth: 540, idealWidth: 580, minHeight: 640, idealHeight: 780)
         #endif
     }
+
+    private var whenCaption: String {
+        #if os(macOS)
+        "Hotify sees these while it checks the instance, every 30 seconds."
+        #else
+        "\(AutomationLimits.deviceName) can't run a Shortcut on its own. The Mac app can."
+        #endif
+    }
+
+    /// A numbered part of the editor: its number and title above `content`, and a caption under it.
+    private func step<Content: View>(
+        _ number: Int, _ title: String, caption: String, @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("\(number)")
+                    .font(.caption.weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.ember)
+                    .frame(width: 22, height: 22)
+                    .background(.ember.opacity(0.14), in: .circle)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.headline)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Step \(number), \(title)")
+            .accessibilityAddTraits(.isHeader)
+            content()
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 2)
+                .contentTransition(.opacity)
+        }
+    }
+
+    private var wherePicker: some View {
+        VStack(spacing: 0) {
+            pickerRow("Instance") {
+                Picker("Instance", selection: $draft.instanceID) {
+                    if instance == nil {
+                        Text("Choose…").tag(draft.instanceID)
+                    }
+                    ForEach(instances.instances) { instance in
+                        Text(instance.name).tag(instance.id)
+                    }
+                }
+            }
+            Divider()
+                .padding(.leading, 14)
+            pickerRow("Resource") {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Picker("Resource", selection: resourceSelection) {
+                    Text(AutomationSentence.anyResource(for: draft.trigger).capitalized)
+                        .tag(Optional<ResourceRoute>.none)
+                    if let saved = draft.resource, let route = saved.route,
+                        !resources.contains(where: { $0.route == route })
+                    {
+                        Label(saved.name, systemImage: route.kind.systemImage).tag(Optional(route))
+                    }
+                    ForEach(eligibleResources) { resource in
+                        Label(resource.name, systemImage: resource.kind.systemImage).tag(Optional(resource.route))
+                    }
+                }
+                .disabled(isLoading || instance == nil)
+            }
+            if let loadError {
+                NoticeBanner(message: loadError)
+                    .padding(14)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .well()
+    }
+
+    private func pickerRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+            Spacer(minLength: 8)
+            content()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var shortcutField: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "square.2.layers.3d")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(draft.trimmedShortcutName.isEmpty ? Color.secondary : Color.ember)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        (draft.trimmedShortcutName.isEmpty ? Color.secondary : Color.ember).opacity(0.12),
+                        in: .rect(cornerRadius: 9, style: .continuous)
+                    )
+                    .accessibilityHidden(true)
+                TextField("Shortcut", text: $draft.shortcutName, prompt: Text("Name in the Shortcuts app"))
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+                    .autocorrectionDisabled()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            Divider()
+                .padding(.leading, 14)
+            HStack {
+                Button("New Shortcut", systemImage: "plus") { openURL(ShortcutLink.create) }
+                Spacer()
+                Button("Open in Shortcuts", systemImage: "arrow.up.forward.app") {
+                    openURL(ShortcutLink.open(draft.shortcutName) ?? ShortcutLink.app)
+                }
+            }
+            .buttonStyle(.borderless)
+            .font(.callout)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+        }
+        .well()
+        .animation(reduceMotion ? nil : .snappy, value: draft.trimmedShortcutName.isEmpty)
+    }
+
+    /// A test run, its result, and the JSON the Shortcut gets.
+    private var tryIt: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Try it")
+                        .font(.headline)
+                    Text(
+                        draft.trigger.isAutomatic
+                            ? "Sends the same fields, with \"test\": true, so the Shortcut can tell it apart."
+                            : "Sends these fields, with \"test\": true, since it ran from here."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Button {
+                    Task { await test() }
+                } label: {
+                    HStack(spacing: 6) {
+                        if isTesting {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "play.fill")
+                        }
+                        Text(runTitle)
+                    }
+                }
+                .glassButton()
+                .disabled(problem != nil || isTesting || runner == nil)
+            }
+            if let testResult {
+                NoticeBanner(message: testResult, tone: testFailed ? .problem : .done)
+            }
+            DisclosureGroup(isExpanded: $showsInput) {
+                sampleInput
+            } label: {
+                Text("What the Shortcut gets")
+                    .font(.subheadline.weight(.medium))
+            }
+        }
+        .padding(14)
+        .well()
+    }
+
+    #if os(macOS)
+    /// Closing the last window would quit Hotify and stop the automation. The switch keeps it in the menu bar.
+    private func keepRunningNotice(_ menuBar: MenuBarModel) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "menubar.rectangle")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.glow)
+                .frame(width: 30, height: 30)
+                .background(.glow.opacity(0.14), in: .rect(cornerRadius: 9, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Keep Hotify in the menu bar")
+                    .font(.subheadline.weight(.semibold))
+                Text("Closing Hotify's last window quits it, which pauses this automation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Toggle(
+                "Show Hotify in the menu bar",
+                isOn: Binding(get: { menuBar.enabled }, set: { menuBar.enabled = $0 })
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
+        }
+        .padding(14)
+        .background(.glow.opacity(0.1), in: .rect(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(.glow.opacity(0.18), lineWidth: 1)
+        }
+        .transition(.opacity)
+    }
+    #endif
 
     /// The JSON a test would send, to read or to paste into the Shortcut while building it.
     private var sampleInput: some View {
@@ -263,7 +383,7 @@ struct AutomationEditor: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
-                .well(cornerRadius: 8)
+                .background(.background.opacity(0.6), in: .rect(cornerRadius: 8, style: .continuous))
                 .accessibilityLabel("Sample input")
                 .accessibilityValue(samplePayload)
             Button(copiedInput ? "Copied" : "Copy", systemImage: copiedInput ? "checkmark" : "doc.on.doc") {
@@ -274,7 +394,7 @@ struct AutomationEditor: View {
             .contentTransition(.symbolEffect(.replace))
             .help("Copy the sample input")
         }
-        .padding(.vertical, 4)
+        .padding(.top, 8)
         .animation(reduceMotion ? nil : .snappy, value: copiedInput)
     }
 
@@ -318,7 +438,6 @@ struct AutomationEditor: View {
         let failure = await runner.runNow(draft, instance: instance)
         testFailed = failure != nil
         testResult = failure ?? "Handed to Shortcuts. Check there that it did what you wanted."
-        if !reduceMotion { testArrivals += 1 }
     }
 
     private func loadResources() async {

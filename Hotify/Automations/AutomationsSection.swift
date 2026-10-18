@@ -19,19 +19,16 @@ struct AutomationsSection: View {
                 Text("Add an instance to run a Shortcut for it.")
                     .foregroundStyle(.secondary)
             } else if automations.automations.isEmpty {
-                Text(emptyMessage)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                emptyState
             }
             ForEach(automations.automations) { automation in
                 row(automation)
             }
-            Button("New Automation…", systemImage: "plus") {
-                editing = EditorTarget(automation: nil)
+            if !automations.automations.isEmpty {
+                Button("New Automation…", systemImage: "plus") {
+                    editing = EditorTarget(automation: nil)
+                }
             }
-            .disabled(instances.instances.isEmpty)
-        } header: {
-            Text("Shortcut Automations")
         } footer: {
             Text(footer)
         }
@@ -59,11 +56,38 @@ struct AutomationsSection: View {
         instances.selected?.id ?? instances.instances.first?.id
     }
 
+    /// What the section shows before the first automation: what one does here, and the one way to make it.
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "square.2.layers.3d")
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(.ember)
+                .frame(width: 56, height: 56)
+                .background(.ember.opacity(0.12), in: .rect(cornerRadius: 16, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(spacing: 4) {
+                Text("No automations yet")
+                    .font(.headline)
+                Text(emptyMessage)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button("New Automation…", systemImage: "plus") {
+                editing = EditorTarget(automation: nil)
+            }
+            .glassButton(prominent: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 18)
+    }
+
     private var emptyMessage: String {
         #if os(macOS)
-        "No automations on this Mac yet. One runs a Shortcut when a deploy ends, a resource stops, or a backup fails."
+        "One runs a Shortcut of yours when a deploy ends, a resource stops, or a backup fails."
         #else
-        "No automations on this \(AutomationLimits.deviceName) yet. One runs a Shortcut for a resource when you tap Run."
+        "One runs a Shortcut of yours for a resource when you tap Run."
         #endif
     }
 

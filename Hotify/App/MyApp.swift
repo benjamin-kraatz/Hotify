@@ -124,6 +124,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .environment(automations)
                 .environment(automations.store)
         }
+        // The content fixes its width, so the window takes it and only its height is free.
+        .windowResizability(.contentSize)
 
         MenuBarExtra(isInserted: Binding(get: { menuBar.enabled }, set: { menuBar.enabled = $0 })) {
             MenuBarView().environment(menuBar)
