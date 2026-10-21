@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// The steps from template to running service. A database skips setup.
+/// The steps from choosing to running. Choosing and placing are one screen, so a resource is created in the first step.
+/// A database or an application skips setup.
 enum ProvisioningStep: Int, CaseIterable, Identifiable {
-    case choose
-    case place
+    case create
     case setUp
     case start
 
@@ -11,12 +11,14 @@ enum ProvisioningStep: Int, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .choose: "Template"
-        case .place: "Place"
+        case .create: "Create"
         case .setUp: "Set Up"
         case .start: "Start"
         }
     }
+
+    /// The steps for a resource Coolify can start as it creates it, which needs no setup.
+    static let instant: [ProvisioningStep] = [.create, .start]
 }
 
 /// Where the user is in provisioning, as a row of small flames: lit behind, flickering here, cold ahead.
@@ -66,7 +68,7 @@ struct ProvisioningSteps: View {
 
 #Preview {
     VStack(spacing: 24) {
-        ProvisioningSteps(current: .choose)
+        ProvisioningSteps(current: .create)
         ProvisioningSteps(current: .setUp)
         ProvisioningSteps(current: .start, isFinished: true)
     }

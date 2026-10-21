@@ -1,14 +1,18 @@
 import CoolifyAPI
 import SwiftUI
 
-/// The Settings tab of a resource: its name and description, an application's source, its domains, a database's public
-/// port, its health check, an application's proxy labels, and its tags, in one form with one Save. Nothing restarts
-/// or deploys on save. A bar offers that afterwards. Tags are saved on their own, as they are added or removed.
+/// The Settings tab of a resource: its name and description, an application's source and build, a service's compose
+/// file, its domains, a database's public port, its health check, an application's proxy labels, resource limits, and
+/// deployment commands, and its tags, in one form with one Save. The compose file is edited on a screen of its own,
+/// into the same draft and Save. Nothing restarts or deploys on save. A bar offers that afterwards. Tags are saved on
+/// their own, as they are added or removed.
 struct ConfigurationView: View {
     var model: ConfigurationModel
     var resource: ResourceSummary
     var pendingAction: ResourceAction?
     var onAction: (ResourceAction) -> Void
+    /// Opens a service's compose file in the editor. `nil` for anything else.
+    var onEditCompose: (() -> Void)?
     @State private var tags: ResourceTagsModel
 
     init(
@@ -16,12 +20,14 @@ struct ConfigurationView: View {
         resource: ResourceSummary,
         pendingAction: ResourceAction? = nil,
         onAction: @escaping (ResourceAction) -> Void,
+        onEditCompose: (() -> Void)? = nil,
         tags: ResourceTagsModel = ResourceTagsModel()
     ) {
         self.model = model
         self.resource = resource
         self.pendingAction = pendingAction
         self.onAction = onAction
+        self.onEditCompose = onEditCompose
         _tags = State(initialValue: tags)
     }
 
@@ -40,6 +46,30 @@ struct ConfigurationView: View {
         )
     }
 
+    private var limits: Binding<ApplicationLimits>? {
+        guard let limits = model.draft?.limits else { return nil }
+        return Binding(
+            get: { model.draft?.limits ?? limits },
+            set: { model.draft?.limits = $0 }
+        )
+    }
+
+    private var build: Binding<ApplicationBuild>? {
+        guard let build = model.draft?.build else { return nil }
+        return Binding(
+            get: { model.draft?.build ?? build },
+            set: { model.draft?.build = $0 }
+        )
+    }
+
+    private var deploymentCommands: Binding<ApplicationDeploymentCommands>? {
+        guard let commands = model.draft?.deploymentCommands else { return nil }
+        return Binding(
+            get: { model.draft?.deploymentCommands ?? commands },
+            set: { model.draft?.deploymentCommands = $0 }
+        )
+    }
+
     private var healthCheck: Binding<HealthCheck> {
         Binding(
             get: { model.draft?.healthCheck ?? HealthCheck() },
@@ -47,28 +77,14 @@ struct ConfigurationView: View {
         )
     }
 
-    /// The action that puts saved changes to use. A stopped resource picks them up when it next starts.
-    private var applyAction: ResourceAction? {
-        guard resource.heat != .cold else { return nil }
-        return resource.kind == .application ? .deploy : .restart
-    }
-
-    private var applyMessage: String {
-        switch applyAction {
-        case .deploy: "Saved. It takes effect after a redeploy."
-        case .restart: "Saved. It takes effect after a restart."
-        default: "Saved. It takes effect on the next start."
-        }
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            notices
+            ConfigurationNotices(model: model, resource: resource, pendingAction: pendingAction, onAction: onAction)
             content
         }
         .safeAreaInset(edge: .bottom) {
             if model.hasChanges {
-                saveBar
+                ConfigurationSaveBar(model: model)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -78,10 +94,6 @@ struct ConfigurationView: View {
             await tags.load()
         }
         .animation(.snappy, value: model.hasChanges)
-        .animation(.snappy, value: model.hasUnappliedChanges)
-        .animation(.snappy, value: model.saveError)
-        .animation(.snappy, value: model.conflicts)
-        .animation(.snappy, value: model.notice)
     }
 
     // MARK: States
@@ -107,43 +119,6 @@ struct ConfigurationView: View {
         }
     }
 
-    @ViewBuilder
-    private var notices: some View {
-        VStack(spacing: 8) {
-            if model.hasUnappliedChanges {
-                ApplyBar(
-                    kind: resource.kind,
-                    message: applyMessage,
-                    action: applyAction,
-                    isBusy: pendingAction != nil || resource.isDeploying,
-                    onApply: { action in
-                        onAction(action)
-                        model.hasUnappliedChanges = false
-                    },
-                    onDismiss: { model.hasUnappliedChanges = false }
-                )
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-            if !model.conflicts.isEmpty {
-                ProblemNotice(problem: .conflicts(model.conflicts)) {
-                    Task { await model.save(force: true) }
-                }
-            }
-            if let saveError = model.saveError {
-                NoticeBanner(message: saveError)
-            }
-            if let notice = model.notice {
-                NoticeBanner(message: notice)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.bottom, hasNotices ? 12 : 0)
-    }
-
-    private var hasNotices: Bool {
-        model.hasUnappliedChanges || !model.conflicts.isEmpty || model.saveError != nil || model.notice != nil
-    }
-
     // MARK: Form
 
     private var form: some View {
@@ -157,6 +132,14 @@ struct ConfigurationView: View {
 
             if let source {
                 SourceSection(source: source)
+            }
+
+            if let build {
+                BuildSection(build: build)
+            }
+
+            if resource.kind == .service {
+                ComposeSection(compose: model.draft?.compose, isChanged: model.hasComposeChanges, onEdit: onEditCompose)
             }
 
             switch resource.kind {
@@ -183,6 +166,19 @@ struct ConfigurationView: View {
                     Text("A service's health checks live in its compose file. Change them in Coolify.")
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            if let limits {
+                LimitsSection(limits: limits)
+            } else if resource.kind == .application {
+                Section("Resources") {
+                    Text("A Docker Compose app runs its compose file as written. Set its limits there.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let deploymentCommands {
+                DeploymentCommandsSection(commands: deploymentCommands)
             }
 
             TagsSection(model: tags)
@@ -259,47 +255,6 @@ struct ConfigurationView: View {
             )
         }
     }
-
-    // MARK: Saving
-
-    private var saveBar: some View {
-        let problem = model.draft?.problem
-        return HStack(spacing: 12) {
-            if let problem {
-                Label(problem, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.glow)
-                    .lineLimit(3)
-            } else {
-                Text("Unsaved changes")
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            Button("Revert") {
-                model.revert()
-            }
-            .glassButton()
-            .disabled(model.isSaving)
-            Button {
-                Task { await model.save() }
-            } label: {
-                if model.isSaving {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Text("Save")
-                }
-            }
-            .glassButton(prominent: true)
-            .disabled(problem != nil || model.isSaving)
-            .keyboardShortcut("s", modifiers: .command)
-        }
-        .font(.callout)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.regularMaterial, in: .rect(cornerRadius: 14))
-        .padding(.horizontal, 20)
-        .padding(.bottom, 12)
-    }
 }
 
 #Preview("Application") {
@@ -314,6 +269,9 @@ struct ConfigurationView: View {
                 redirect: .nonWWW,
                 healthCheck: HealthCheck(
                     isEnabled: true, kind: .http, method: "GET", path: "/health", returnCode: 200, interval: 30),
+                limits: ApplicationLimits(limits: ResourceLimits(cpus: "1.5", memory: "512m")),
+                deploymentCommands: ApplicationDeploymentCommands(
+                    commands: DeploymentCommands(postDeployment: "./bin/warm-cache")),
                 customLabels: """
                     traefik.http.middlewares.hotify-compress.compress=true
                     traefik.http.routers.hotify.middlewares=hotify-compress
@@ -333,6 +291,34 @@ struct ConfigurationView: View {
                 Tag(uuid: "3", name: "staging"),
             ]
         )
+    )
+    .frame(width: 560, height: 960)
+}
+
+#Preview("Nixpacks application") {
+    ConfigurationView(
+        model: ConfigurationModel(
+            saved: ResourceConfiguration(
+                kind: .application,
+                name: "storefront",
+                description: "",
+                // Not on github.com, so the preview doesn't ask GitHub for commits.
+                source: ApplicationSource(
+                    kind: .git(repository: "https://gitlab.example.com/shop/storefront.git"), branch: "main"),
+                domains: ["https://shop.example.com"],
+                healthCheck: HealthCheck(),
+                limits: ApplicationLimits(limits: ResourceLimits()),
+                build: ApplicationBuild(
+                    buildPack: .nixpacks,
+                    settings: BuildSettings(
+                        installCommand: "pnpm install --frozen-lockfile", buildCommand: "pnpm build",
+                        baseDirectory: "/apps/storefront", watchPaths: "apps/storefront/**")),
+                deploymentCommands: ApplicationDeploymentCommands(
+                    commands: DeploymentCommands(preDeployment: "pnpm db:migrate"))
+            )
+        ),
+        resource: ResourceSummary(route: .application("shop"), name: "storefront", status: "running:healthy"),
+        onAction: { _ in }
     )
     .frame(width: 560, height: 960)
 }
@@ -359,10 +345,20 @@ struct ConfigurationView: View {
                 containers: [
                     ContainerDomains(name: "grafana", label: "Grafana", domains: ["https://grafana.example.com"])
                 ],
-                hasContainerDomains: true)
+                hasContainerDomains: true,
+                compose: """
+                    services:
+                      grafana:
+                        image: grafana/grafana-oss:11.2.0
+                        environment:
+                          - SERVICE_URL_GRAFANA_3000
+                      prometheus:
+                        image: prom/prometheus:v2.54.1
+                    """)
         ),
         resource: ResourceSummary(route: .service("metrics"), name: "metrics", status: "running:healthy"),
-        onAction: { _ in }
+        onAction: { _ in },
+        onEditCompose: {}
     )
-    .frame(width: 560, height: 560)
+    .frame(width: 560, height: 720)
 }

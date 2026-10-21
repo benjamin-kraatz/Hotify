@@ -19,12 +19,22 @@ struct ResourceConfiguration: Hashable {
     var hasContainerDomains = false
     /// `nil` for a service, whose health checks live in its compose file.
     var healthCheck: HealthCheck?
+    /// An application's CPU and memory limits. `nil` for anything else, and for a Docker Compose application, whose
+    /// compose file runs without them.
+    var limits: ApplicationLimits?
+    /// How an application builds from its repository. `nil` for anything else, and for an application with nothing to
+    /// build, such as a Docker image.
+    var build: ApplicationBuild?
+    /// The commands Coolify runs on the server around an application's deployments. `nil` for anything else.
+    var deploymentCommands: ApplicationDeploymentCommands?
     /// An application's proxy labels. Empty when it has none. Unused for a database or a service.
     var customLabels = ""
     /// Whether Coolify writes `$` as `$$`. Off lets the labels expand environment variables.
     var escapesDollarSigns = true
     var isPublic = false
     var publicPort: Int?
+    /// A service's compose file, exactly as written. `nil` for anything else, and when Coolify kept it from the token.
+    var compose: String?
 }
 
 /// The addresses of one container or compose service.
@@ -43,6 +53,8 @@ extension ResourceConfiguration {
         name = application.name
         description = application.description ?? ""
         source = ApplicationSource(application: application)
+        build = ApplicationBuild(application: application)
+        deploymentCommands = ApplicationDeploymentCommands(application: application)
         redirect = application.redirect ?? .both
         forcesHTTPS = application.settings?.isForceHTTPSEnabled ?? true
         healthCheck = Self.cleaned(application.healthCheck)
@@ -56,6 +68,7 @@ extension ResourceConfiguration {
                 .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         } else {
             domains = Self.split(application.fqdn)
+            limits = ApplicationLimits(limits: application.limits)
         }
     }
 
@@ -73,6 +86,7 @@ extension ResourceConfiguration {
         kind = .service
         name = service.name
         description = service.description ?? ""
+        compose = service.dockerComposeRaw
         hasContainerDomains = true
         containers = (service.applications ?? []).map { container in
             ContainerDomains(
@@ -128,8 +142,17 @@ extension ResourceConfiguration {
         if redirect != saved.redirect { update.redirect = redirect }
         if forcesHTTPS != saved.forcesHTTPS { update.isForceHTTPSEnabled = forcesHTTPS }
         update.healthCheck = healthCheckChanges(from: saved)
+        if let limits, let before = saved.limits {
+            update.limits = limits.changes(from: before)
+        }
         if let source, let before = saved.source {
             source.write(changesFrom: before, into: &update)
+        }
+        if let build, let before = saved.build {
+            update.build = build.changes(from: before)
+        }
+        if let deploymentCommands, let before = saved.deploymentCommands {
+            update.deploymentCommands = deploymentCommands.changes(from: before)
         }
         // An empty string clears labels that were present. Leaving them empty sends nothing.
         if customLabels != saved.customLabels { update.customLabels = customLabels }
@@ -155,11 +178,13 @@ extension ResourceConfiguration {
         return update
     }
 
-    /// Only the containers whose domains changed. Coolify leaves the others as they are.
+    /// Only the containers whose domains changed. Coolify leaves the others as they are. The compose file goes as
+    /// typed, never trimmed, since its whitespace is its structure.
     func serviceUpdate(from saved: Self, force: Bool) -> ServiceUpdate {
         var update = ServiceUpdate()
         if trimmedName != saved.trimmedName { update.name = trimmedName }
         if trimmedDescription != saved.trimmedDescription { update.description = trimmedDescription }
+        if let compose, compose != saved.compose { update.dockerComposeRaw = compose }
         let before = Dictionary(saved.containers.map { ($0.name, Self.joined($0.domains)) }) { first, _ in first }
         let changed = containers.filter { Self.joined($0.domains) != before[$0.name] }
         if !changed.isEmpty {
@@ -203,8 +228,11 @@ extension ResourceConfiguration {
         if trimmedName.isEmpty {
             return "A name is required."
         }
-        if let problem = source?.problem {
+        if let problem = source?.problem ?? build?.problem {
             return problem
+        }
+        if let compose, let blocking = ComposeCheck(compose).findings.first(where: { $0.severity == .blocking }) {
+            return blocking.message
         }
         let addresses = hasContainerDomains ? containers.flatMap(\.domains) : domains
         if let bad = addresses.map({ $0.trimmingCharacters(in: .whitespaces) }).first(where: {
@@ -218,7 +246,10 @@ extension ResourceConfiguration {
         if let port = publicPort, !(1...65_535).contains(port) {
             return "A port is a number from 1 to 65535."
         }
-        return healthCheck.flatMap { Self.problem(in: $0, kind: kind) }
+        if let problem = healthCheck.flatMap({ Self.problem(in: $0, kind: kind) }) {
+            return problem
+        }
+        return limits?.problem ?? deploymentCommands?.problem
     }
 
     static func isWebAddress(_ text: String) -> Bool {

@@ -39,6 +39,12 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
     public var dockerComposeDomains: [ComposeDomain]?
     /// Sent flat, as Coolify's `health_check_*` fields.
     public var healthCheck: HealthCheck?
+    /// Sent flat, as Coolify's `limits_*` fields. `ResourceLimits.none` lifts a limit.
+    public var limits: ResourceLimits?
+    /// Sent flat, as Coolify's build fields, such as `install_command` and `base_directory`.
+    public var build: BuildSettings?
+    /// Sent flat, as Coolify's `pre_deployment_command*` and `post_deployment_command*` fields.
+    public var deploymentCommands: DeploymentCommands?
     /// Takes a domain another resource already uses, after Coolify answered 409.
     public var forceDomainOverride: Bool?
     public var gitBranch: String?
@@ -77,6 +83,9 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         isForceHTTPSEnabled: Bool? = nil,
         dockerComposeDomains: [ComposeDomain]? = nil,
         healthCheck: HealthCheck? = nil,
+        limits: ResourceLimits? = nil,
+        build: BuildSettings? = nil,
+        deploymentCommands: DeploymentCommands? = nil,
         forceDomainOverride: Bool? = nil,
         gitBranch: String? = nil,
         gitCommitSHA: String? = nil,
@@ -92,6 +101,9 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         self.isForceHTTPSEnabled = isForceHTTPSEnabled
         self.dockerComposeDomains = dockerComposeDomains
         self.healthCheck = healthCheck
+        self.limits = limits
+        self.build = build
+        self.deploymentCommands = deploymentCommands
         self.forceDomainOverride = forceDomainOverride
         self.gitBranch = gitBranch
         self.gitCommitSHA = gitCommitSHA
@@ -104,17 +116,20 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
     /// Whether there is anything to send.
     public var isEmpty: Bool {
         name == nil && description == nil && domains == nil && redirect == nil && isForceHTTPSEnabled == nil
-            && dockerComposeDomains == nil && healthCheck == nil && gitBranch == nil && gitCommitSHA == nil
-            && dockerRegistryImageTag == nil && isAutoDeployEnabled == nil && customLabels == nil
-            && isContainerLabelEscapeEnabled == nil
+            && dockerComposeDomains == nil && healthCheck == nil && limits == nil && build == nil
+            && deploymentCommands == nil && gitBranch == nil && gitCommitSHA == nil && dockerRegistryImageTag == nil
+            && isAutoDeployEnabled == nil && customLabels == nil && isContainerLabelEscapeEnabled == nil
     }
 
     /// Whether the change only reaches the running app with its next deployment. Coolify writes domains, the
-    /// health check, and proxy labels into the container as it deploys, and builds a new version only then.
+    /// health check, resource limits, and proxy labels into the container as it deploys, builds a new version only
+    /// then, and runs the deployment commands only around one. Watch paths and deploy on push apply to the next push.
     public var needsRedeploy: Bool {
         domains != nil || redirect != nil || isForceHTTPSEnabled != nil || dockerComposeDomains != nil
-            || healthCheck != nil || gitBranch != nil || gitCommitSHA != nil || dockerRegistryImageTag != nil
-            || customLabels != nil || isContainerLabelEscapeEnabled != nil
+            || healthCheck != nil || limits != nil || build?.needsRedeploy == true
+            || deploymentCommands?.isEmpty == false
+            || gitBranch != nil || gitCommitSHA != nil || dockerRegistryImageTag != nil || customLabels != nil
+            || isContainerLabelEscapeEnabled != nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -134,5 +149,8 @@ public struct ApplicationUpdate: Encodable, Sendable, Hashable {
         try container.encodeIfPresent(customLabels.map(Base64Text.encode), forKey: .customLabels)
         try container.encodeIfPresent(isContainerLabelEscapeEnabled, forKey: .isContainerLabelEscapeEnabled)
         try healthCheck?.encode(to: encoder)
+        try limits?.encode(to: encoder)
+        try build?.encode(to: encoder)
+        try deploymentCommands?.encode(to: encoder)
     }
 }

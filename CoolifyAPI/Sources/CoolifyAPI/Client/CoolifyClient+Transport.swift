@@ -93,11 +93,19 @@ extension CoolifyClient {
         return value
     }
 
-    private func send(
+    /// Posts one multipart form through the upload session, whose timeouts allow a large body on a slow link.
+    func postMultipart(_ path: String, form: MultipartForm) async throws -> (Data, HTTPURLResponse) {
+        try await send(
+            "POST", path: path, body: form.body, contentType: form.contentType, session: uploadSession)
+    }
+
+    func send(
         _ method: String,
         path: String,
         query: [URLQueryItem] = [],
-        body: Data? = nil
+        body: Data? = nil,
+        contentType: String = "application/json",
+        session: URLSession? = nil
     ) async throws -> (Data, HTTPURLResponse) {
         let url = try makeURL(path: path, query: query)
         var request = URLRequest(url: url)
@@ -106,13 +114,13 @@ extension CoolifyClient {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
         if method != "GET" {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         }
 
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await (session ?? self.session).data(for: request)
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
         } catch {
@@ -147,7 +155,7 @@ extension CoolifyClient {
         return url
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, from data: Data, response: HTTPURLResponse) throws -> T {
+    func decode<T: Decodable>(_ type: T.Type, from data: Data, response: HTTPURLResponse) throws -> T {
         if data.isEmpty {
             throw CoolifyError(
                 statusCode: response.statusCode,

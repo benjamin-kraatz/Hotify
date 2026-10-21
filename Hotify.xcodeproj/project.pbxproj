@@ -13,6 +13,8 @@
 		3302C881306AD494001B6155 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3302C880306AD494001B6155 /* CoolifyAPI */; };
 		3302C887306AD532001B6155 /* CoolifyAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3302C886306AD532001B6155 /* CoolifyAPI */; };
 		33F663E8306AD1DD00682500 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = 33F663E7306AD1DD00682500 /* PostHog */; };
+		7E3A00000000000000000011 /* HotifySSH in Frameworks */ = {isa = PBXBuildFile; productRef = 7E3A00000000000000000012 /* HotifySSH */; };
+		7E3A00000000000000000021 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 7E3A00000000000000000022 /* SwiftTerm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +73,8 @@
 				3302C887306AD532001B6155 /* CoolifyAPI in Frameworks */,
 				33F663E8306AD1DD00682500 /* PostHog in Frameworks */,
 				3302C87E306AD482001B6155 /* CoolifyAPI in Frameworks */,
+				7E3A00000000000000000011 /* HotifySSH in Frameworks */,
+				7E3A00000000000000000021 /* SwiftTerm in Frameworks */,
 			);
 		};
 		000000000000000230000000 /* Frameworks */ = {
@@ -132,6 +136,8 @@
 				3302C87D306AD482001B6155 /* CoolifyAPI */,
 				3302C880306AD494001B6155 /* CoolifyAPI */,
 				3302C886306AD532001B6155 /* CoolifyAPI */,
+				7E3A00000000000000000012 /* HotifySSH */,
+				7E3A00000000000000000022 /* SwiftTerm */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* Hotify.app */;
@@ -189,6 +195,8 @@
 			packageReferences = (
 				33F663E6306AD1DD00682500 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 				3302C885306AD532001B6155 /* XCLocalSwiftPackageReference "CoolifyAPI" */,
+				7E3A00000000000000000013 /* XCLocalSwiftPackageReference "HotifySSH" */,
+				7E3A00000000000000000023 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -419,6 +427,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "Download files from your server onto your device.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Hotify asks for Face ID before it shows environment variable values.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -434,7 +443,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 0.2.6;
+				MARKETING_VERSION = 0.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sebastiankraatz.Hotify;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -490,6 +499,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "Download files from your server onto your device.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Hotify asks for Face ID before it shows environment variable values.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -505,7 +515,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 0.2.6;
+				MARKETING_VERSION = 0.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sebastiankraatz.Hotify;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -557,7 +567,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 0.2.6;
+				MARKETING_VERSION = 0.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sebastiankraatz.Hotify.Widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -603,7 +613,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 0.2.6;
+				MARKETING_VERSION = 0.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sebastiankraatz.Hotify.Widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -655,6 +665,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = CoolifyAPI;
 		};
+		7E3A00000000000000000013 /* XCLocalSwiftPackageReference "HotifySSH" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = HotifySSH;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -664,6 +678,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 3.85.1;
+			};
+		};
+		7E3A00000000000000000023 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.18.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -691,6 +713,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 33F663E6306AD1DD00682500 /* XCRemoteSwiftPackageReference "posthog-ios" */;
 			productName = PostHog;
+		};
+		7E3A00000000000000000012 /* HotifySSH */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7E3A00000000000000000013 /* XCLocalSwiftPackageReference "HotifySSH" */;
+			productName = HotifySSH;
+		};
+		7E3A00000000000000000022 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7E3A00000000000000000023 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -16,16 +16,16 @@ struct ProjectOverview: View {
     var onEditEnvironment: ((EnvironmentSummary) -> Void)?
     /// Creates an environment by name, with its color. `nil` leaves the button out, as without a connection.
     var onAddEnvironment: ((_ name: String, _ tint: PlaceTint?) async throws -> Void)?
-    /// Deletes one environment. `nil` leaves the control out, as without a connection.
-    var onDeleteEnvironment: ((EnvironmentSummary) async throws -> Void)? = nil
+    /// Deletes one environment once the owner confirms it, and shows what went wrong itself. `nil` leaves the control
+    /// out, as without a connection.
+    var onDeleteEnvironment: ((EnvironmentSummary) async -> Void)? = nil
+    /// Whether the page is already asking for a delete, which keeps Delete Environment out of reach until it ends.
+    var isRemoving = false
 
     @State private var stopCandidate: ResourceSummary?
     @State private var isAddingEnvironment = false
     @State private var environmentToDelete: EnvironmentSummary?
-    @State private var isRemovingEnvironment = false
-    @State private var removalError: String?
     @SwiftUI.Environment(\.placePalette) private var palette
-    @SwiftUI.Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var groups: [EnvironmentGroup] {
         let members = Dictionary(grouping: resources) { $0.place?.environmentID ?? -1 }
@@ -63,9 +63,6 @@ struct ProjectOverview: View {
         let groups = groups
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                if let removalError {
-                    NoticeBanner(message: removalError)
-                }
                 ForEach(groups) { group in
                     environmentPanel(group)
                 }
@@ -136,7 +133,7 @@ struct ProjectOverview: View {
             presenting: environmentToDelete
         ) { environment in
             Button("Delete", role: .destructive) {
-                Task { await remove(environment) }
+                Task { await onDeleteEnvironment?(environment) }
             }
         } message: { environment in
             Text(environmentRemovalMessage(environment))
@@ -145,7 +142,6 @@ struct ProjectOverview: View {
         .animation(.snappy, value: resources.map(\.id))
         .animation(.snappy, value: deployments.map(\.id))
         .animation(.snappy, value: isLoadingDeployments)
-        .animation(reduceMotion ? nil : .snappy, value: removalError)
     }
 
     /// The last environment is the project's only place, so the delete stays hidden until another exists.
@@ -159,21 +155,8 @@ struct ProjectOverview: View {
     }
 
     private func environmentRemovalMessage(_ environment: EnvironmentSummary) -> String {
-        environment.name.isEmpty
-            ? "Coolify deletes this environment."
-            : "Coolify deletes the \(environment.name) environment."
-    }
-
-    private func remove(_ environment: EnvironmentSummary) async {
-        guard let onDeleteEnvironment, !isRemovingEnvironment else { return }
-        isRemovingEnvironment = true
-        defer { isRemovingEnvironment = false }
-        removalError = nil
-        do {
-            try await onDeleteEnvironment(environment)
-        } catch {
-            removalError = error.localizedDescription
-        }
+        let what = environment.name.isEmpty ? "this environment" : "the \(environment.name) environment"
+        return "Coolify deletes \(what). Hotify asks for \(UnlockMethod.current().promptName) first."
     }
 
     private func newEnvironment(_ onAdd: @escaping (String, PlaceTint?) async throws -> Void) -> some View {
@@ -226,6 +209,7 @@ struct ProjectOverview: View {
                             } label: {
                                 Label("Delete Environment…", systemImage: "trash")
                             }
+                            .disabled(isRemoving)
                         }
                     } label: {
                         Label("More for \(group.environment.name)", systemImage: "ellipsis")

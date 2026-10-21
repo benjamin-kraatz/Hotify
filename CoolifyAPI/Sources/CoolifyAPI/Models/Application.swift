@@ -7,11 +7,14 @@ public struct ApplicationSettings: Decodable, Sendable, Hashable {
     public var isForceHTTPSEnabled: Bool?
     /// Whether a push to the branch deploys. A push deploys the pushed commit, even when one is pinned.
     public var isAutoDeployEnabled: Bool?
+    /// Whether Nixpacks or Railpack builds a static site, which Coolify serves from the publish directory.
+    public var isStatic: Bool?
 
     enum CodingKeys: String, CodingKey {
         case isPreviewDeploymentsEnabled
         case isForceHTTPSEnabled = "isForceHttpsEnabled"
         case isAutoDeployEnabled
+        case isStatic
     }
 
     public init(from decoder: Decoder) throws {
@@ -19,6 +22,7 @@ public struct ApplicationSettings: Decodable, Sendable, Hashable {
         isPreviewDeploymentsEnabled = container.flexBool(.isPreviewDeploymentsEnabled)
         isForceHTTPSEnabled = container.flexBool(.isForceHTTPSEnabled)
         isAutoDeployEnabled = container.flexBool(.isAutoDeployEnabled)
+        isStatic = container.flexBool(.isStatic)
     }
 }
 
@@ -49,18 +53,37 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
     /// that never had a domain are missing.
     public var dockerComposeDomains: [String: String]?
     public var healthCheck: HealthCheck?
+    /// The container's CPU and memory limits. A field the payload leaves out is `nil`.
+    public var limits: ResourceLimits?
     /// Tag names when the payload includes them. The OpenAPI schema omits this field; an absent one is empty.
     public var tags: [String] = []
     /// The proxy label block. Absent when the payload leaves it out or the application has none.
     public var customLabels: String?
     /// Whether Coolify turns `$` into `$$` in the labels. Off lets the labels expand environment variables.
     public var isContainerLabelEscapeEnabled: Bool?
+    /// The commands, directories, and watch paths of the build. A field the payload leaves out is `nil`.
+    public var build: BuildSettings?
+    /// The commands Coolify runs before and after each deployment.
+    public var deploymentCommands: DeploymentCommands?
+    /// The compose file's path, read from the base directory, for a Docker Compose application.
+    public var dockerComposeLocation: String?
+    /// Whether Coolify keeps the application's Dockerfile itself, rather than reading one from a repository. Only
+    /// known when the token can read sensitive data, as Coolify hides the Dockerfile otherwise.
+    public var hasInlineDockerfile = false
 
     /// Whether the application builds from a Docker Compose file, whose domains are set per service.
     public var isDockerCompose: Bool { buildPack == "dockercompose" }
 
     /// Whether the application runs a registry image rather than building from a repository.
     public var isDockerImage: Bool { buildPack == "dockerimage" }
+
+    /// Whether the application builds from a Dockerfile Coolify keeps, which has no repository to build from.
+    ///
+    /// Coolify fills in its own `coollabsio/coolify` as the repository of an application created from a Dockerfile or
+    /// an image, and hides the Dockerfile from a token that can't read sensitive data, so that placeholder counts too.
+    public var buildsFromInlineDockerfile: Bool {
+        buildPack == "dockerfile" && (hasInlineDockerfile || gitRepository == "coollabsio/coolify")
+    }
 
     /// The commit manual deploys are pinned to. `nil` when they build the branch's latest.
     public var pinnedCommit: String? {
@@ -93,6 +116,8 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         case tags
         case customLabels
         case isContainerLabelEscapeEnabled
+        case dockerComposeLocation
+        case dockerfile
     }
 
     public init(from decoder: Decoder) throws {
@@ -116,12 +141,17 @@ public struct Application: Decodable, Sendable, Hashable, HasResourceStatus {
         redirect = container.flexString(.redirect).flatMap(DomainRedirect.init(rawValue:))
         dockerComposeDomains = container.flexString(.dockerComposeDomains).flatMap(Self.composeDomains(from:))
         healthCheck = try? HealthCheck(from: decoder)
+        limits = try? ResourceLimits(from: decoder)
         // The OpenAPI Application schema has no tags field. Decode them when a payload sends them anyway.
         tags = container.flexTagNames(.tags)
         // A GET may omit both. `0` and `1` are how Laravel often sends the escape flag. Coolify keeps the labels
         // as base64 and sends them that way, which the OpenAPI spec does not mention.
         customLabels = container.flexString(.customLabels).map(Base64Text.decode)
         isContainerLabelEscapeEnabled = container.flexBool(.isContainerLabelEscapeEnabled)
+        build = try? BuildSettings(from: decoder)
+        deploymentCommands = try? DeploymentCommands(from: decoder)
+        dockerComposeLocation = container.flexString(.dockerComposeLocation)
+        hasInlineDockerfile = container.flexString(.dockerfile)?.nonEmpty != nil
     }
 
     /// Coolify stores `docker_compose_domains` as a JSON string, `{"web": {"domain": "https://…"}}`, and sends it

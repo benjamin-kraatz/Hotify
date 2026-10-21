@@ -1,13 +1,17 @@
 import CoolifyAPI
 import SwiftUI
 
-/// One backup run: how it went and when. Opens to show Coolify's message and the file it wrote.
+/// One backup run: how it went and when. Opens to show Coolify's message and the file it wrote, and offers to restore
+/// a run whose dump Coolify still keeps.
 struct BackupExecutionRow: View {
     var execution: BackupExecution
+    /// `nil` when the run cannot be restored.
+    var onRestore: (() -> Void)?
     @State private var isExpanded: Bool
 
-    init(execution: BackupExecution, startsExpanded: Bool = false) {
+    init(execution: BackupExecution, startsExpanded: Bool = false, onRestore: (() -> Void)? = nil) {
         self.execution = execution
+        self.onRestore = onRestore
         _isExpanded = State(initialValue: startsExpanded)
     }
 
@@ -75,6 +79,11 @@ struct BackupExecutionRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
+        .contextMenu {
+            if let onRestore {
+                Button("Restore This Run…", systemImage: "arrow.counterclockwise", action: onRestore)
+            }
+        }
         .animation(.snappy, value: isExpanded)
     }
 
@@ -98,6 +107,13 @@ struct BackupExecutionRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if let onRestore {
+                Button("Restore This Run…", systemImage: "arrow.counterclockwise", action: onRestore)
+                    .glassButton()
+                    .controlSize(.small)
+                    .padding(.top, 2)
+                    .help("Restore this backup into the database")
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -118,7 +134,7 @@ struct BackupExecutionRow: View {
     VStack(spacing: 0) {
         BackupExecutionRow(execution: executions[0], startsExpanded: true)
         Divider()
-        BackupExecutionRow(execution: executions[1])
+        BackupExecutionRow(execution: executions[1], startsExpanded: true, onRestore: {})
     }
     .well()
     .frame(width: 480)

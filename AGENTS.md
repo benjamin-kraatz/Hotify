@@ -7,22 +7,27 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
 - `Hotify/` is the app target.
   - `App/` has the entry point.
   - `Design/` has the app's look: the stokable flame and its fire, heat edges, wells, and the filter field.
-  - `Configuration/` is a resource's Settings tab: its name and description, an application's source (branch, pinned commit, deploy on push, or image tag), its domains, a database's public port, its health check, and an application's proxy labels, in one form with one Save.
-  - `Dashboard/` shows the selected instance, its applications, databases, and services, and the deployments and logs for one resource. A service's Containers tab can start, stop, or restart one container, or edit its domains or a database container's public port. A server opens its own page.
+  - `Configuration/` is a resource's settings, in the inspector beside its tabs (a sheet on iPhone): its name and description, an application's source (branch, pinned commit, deploy on push, or image tag), its build settings, the pre- and post-deployment commands Coolify runs on the server, a service's compose file, its domains, a database's public port, its health check, and an application's proxy labels and CPU and memory limits, in one form with one Save.
+  - `Compose/` writes and edits a service's own Docker Compose file: a plain code editor with every text substitution off, what Hotify reads in the file, and the screen that edits an existing service's file in the detail column, behind `VariableLock`, into the settings' draft and Save. The file is sent as typed and never rebuilt from the outline. It is a Coolify service, not a Docker Compose application built from a repository.
+  - `Dashboard/` shows the selected instance, its applications, databases, and services, and one resource: an overview of it, its deployments and logs, and its actions in the toolbar. A service's Containers tab can start, stop, or restart one container, or edit its domains or a database container's public port. A server opens its own page.
   - `Servers/` validates a server, runs its Docker cleanup, restarts its proxy, edits its proxy redirect and configuration, records a Cloudflare Tunnel, opens its shared variables, and adds, renames, and deletes a Docker network destination. A server can be added, edited, and deleted. It takes the detail column.
   - `Intelligence/` explains a failed deployment with the on-device Apple Intelligence model. Nothing in it may send a log off the device.
   - `Instances/` adds, lists, and persists instances, and shows the welcome screen.
   - `Previews/` deploys, lists, and manages an application's pull request previews. It opens from the Previews toolbar menu and takes over the detail column.
-  - `Notifications/` tells you, on the Mac, when a deploy fails or finishes, a resource stops or turns unhealthy, a backup fails or runs late, or a server drops. It checks each instance whose notifications are on every 30 seconds while Hotify runs, and a click opens the place through a `hotify://` link. `LocalActions` remembers what this device started, which tells your own deploys from a push. On iPhone, `DeploymentActivities` follows each deploy started there as a Live Activity, while Hotify may run, and ends it with the result.
+  - `Automations/` runs a Shortcut on this device, through the `shortcuts://run-shortcut` URL, with the event as JSON text that holds no token or log. On the Mac a resource's deploy, outage, or backup can run one, through the same 30-second instance watch as notifications but without needing them on. iPhone only runs one when you tap Run. Automations stay in the device's own defaults, never in iCloud or the App Group.
+  - `Notifications/` tells you, on the Mac, when a deploy fails or finishes, a resource stops or turns unhealthy, a backup fails or runs late, or a server drops. It checks each instance whose notifications are on, or that a Mac automation waits on, every 30 seconds while Hotify runs, and a click opens the place through a `hotify://` link. `LocalActions` remembers what this device started, which tells your own deploys from a push. On iPhone, `DeploymentActivities` follows each deploy started there as a Live Activity, while Hotify may run, and ends it with the result.
+  - `Alerts/` sets up the alerts Coolify itself sends the team by email, Discord, Slack, Telegram, Pushover, or webhook: which channels are on, where they send, and which events they carry. Coolify delivers them from the instance, so they arrive while Hotify is closed, unlike `Notifications/`. It is a Settings pane for the selected instance's team, with one editor sheet per channel that sends only what changed. Credentials start blank, and blank keeps what Coolify has. A value Coolify shares with a `read:sensitive` token shows only behind `VariableLock`. Coolify's API has no test send, so there is none here.
   - `Projects/` shows one project: its resources by environment, the previews of all its applications, and the variables the project, its environments, the team, and a server share. It opens from the project's head in the dashboard and takes the detail column. A resource opened from it offers the way back. It also holds the colors you give projects and environments: `PlaceColors` keeps them per instance, on the device and in iCloud key-value storage, since Coolify has no such field.
   - `Versions/` changes which version of an application runs. The toolbar's Versions menu rolls back to an image Coolify kept, and Roll Back to This does the same from a deployment. Deploy a Version deploys any commit or image tag, once or pinned, and lists a GitHub branch's recent commits to pick from.
-  - `Provisioning/` creates services from Coolify's one-click templates, and databases of any engine Coolify offers: a gallery, then placement, setup for a service, and the first start, in one New Resource sheet that opens from a project page's New Resource button, its ⇧⌘N in the Project menu, or an empty dashboard. From a project, the sheet starts in that project, on the server that runs most of it. A new database's connection strings hold its password, so they stay behind `VariableLock`. The sheet also creates applications from a public repository, a Dockerfile, a Docker image, a GitHub App, or a deploy key.
+  - `Provisioning/` creates services from Coolify's one-click templates or a compose file you write, and databases of any engine Coolify offers: choosing, placing, and naming on one screen (three columns on the Mac and iPad: a sidebar of sources, a list or a compose file, and an inspector that creates it; a list that pushes the creating screen on iPhone), then setup for a service and the first start, in one New Resource sheet that opens from a project page's New Resource button, its ⇧⌘N in the Project menu, or an empty dashboard. From a project, the sheet starts in that project, on the server that runs most of it. A new database's connection strings hold its password, so they stay behind `VariableLock`. The sheet also creates applications from a public repository, a Dockerfile, a Docker image, a GitHub App, or a deploy key.
   - `Placement/` is the move/clone/migrate sheet for a resource that already exists, distinct from provisioning placement, which chooses where a new resource is created.
+  - `Restore/` restores a backup into a database or a service's database container: a file from this device, a stored backup run, or a path on the server. It opens from the Backups tab and a database container's menu. `DatabaseRestores` keeps each restore running and followed when its sheet closes, and only an upload can be cancelled.
   - `Variables/` lists and edits a resource's environment variables, and holds `VariableLock`, which hides their values behind Face ID, Touch ID, or the passcode.
   - `Volumes/` lists a resource's persistent volumes and file mounts, and schedules a backup of a volume or a directory mount.
+  - `Terminal/` opens a shell in a resource's container over SSH from the device, since Coolify's API has no terminal. It signs in with the device's own ed25519 key, which `DeviceKey` keeps in this device's Keychain behind Face ID, Touch ID, or the passcode, and asks for every session. It pins each server's host key on first contact, and can add the device key to a server once with the key Coolify connects with, which it fetches, uses, and forgets. Servers behind a Cloudflare Tunnel aren't supported yet. `TerminalCanvas` wraps SwiftTerm, pinned to 1.18.x, in `TerminalTheme`'s palettes, and `TerminalSurface` is the screen's handle on it: find, paste checks, OSC titles, the bell. The connection probes the server every 15 seconds, which keeps NAT tables warm and shows the round trip in the header, and a reconnect prints a divider into the scrollback rather than clearing it. On iPhone, `TerminalKeyBar` sits above the keyboard, and a terminal that died in the background reconnects when the app returns. The Terminal menu holds the Mac shortcuts, and `TerminalPreferences` names the defaults keys for the Settings section.
   - `Tasks/` lists the commands an application or a service runs on a schedule, and the history of each run. Run Now starts one immediately.
   - `Removal/` confirms before deleting an application, database, service, project, or environment. Volume deletion stays off until you turn it on.
-  - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS, including the team's S3 backup stores.
+  - `Settings/` has the Settings window on the Mac and the Settings sheet on iOS. `SettingsPane` lists the panes: Menu Bar and Notifications on the Mac, then Coolify Alerts, Automations, Terminal, Privacy, Backup Storage, and About. The Mac shows each as a toolbar tab over a grouped form, and iOS pushes each from a list. The folder also holds the Privacy pane's variable lock and the team's S3 backup stores.
   - `Storage/` holds the GitHub token.
 - `HotifyWidgets/` is the WidgetKit extension: the Pinned Resources, Instance, Needs Attention, Recent Deployments, and Backups widgets, two Control Center controls, and on iPhone the deploy Live Activity.
   - `Status/` reads pinned resources from Coolify and keeps `WidgetLedger`, what the widgets remember between timelines in the App Group.
@@ -40,23 +45,29 @@ Hotify is a SwiftUI app for macOS and iOS that manages a self-hosted [Coolify](h
   - `Client/` has `CoolifyClient` and one `CoolifyClient+<Group>.swift` extension per endpoint group.
   - `HTTP/` has URL normalization and errors.
   - `Decoding/` has the lenient decoding helpers.
-  - `Templates/` reads Coolify's template catalog from its CDN, since the API has no template endpoint, and outlines a template's compose file.
+  - `Templates/` reads Coolify's template catalog from its CDN, since the API has no template endpoint, outlines a compose file, and checks one for likely mistakes without a YAML parser.
+  - `Terminal/` builds the shell lines the terminal runs over SSH: Coolify's container label filters, its login shell, and adding a key to `authorized_keys`. It also picks the SSH address a device can reach.
   - `Models/` has one file per Coolify type.
+- `HotifySSH/` is a local Swift package the app depends on, built on Apple's swift-nio-ssh. It signs in with an ed25519 key, checks the host key against the trusted one, runs commands, and opens PTY sessions. It knows nothing about Coolify.
 
 `Hotify/`, `HotifyWidgets/`, and `Shared/` are synchronized folders in Xcode. New files join their targets on their own, so do not edit `project.pbxproj` to add them.
 
 ## Build and test
 
 ```sh
-# Package tests. Run these after any change in CoolifyAPI/.
+# Package tests. Run these after any change in CoolifyAPI/ or HotifySSH/.
 cd CoolifyAPI && swift test
+cd HotifySSH && swift test
+
+# Instance watch and Shortcut automation checks. Run these after any change in Automations/ or Notifications/.
+./scripts/test_automations.sh
 
 # App build. Run this after any change in Hotify/.
 xcodebuild -project Hotify.xcodeproj -scheme Hotify -destination 'platform=macOS' build
 
 # Format, then lint. CI does not check formatting, so run these before you commit. The config is in .swift-format.
-swift format format -i --recursive --parallel Hotify HotifyWidgets Shared CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
-swift format lint --strict --recursive --parallel Hotify HotifyWidgets Shared CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift
+swift format format -i --recursive --parallel Hotify HotifyWidgets Shared CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift HotifySSH/Sources HotifySSH/Tests HotifySSH/Package.swift
+swift format lint --strict --recursive --parallel Hotify HotifyWidgets Shared CoolifyAPI/Sources CoolifyAPI/Tests CoolifyAPI/Package.swift HotifySSH/Sources HotifySSH/Tests HotifySSH/Package.swift
 ```
 
 GitHub Actions (`.github/workflows/ci.yml`) validates releases and publishes tags. Xcode Cloud owns app builds on main and iOS/macOS distribution from tags. GitHub tagging does not wait for Xcode Cloud builds. Run the local checks above when changing app or API code.

@@ -19,6 +19,10 @@ public struct ServerSettings: Decodable, Sendable, Hashable {
     public var serverDiskUsageNotificationThreshold: Int?
     /// Cron expression for the disk check, when the response nests it under settings.
     public var serverDiskUsageCheckFrequency: String?
+    /// Whether Coolify allows a terminal on this server. `nil` when the response leaves it out.
+    public var isTerminalEnabled: Bool?
+    /// Whether Coolify reaches the server through a Cloudflare Tunnel. `nil` when the response leaves it out.
+    public var isCloudflareTunnel: Bool?
 
     enum CodingKeys: String, CodingKey {
         case isReachable
@@ -31,6 +35,8 @@ public struct ServerSettings: Decodable, Sendable, Hashable {
         case connectionTimeout
         case serverDiskUsageNotificationThreshold
         case serverDiskUsageCheckFrequency
+        case isTerminalEnabled
+        case isCloudflareTunnel
     }
 
     public init(
@@ -43,7 +49,9 @@ public struct ServerSettings: Decodable, Sendable, Hashable {
         deploymentQueueLimit: Int? = nil,
         connectionTimeout: Int? = nil,
         serverDiskUsageNotificationThreshold: Int? = nil,
-        serverDiskUsageCheckFrequency: String? = nil
+        serverDiskUsageCheckFrequency: String? = nil,
+        isTerminalEnabled: Bool? = nil,
+        isCloudflareTunnel: Bool? = nil
     ) {
         self.isReachable = isReachable
         self.isUsable = isUsable
@@ -55,6 +63,8 @@ public struct ServerSettings: Decodable, Sendable, Hashable {
         self.connectionTimeout = connectionTimeout
         self.serverDiskUsageNotificationThreshold = serverDiskUsageNotificationThreshold
         self.serverDiskUsageCheckFrequency = serverDiskUsageCheckFrequency
+        self.isTerminalEnabled = isTerminalEnabled
+        self.isCloudflareTunnel = isCloudflareTunnel
     }
 
     public init(from decoder: Decoder) throws {
@@ -69,6 +79,8 @@ public struct ServerSettings: Decodable, Sendable, Hashable {
         connectionTimeout = container.flexInt(.connectionTimeout)
         serverDiskUsageNotificationThreshold = container.flexInt(.serverDiskUsageNotificationThreshold)
         serverDiskUsageCheckFrequency = container.flexString(.serverDiskUsageCheckFrequency)
+        isTerminalEnabled = container.flexBool(.isTerminalEnabled)
+        isCloudflareTunnel = container.flexBool(.isCloudflareTunnel)
     }
 }
 

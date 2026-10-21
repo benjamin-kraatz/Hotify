@@ -1,7 +1,8 @@
 import CoolifyAPI
 import Foundation
 
-/// Takes a template to a running service: create it stopped, let the user set it up, then start it and watch.
+/// Takes a template, or a compose file the user wrote, to a running service: create it stopped, let the user set it
+/// up, then start it and watch.
 ///
 /// Coolify creates first and asks second on purpose. It generates the passwords and addresses at creation, so the
 /// setup step edits real values instead of guessing them from the compose file.
@@ -18,10 +19,14 @@ final class ProvisioningModel {
 
     var name = ""
     var description = ""
+    /// The compose file for a service made without a template. Kept as typed, and kept when creating fails.
+    var compose = ""
     var isCreating = false
     var createProblem: ProvisioningProblem?
 
     private(set) var template: ServiceTemplate?
+    /// What the created service's compose file runs and asks for, from the template or the file the user wrote.
+    private(set) var outline: ComposeOutline?
     private(set) var serviceUUID: String?
     /// The created service's name as Coolify stored it.
     var serviceName = ""
@@ -66,6 +71,14 @@ final class ProvisioningModel {
             && !placement.isLoadingDestinations
     }
 
+    /// Only an empty file is held back here. Coolify checks the rest, and says why it refuses one.
+    var canCreateFromCompose: Bool {
+        canCreate && !ComposeCheck(compose).isBlocking
+    }
+
+    /// Whether the service came from a compose file the user wrote rather than a template.
+    var isFromCompose: Bool { template == nil && serviceUUID != nil }
+
     /// Creates the service, stopped, and moves on to setup.
     func create(_ template: ServiceTemplate) async {
         guard let client, canCreate,
@@ -91,6 +104,7 @@ final class ProvisioningModel {
                 )
             )
             self.template = template
+            outline = template.outline
             serviceUUID = created.uuid
             serviceName = trimmedName.isEmpty ? template.slug : trimmedName
             placement.remember()
@@ -103,15 +117,58 @@ final class ProvisioningModel {
         }
     }
 
+    /// Creates the service from `compose`, sent exactly as written, stopped, and moves on to setup. Coolify checks the
+    /// file before it creates anything, so a refused one leaves nothing behind and the text stays to fix.
+    func createFromCompose() async {
+        guard let client, canCreateFromCompose,
+            let serverUUID = placement.placement.serverUUID,
+            let projectUUID = placement.placement.projectUUID,
+            let environmentUUID = placement.placement.environmentUUID
+        else { return }
+        isCreating = true
+        createProblem = nil
+        defer { isCreating = false }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let compose = compose
+        do {
+            let created = try await client.createService(
+                ServiceDraft(
+                    compose: compose,
+                    // Coolify names it `service-` and a random suffix without one. Setup reads that name back.
+                    name: trimmedName.isEmpty ? nil : trimmedName,
+                    description: trimmedDescription.isEmpty ? nil : trimmedDescription,
+                    serverUUID: serverUUID,
+                    projectUUID: projectUUID,
+                    environmentUUID: environmentUUID,
+                    destinationUUID: placement.placement.destinationUUID
+                )
+            )
+            template = nil
+            outline = ComposeOutline(compose)
+            serviceUUID = created.uuid
+            serviceName = trimmedName.isEmpty ? "New service" : trimmedName
+            placement.remember()
+            stage = .settingUp
+            await loadSetup()
+        } catch is CancellationError {
+            return
+        } catch {
+            createProblem =
+                ComposeFailure.message(for: error).map(ProvisioningProblem.message)
+                ?? ProvisioningProblem(error)
+        }
+    }
+
     func loadSetup() async {
-        guard let client, let serviceUUID, let template else { return }
+        guard let client, let serviceUUID, let outline else { return }
         isLoadingSetup = true
         defer { isLoadingSetup = false }
         do {
             async let service = client.service(serviceUUID)
             async let variables = client.environmentVariables(of: .service(serviceUUID))
             let loadedService = try await service
-            setup = SetupDraft(service: loadedService, variables: try await variables, outline: template.outline)
+            setup = SetupDraft(service: loadedService, variables: try await variables, outline: outline)
             serviceName = loadedService.name.isEmpty ? serviceName : loadedService.name
             hasLoadedSetup = true
             setupProblem = nil
