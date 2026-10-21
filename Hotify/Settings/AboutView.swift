@@ -62,30 +62,41 @@ struct AboutView: View {
                         .strokeBorder(.primary.opacity(0.06))
                 }
 
-                Button {
-                    #if os(macOS)
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(buildInfo.copyableDetails, forType: .string)
-                    #else
-                    UIPasteboard.general.string = buildInfo.copyableDetails
-                    #endif
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
-                        copied = true
-                    }
-                } label: {
-                    Label(copied ? "Copied" : "Copy build details", systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .frame(maxWidth: .infinity)
-                }
-                .glassButton()
-                .controlSize(.large)
-                .task(id: copied) {
-                    guard copied else { return }
-                    do {
-                        try await Task.sleep(for: .seconds(2))
+                VStack(spacing: 12) {
+                    Button {
+                        #if os(macOS)
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(buildInfo.copyableDetails, forType: .string)
+                        #else
+                        UIPasteboard.general.string = buildInfo.copyableDetails
+                        #endif
                         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
-                            copied = false
+                            copied = true
                         }
-                    } catch {}
+                    } label: {
+                        Label(
+                            copied ? "Copied" : "Copy build details", systemImage: copied ? "checkmark" : "doc.on.doc"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .glassButton()
+                    .controlSize(.large)
+                    .task(id: copied) {
+                        guard copied else { return }
+                        do {
+                            try await Task.sleep(for: .seconds(2))
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                copied = false
+                            }
+                        } catch {}
+                    }
+
+                    Link(destination: IssueReport(buildInfo: buildInfo).url) {
+                        Label("Report an Issue", systemImage: "ladybug")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .glassButton()
+                    .controlSize(.large)
                 }
 
                 Text("An independent app for Coolify.\nNot affiliated with the Coolify project.")
@@ -121,7 +132,7 @@ struct AboutView: View {
             commit: "6bb32a8541fe95869881e3c7e542640ab4331267"
         )
     )
-    .frame(width: 400, height: 584)
+    .frame(width: 400, height: 640)
 }
 
 #Preview("Missing metadata") {
@@ -131,5 +142,5 @@ struct AboutView: View {
             commit: nil
         )
     )
-    .frame(width: 400, height: 624)
+    .frame(width: 400, height: 680)
 }
