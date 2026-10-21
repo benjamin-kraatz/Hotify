@@ -103,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 InstanceCommands()
                 ProjectCommands()
                 TerminalCommands()
+                HelpCommands()
             }
             // Not on `.inactive`: the Face ID prompt itself makes the scene inactive on iOS.
             .onChange(of: scenePhase) { _, phase in

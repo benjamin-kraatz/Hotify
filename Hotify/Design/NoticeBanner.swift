@@ -31,6 +31,27 @@ struct NoticeBanner: View {
     @State private var arrivals = 0
 
     var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            label
+            if tone == .problem {
+                ReportErrorButton(error: message)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(tone.color.opacity(0.12), in: .rect(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(tone.color.opacity(0.18), lineWidth: 1)
+        }
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .task(id: message) {
+            guard !reduceMotion else { return }
+            arrivals += 1
+        }
+    }
+
+    private var label: some View {
         Label {
             // Not fixed to its full height. The Mac sizes the window's minimum at the narrowest width, where a
             // fixed text wraps word by word and grows the window past the screen. A stack still gives it every line.
@@ -45,18 +66,6 @@ struct NoticeBanner: View {
                 .symbolEffect(.bounce, value: arrivals)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(tone.color.opacity(0.12), in: .rect(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(tone.color.opacity(0.18), lineWidth: 1)
-        }
-        .transition(.move(edge: .top).combined(with: .opacity))
-        .task(id: message) {
-            guard !reduceMotion else { return }
-            arrivals += 1
-        }
     }
 }
 
